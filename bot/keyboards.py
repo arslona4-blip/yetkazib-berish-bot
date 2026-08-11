@@ -141,7 +141,9 @@ def more_menu_keyboard() -> ReplyKeyboardMarkup:
     rows = [
         ["🔍 Qidiruv", "⭐ Sevimlilar"],
         ["🎁 Bonus", "👥 Ulashish"],
-        ["ℹ️ Yordam", "⬅️ Asosiy menyu"],
+        ["✨ Tavsiyalar", "🔁 Takroriy buyurtmalar"],
+        ["🌐 Til", "ℹ️ Yordam"],
+        ["⬅️ Asosiy menyu"],
     ]
     shop = shop_reply_button("🛒 Do'kon")
     if shop:
@@ -359,8 +361,20 @@ def confirm_order_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def payment_keyboard(order_id: int) -> InlineKeyboardMarkup:
-    from bot.config import CLICK_LINK, PAYME_LINK, online_payment_enabled
+def payment_keyboard(
+    order_id: int, amount: int | None = None
+) -> InlineKeyboardMarkup:
+    from bot.config import (
+        CLICK_LINK,
+        PAYME_LINK,
+        online_payment_enabled,
+        payment_link_with_amount,
+    )
+    from bot.database import get_order
+
+    if amount is None:
+        order = get_order(order_id)
+        amount = int(order["price"]) if order else 0
 
     rows = [
         [
@@ -382,8 +396,9 @@ def payment_keyboard(order_id: int) -> InlineKeyboardMarkup:
             )
         ],
     ]
-    if PAYME_LINK:
-        rows.append([InlineKeyboardButton("🟢 Payme", url=PAYME_LINK)])
+    payme_url = payment_link_with_amount(PAYME_LINK, amount, order_id)
+    if payme_url:
+        rows.append([InlineKeyboardButton("🟢 Payme", url=payme_url)])
         rows.append(
             [
                 InlineKeyboardButton(
@@ -392,8 +407,9 @@ def payment_keyboard(order_id: int) -> InlineKeyboardMarkup:
                 )
             ]
         )
-    if CLICK_LINK:
-        rows.append([InlineKeyboardButton("🔵 Click", url=CLICK_LINK)])
+    click_url = payment_link_with_amount(CLICK_LINK, amount, order_id)
+    if click_url:
+        rows.append([InlineKeyboardButton("🔵 Click", url=click_url)])
         rows.append(
             [
                 InlineKeyboardButton(
@@ -483,6 +499,7 @@ def admin_menu_keyboard() -> InlineKeyboardMarkup:
             ],
             [InlineKeyboardButton("📊 Statistika", callback_data="admin:stats")],
             [InlineKeyboardButton("📈 Kunlik hisobot", callback_data="admin:report")],
+            [InlineKeyboardButton("🗺 Zonalar", callback_data="admin:zones")],
             [InlineKeyboardButton("📣 Broadcast", callback_data="admin:broadcast")],
             [InlineKeyboardButton("📤 Excel eksport", callback_data="admin:export")],
             [InlineKeyboardButton("📥 Excel import", callback_data="admin:import")],
@@ -534,6 +551,13 @@ def order_actions_keyboard(order_id: int, can_pay: bool, can_cancel: bool) -> In
         [
             InlineKeyboardButton(
                 "🔁 Yana buyurtma", callback_data=f"reorder:{order_id}"
+            )
+        ]
+    )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                "🔄 Takroriy qilish", callback_data=f"recur:{order_id}"
             )
         ]
     )
@@ -782,6 +806,9 @@ def admin_product_item_keyboard(product_id: int, is_active: bool) -> InlineKeybo
                 InlineKeyboardButton(
                     "📷 Shtrix-kod", callback_data=f"admin_prod:barcode:{product_id}"
                 ),
+                InlineKeyboardButton(
+                    "🔥 Aksiya", callback_data=f"admin_prod:sale:{product_id}"
+                ),
             ],
             [
                 InlineKeyboardButton(
@@ -853,5 +880,61 @@ def admin_delete_order_confirm_keyboard(order_id: int) -> InlineKeyboardMarkup:
                     callback_data=f"admin_del_order_no:{order_id}",
                 ),
             ]
+        ]
+    )
+
+
+def courier_order_keyboard(order_id: int) -> InlineKeyboardMarkup:
+    """Kuryer uchun: faqat accepted / in_delivery / delivered."""
+    allowed = ("accepted", "in_delivery", "delivered")
+    buttons = [
+        InlineKeyboardButton(
+            ORDER_STATUS_LABELS[status],
+            callback_data=f"admin_status:{order_id}:{status}",
+        )
+        for status in allowed
+        if status in ORDER_STATUS_LABELS
+    ]
+    rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
+    return InlineKeyboardMarkup(rows)
+
+
+def rating_keyboard(order_id: int) -> InlineKeyboardMarkup:
+    stars = [
+        InlineKeyboardButton("⭐" * n, callback_data=f"rate:{order_id}:{n}")
+        for n in range(1, 6)
+    ]
+    return InlineKeyboardMarkup([stars[:3], stars[3:]])
+
+
+def language_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("🇺🇿 O'zbekcha", callback_data="lang:uz"),
+                InlineKeyboardButton("🇷🇺 Русский", callback_data="lang:ru"),
+            ]
+        ]
+    )
+
+
+def recurring_interval_keyboard(order_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("7 kun", callback_data=f"recur_set:{order_id}:7"),
+                InlineKeyboardButton("14 kun", callback_data=f"recur_set:{order_id}:14"),
+                InlineKeyboardButton("30 kun", callback_data=f"recur_set:{order_id}:30"),
+            ],
+            [InlineKeyboardButton("❌ Bekor", callback_data="recur_cancel")],
+        ]
+    )
+
+
+def zones_admin_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("➕ Zona qo'shish", callback_data="zone:add")],
+            [InlineKeyboardButton("⬅️ Orqaga", callback_data="admin:menu")],
         ]
     )

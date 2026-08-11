@@ -61,6 +61,14 @@ CARD_HOLDER = os.getenv("CARD_HOLDER", SHOP_NAME).strip()
 PAYME_LINK = os.getenv("PAYME_LINK", "").strip()
 CLICK_LINK = os.getenv("CLICK_LINK", "").strip()
 
+LOW_STOCK_THRESHOLD = int(os.getenv("LOW_STOCK_THRESHOLD", "5"))
+DAILY_REPORT_HOUR = int(os.getenv("DAILY_REPORT_HOUR", "21"))
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", "").rstrip("/")
+WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", "telegram")
+WEBHOOK_PORT = int(os.getenv("WEBHOOK_LISTEN_PORT", "0") or "0")
+DATABASE_URL = os.getenv("DATABASE_URL", "")  # reserved; SQLite primary
+DEFAULT_LANG = os.getenv("DEFAULT_LANG", "uz")
+
 # Eski konstanta — endi bot.timeutil.get_delivery_slots() ishlatiladi
 DELIVERY_SLOTS = []
 
@@ -71,3 +79,11 @@ def online_payment_enabled() -> bool:
 
 def card_payment_enabled() -> bool:
     return bool(CARD_NUMBER) and "XXXX" not in CARD_NUMBER
+
+
+def payment_link_with_amount(base_url: str, amount: int, order_id: int) -> str:
+    """Payme/Click linkiga amount va order_id qo'shadi."""
+    if not base_url:
+        return ""
+    sep = "&" if "?" in base_url else "?"
+    return f"{base_url}{sep}amount={int(amount)}&order_id={int(order_id)}"

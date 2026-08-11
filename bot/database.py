@@ -1,5 +1,6 @@
 import sqlite3
 from contextlib import contextmanager
+from datetime import timedelta
 from typing import Any
 
 from bot.config import DATABASE_PATH, DELIVERY_PRICE, ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS
@@ -275,6 +276,62 @@ def _migrate_features(conn: sqlite3.Connection) -> None:
             INSERT INTO promo_codes (code, discount_percent, discount_amount, min_order, is_active)
             VALUES ('BARAKA10', 10, 0, 30000, 1)
             """
+        )
+
+    user_cols = {r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
+    if "language" not in user_cols:
+        conn.execute(
+            "ALTER TABLE users ADD COLUMN language TEXT NOT NULL DEFAULT 'uz'"
+        )
+
+    product_cols = {r[1] for r in conn.execute("PRAGMA table_info(products)").fetchall()}
+    if "sale_price" not in product_cols:
+        conn.execute("ALTER TABLE products ADD COLUMN sale_price INTEGER")
+    if "sale_until" not in product_cols:
+        conn.execute("ALTER TABLE products ADD COLUMN sale_until TEXT")
+
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS order_reviews (
+            order_id INTEGER PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            rating INTEGER NOT NULL,
+            comment TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (order_id) REFERENCES orders (id)
+        );
+
+        CREATE TABLE IF NOT EXISTS delivery_zones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            keywords TEXT,
+            price INTEGER NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 1
+        );
+
+        CREATE TABLE IF NOT EXISTS recurring_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            source_order_id INTEGER,
+            interval_days INTEGER NOT NULL DEFAULT 7,
+            next_run TEXT NOT NULL,
+            phone TEXT,
+            address TEXT,
+            slot TEXT,
+            note TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL
+        );
+        """
+    )
+    zone_count = conn.execute("SELECT COUNT(*) FROM delivery_zones").fetchone()[0]
+    if zone_count == 0:
+        conn.execute(
+            """
+            INSERT INTO delivery_zones (name, keywords, price, is_active)
+            VALUES ('Standart', '', ?, 1)
+            """,
+            (DELIVERY_PRICE,),
         )
 
 
@@ -563,12 +620,55 @@ def delete_variant(variant_id: int) -> None:
 def product_display_price(product: sqlite3.Row) -> str:
     variants = get_variants(product["id"])
     if not variants:
-        return f"{product['price']:,} so'm"
+        base = int(product["price"] or 0)
+        effective = effective_product_price(product)
+        if effective < base:
+            return f"🔥 {effective:,} so'm (~~{base:,}~~)"
+        return f"{base:,} so'm"
     prices = [v["price"] for v in variants]
     low, high = min(prices), max(prices)
     if low == high:
         return f"{low:,} so'm"
     return f"{low:,} – {high:,} so'm"
+
+
+def effective_product_price(product) -> int:
+    try:
+        base = int(product["price"] or 0)
+    except (KeyError, IndexError, TypeError):
+        return 0
+    try:
+        sale_price = product["sale_price"]
+        sale_until = product["sale_until"]
+    except (KeyError, IndexError, TypeError):
+        return base
+    if sale_price is None:
+        return base
+    try:
+        sale_price = int(sale_price)
+    except (TypeError, ValueError):
+        return base
+    if sale_price <= 0:
+        return base
+    today = now_tashkent().strftime("%Y-%m-%d")
+    until = str(sale_until or "").strip()[:10]
+    if until and until >= today:
+        return sale_price
+    return base
+
+
+def set_product_sale(
+    product_id: int, sale_price: int | None, sale_until: str | None
+) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE products
+            SET sale_price = ?, sale_until = ?
+            WHERE id = ?
+            """,
+            (sale_price, sale_until, product_id),
+        )
 
 
 def add_to_cart(
@@ -650,6 +750,11 @@ def get_cart(user_id: int) -> list[sqlite3.Row]:
                 END AS variant_name,
                 CASE
                     WHEN c.variant_id > 0 THEN v.price
+                    WHEN p.sale_price IS NOT NULL
+                         AND p.sale_price > 0
+                         AND p.sale_until IS NOT NULL
+                         AND date(p.sale_until) >= date('now', 'localtime')
+                    THEN p.sale_price
                     ELSE p.price
                 END AS price,
                 CASE
@@ -1547,3 +1652,321 @@ def mark_order_as_debt(
         )
     update_payment_status(order_id, "debt")
     return cid, get_contact_balance(cid)
+
+
+# --- Language / zones / reviews / recurring / recommendations ---
+def get_user_language(user_id: int) -> str:
+    from bot.config import DEFAULT_LANG
+
+    user = get_user(user_id)
+    if not user:
+        return DEFAULT_LANG or "uz"
+    try:
+        lang = user["language"]
+    except (KeyError, IndexError, TypeError):
+        return DEFAULT_LANG or "uz"
+    return (lang or DEFAULT_LANG or "uz").strip().lower() or "uz"
+
+
+def set_user_language(user_id: int, lang: str) -> None:
+    lang = (lang or "uz").strip().lower()
+    if lang not in ("uz", "ru"):
+        lang = "uz"
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE users SET language = ? WHERE user_id = ?",
+            (lang, user_id),
+        )
+
+
+def get_delivery_fee(
+    address: str, lat: float | None = None, lon: float | None = None
+) -> tuple[int, str]:
+    _ = (lat, lon)
+    addr = (address or "").casefold()
+    zones = list_delivery_zones(active_only=True)
+    for zone in zones:
+        keywords = (zone["keywords"] or "").strip()
+        if not keywords:
+            continue
+        for kw in keywords.split(","):
+            token = kw.strip().casefold()
+            if token and token in addr:
+                return int(zone["price"]), str(zone["name"])
+    for zone in zones:
+        if (zone["name"] or "").strip().casefold() == "standart":
+            return int(zone["price"]), str(zone["name"])
+    if zones:
+        z = zones[0]
+        return int(z["price"]), str(z["name"])
+    return DELIVERY_PRICE, "Standart"
+
+
+def list_delivery_zones(active_only: bool = False) -> list[sqlite3.Row]:
+    with get_connection() as conn:
+        if active_only:
+            rows = conn.execute(
+                """
+                SELECT * FROM delivery_zones
+                WHERE is_active = 1
+                ORDER BY id
+                """
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM delivery_zones ORDER BY id"
+            ).fetchall()
+    return list(rows)
+
+
+def upsert_zone(
+    *,
+    zone_id: int | None = None,
+    name: str,
+    keywords: str = "",
+    price: int,
+    is_active: int = 1,
+) -> int:
+    with get_connection() as conn:
+        if zone_id:
+            conn.execute(
+                """
+                UPDATE delivery_zones
+                SET name = ?, keywords = ?, price = ?, is_active = ?
+                WHERE id = ?
+                """,
+                (name.strip(), keywords.strip(), int(price), int(is_active), zone_id),
+            )
+            return int(zone_id)
+        cur = conn.execute(
+            """
+            INSERT INTO delivery_zones (name, keywords, price, is_active)
+            VALUES (?, ?, ?, ?)
+            """,
+            (name.strip(), keywords.strip(), int(price), int(is_active)),
+        )
+        return int(cur.lastrowid)
+
+
+def deactivate_zone(zone_id: int) -> bool:
+    with get_connection() as conn:
+        cur = conn.execute(
+            "UPDATE delivery_zones SET is_active = 0 WHERE id = ?",
+            (zone_id,),
+        )
+        return cur.rowcount > 0
+
+
+def save_order_review(
+    order_id: int, user_id: int, rating: int, comment: str = ""
+) -> bool:
+    rating = max(1, min(5, int(rating)))
+    with get_connection() as conn:
+        exists = conn.execute(
+            "SELECT 1 FROM order_reviews WHERE order_id = ?",
+            (order_id,),
+        ).fetchone()
+        if exists:
+            return False
+        conn.execute(
+            """
+            INSERT INTO order_reviews (order_id, user_id, rating, comment, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (order_id, user_id, rating, (comment or "").strip(), _now_iso()),
+        )
+    return True
+
+
+def get_order_review(order_id: int) -> sqlite3.Row | None:
+    with get_connection() as conn:
+        return conn.execute(
+            "SELECT * FROM order_reviews WHERE order_id = ?",
+            (order_id,),
+        ).fetchone()
+
+
+def get_recommended_products(user_id: int, limit: int = 6) -> list[sqlite3.Row]:
+    with get_connection() as conn:
+        past = conn.execute(
+            """
+            SELECT DISTINCT oi.product_id
+            FROM order_items oi
+            JOIN orders o ON o.id = oi.order_id
+            WHERE o.user_id = ?
+              AND oi.product_id IS NOT NULL
+              AND o.status != 'cancelled'
+            """,
+            (user_id,),
+        ).fetchall()
+        past_ids = [int(r["product_id"]) for r in past if r["product_id"]]
+        if past_ids:
+            placeholders = ",".join("?" * len(past_ids))
+            rows = conn.execute(
+                f"""
+                SELECT p.*, c.name AS category_name, COUNT(*) AS score
+                FROM order_items oi
+                JOIN orders o ON o.id = oi.order_id
+                JOIN products p ON p.id = oi.product_id
+                LEFT JOIN categories c ON c.id = p.category_id
+                WHERE o.status != 'cancelled'
+                  AND oi.product_id IS NOT NULL
+                  AND oi.product_id NOT IN ({placeholders})
+                  AND p.is_active = 1
+                  AND COALESCE(p.stock, 0) > 0
+                  AND o.id IN (
+                    SELECT DISTINCT o2.id
+                    FROM orders o2
+                    JOIN order_items oi2 ON oi2.order_id = o2.id
+                    WHERE oi2.product_id IN ({placeholders})
+                      AND o2.status != 'cancelled'
+                  )
+                GROUP BY p.id
+                ORDER BY score DESC, p.name COLLATE NOCASE
+                LIMIT ?
+                """,
+                (*past_ids, *past_ids, limit),
+            ).fetchall()
+            if rows:
+                return list(rows)
+        rows = conn.execute(
+            """
+            SELECT p.*, c.name AS category_name, COALESCE(SUM(oi.quantity), 0) AS score
+            FROM products p
+            LEFT JOIN categories c ON c.id = p.category_id
+            LEFT JOIN order_items oi ON oi.product_id = p.id
+            LEFT JOIN orders o ON o.id = oi.order_id
+              AND o.status != 'cancelled'
+              AND date(o.created_at) >= date('now', '-30 day', 'localtime')
+            WHERE p.is_active = 1 AND COALESCE(p.stock, 0) > 0
+            GROUP BY p.id
+            ORDER BY score DESC, p.name COLLATE NOCASE
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return list(rows)
+
+
+def get_low_stock_products(threshold: int) -> list[sqlite3.Row]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM products
+            WHERE is_active = 1
+              AND COALESCE(stock, 0) <= ?
+            ORDER BY stock ASC, name COLLATE NOCASE
+            """,
+            (int(threshold),),
+        ).fetchall()
+    return list(rows)
+
+
+def create_recurring_order(
+    user_id: int,
+    source_order_id: int,
+    interval_days: int,
+    *,
+    phone: str = "",
+    address: str = "",
+    slot: str = "",
+    note: str = "",
+) -> int:
+    days = max(1, int(interval_days))
+    next_run = (now_tashkent() + timedelta(days=days)).isoformat()
+    order = get_order(source_order_id)
+    if order:
+        phone = phone or (order["phone"] or "")
+        address = address or (order["delivery_address"] or "")
+        try:
+            slot = slot or (order["delivery_slot"] or "")
+        except (KeyError, IndexError, TypeError):
+            pass
+        try:
+            note = note or (order["description"] or "")
+        except (KeyError, IndexError, TypeError):
+            pass
+    with get_connection() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO recurring_orders (
+                user_id, source_order_id, interval_days, next_run,
+                phone, address, slot, note, is_active, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+            """,
+            (
+                user_id,
+                source_order_id,
+                days,
+                next_run,
+                phone,
+                address,
+                slot,
+                note,
+                _now_iso(),
+            ),
+        )
+        return int(cur.lastrowid)
+
+
+def get_due_recurring_orders() -> list[sqlite3.Row]:
+    now = _now_iso()
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM recurring_orders
+            WHERE is_active = 1
+              AND datetime(next_run) <= datetime(?)
+            ORDER BY next_run
+            """,
+            (now,),
+        ).fetchall()
+    return list(rows)
+
+
+def mark_recurring_run(recurring_id: int, next_run_iso: str) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE recurring_orders
+            SET next_run = ?
+            WHERE id = ?
+            """,
+            (next_run_iso, recurring_id),
+        )
+
+
+def list_user_recurring(user_id: int) -> list[sqlite3.Row]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM recurring_orders
+            WHERE user_id = ? AND is_active = 1
+            ORDER BY next_run
+            """,
+            (user_id,),
+        ).fetchall()
+    return list(rows)
+
+
+def deactivate_recurring(recurring_id: int, user_id: int | None = None) -> bool:
+    with get_connection() as conn:
+        if user_id is not None:
+            cur = conn.execute(
+                """
+                UPDATE recurring_orders
+                SET is_active = 0
+                WHERE id = ? AND user_id = ?
+                """,
+                (recurring_id, user_id),
+            )
+        else:
+            cur = conn.execute(
+                """
+                UPDATE recurring_orders
+                SET is_active = 0
+                WHERE id = ?
+                """,
+                (recurring_id,),
+            )
+        return cur.rowcount > 0

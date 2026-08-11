@@ -18,29 +18,41 @@ from bot.config import (
     ADMIN_IDS,
     BASE_DIR,
     BOT_TOKEN,
+    CARD_NUMBER,
+    CLICK_LINK,
     DATABASE_PATH,
     DELIVERY_PRICE,
     MIN_ORDER_AMOUNT,
+    PAYME_LINK,
     SHOP_ADDRESS,
     SHOP_HOURS,
     SHOP_NAME,
     SHOP_PHONE,
     SHOP_TELEGRAM,
     WEBAPP_PORT,
+    card_payment_enabled,
+    payment_link_with_amount,
 )
 from bot.database import (
+    calc_promo_discount,
     create_order,
+    effective_product_price,
     format_order,
+    get_bonus,
     get_categories,
+    get_delivery_fee,
     get_order,
     get_product,
     get_product_by_barcode,
     get_products,
+    get_user,
     get_variant,
     get_variants,
     product_display_price,
     save_order_items_direct,
     set_user_phone,
+    spend_bonus,
+    update_payment_status,
     upsert_user,
 )
 from bot.timeutil import get_delivery_slots
@@ -212,7 +224,7 @@ def resolve_order_items(
             variants = get_variants(product_id, active_only=True)
             if variants:
                 raise ValueError(f"'{product['name']}' uchun o'lcham tanlang")
-            unit_price = int(product["price"])
+            unit_price = effective_product_price(product)
             name = str(product["name"])
         subtotal += unit_price * quantity
         order_items.append(
@@ -236,8 +248,11 @@ def place_miniapp_order(
     slot: str,
     note: str,
     items_raw: list,
-) -> tuple[int, int, int, str]:
-    """Buyurtmani DB ga yozadi. Qaytaradi: order_id, total, subtotal, text."""
+    promo_code: str = "",
+    bonus_spent: int = 0,
+    payment_method: str = "pending",
+) -> tuple[int, int, int, int, str]:
+    """Buyurtmani DB ga yozadi. Qaytaradi: order_id, total, subtotal, delivery, text."""
     if not phone:
         raise ValueError("Telefon majburiy")
     if not address:
@@ -247,9 +262,33 @@ def place_miniapp_order(
     order_items, subtotal = resolve_order_items(items_raw)
     if subtotal < MIN_ORDER_AMOUNT:
         raise ValueError(f"Minimal buyurtma: {MIN_ORDER_AMOUNT:,} so'm")
-    total = subtotal + DELIVERY_PRICE
+
+    promo_code = (promo_code or "").strip()
+    discount = 0
+    if promo_code:
+        discount, msg = calc_promo_discount(promo_code, subtotal)
+        if msg != "OK" or discount <= 0:
+            raise ValueError(msg or "Promo kod yaroqsiz")
+        promo_code = promo_code.upper()
+
+    delivery_fee, _zone = get_delivery_fee(address)
+    try:
+        bonus_spent = max(0, int(bonus_spent or 0))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Bonus noto'g'ri") from exc
+    total = max(0, subtotal + delivery_fee - discount - bonus_spent)
+
+    allowed_pay = {"pending", "cash", "card_waiting", "debt"}
+    payment_method = (payment_method or "pending").strip().lower()
+    if payment_method not in allowed_pay:
+        payment_method = "pending"
+
     upsert_user(user_id, full_name, username)
     set_user_phone(user_id, phone)
+
+    if bonus_spent and not spend_bonus(user_id, bonus_spent):
+        raise ValueError("Bonus yetarli emas")
+
     order_id = create_order(
         user_id=user_id,
         pickup_address=SHOP_ADDRESS,
@@ -258,12 +297,75 @@ def place_miniapp_order(
         phone=phone,
         price=total,
         delivery_slot=slot,
+        promo_code=promo_code,
+        discount=discount,
+        bonus_spent=bonus_spent,
         subtotal=subtotal,
     )
     save_order_items_direct(order_id, order_items)
+    if payment_method != "pending":
+        update_payment_status(order_id, payment_method)
     order_row = get_order(order_id)
     text = format_order(order_row) if order_row else f"Buyurtma #{order_id}"
-    return order_id, total, subtotal, text
+    return order_id, total, subtotal, delivery_fee, text
+
+
+def extract_user_from_init_data(
+    init_data: str,
+) -> tuple[int | None, str, str | None]:
+    """validate_webapp_init_data yoki auth_date fallback orqali user."""
+    full_name = "Mini App mijoz"
+    username: str | None = None
+    if not init_data:
+        return None, full_name, username
+
+    validated = validate_webapp_init_data(init_data)
+    if validated and isinstance(validated.get("user"), dict):
+        user = validated["user"]
+        full_name = (
+            f"{user.get('first_name') or ''} {user.get('last_name') or ''}".strip()
+            or full_name
+        )
+        return int(user.get("id")), full_name, user.get("username")
+
+    fallback = parse_init_data_user_fallback(init_data)
+    if fallback:
+        logger.warning(
+            "initData hash o'tmadi, auth_date bilan fallback user=%s",
+            fallback.get("id"),
+        )
+        full_name = (
+            f"{fallback.get('first_name') or ''} "
+            f"{fallback.get('last_name') or ''}".strip()
+            or full_name
+        )
+        return int(fallback["id"]), full_name, fallback.get("username")
+    return None, full_name, username
+
+
+def extract_user_from_request(
+    request: web.Request, body: dict[str, Any] | None = None
+) -> tuple[int | None, str, str | None]:
+    """X-Telegram-Init-Data / query / body dan user."""
+    body = body or {}
+    init_data = (
+        (request.headers.get("X-Telegram-Init-Data") or "").strip()
+        or (request.rel_url.query.get("initData") or "").strip()
+        or (request.rel_url.query.get("init_data") or "").strip()
+        or str(body.get("initData") or body.get("init_data") or "").strip()
+    )
+    user_id, full_name, username = extract_user_from_init_data(init_data)
+    if user_id is not None:
+        return user_id, full_name, username
+
+    unsafe = body.get("telegram_user") or {}
+    if isinstance(unsafe, dict) and str(unsafe.get("id", "")).isdigit():
+        full_name = (
+            f"{unsafe.get('first_name') or ''} {unsafe.get('last_name') or ''}".strip()
+            or full_name
+        )
+        return int(unsafe["id"]), full_name, unsafe.get("username")
+    return None, full_name, username
 
 
 @web.middleware
@@ -286,7 +388,9 @@ async def cors_middleware(request: web.Request, handler):
 def _add_cors(response: web.StreamResponse) -> None:
     response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    response.headers["Access-Control-Allow-Headers"] = (
+        "Content-Type, Authorization, X-Telegram-Init-Data"
+    )
 
 
 def _row_to_dict(row) -> dict[str, Any]:
@@ -308,6 +412,55 @@ async def api_config(_request: web.Request) -> web.Response:
             "delivery_price": DELIVERY_PRICE,
             "min_order": MIN_ORDER_AMOUNT,
             "slots": get_delivery_slots(),
+            "payme_link": PAYME_LINK,
+            "click_link": CLICK_LINK,
+            "card_enabled": card_payment_enabled(),
+            "card_number": CARD_NUMBER if card_payment_enabled() else "",
+        }
+    )
+
+
+async def api_user(request: web.Request) -> web.Response:
+    user_id, _full_name, _username = extract_user_from_request(request)
+    if user_id is None:
+        raise web.HTTPUnauthorized(text="initData kerak")
+    user = get_user(user_id)
+    return web.json_response(
+        {
+            "user_id": user_id,
+            "bonus_points": get_bonus(user_id),
+            "full_name": (user["full_name"] if user else ""),
+        }
+    )
+
+
+async def api_promo(request: web.Request) -> web.Response:
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise web.HTTPBadRequest(text="JSON noto'g'ri") from exc
+    code = str(body.get("code") or body.get("promo_code") or "").strip()
+    try:
+        subtotal = int(body.get("subtotal") or 0)
+    except (TypeError, ValueError):
+        subtotal = 0
+    if not code:
+        return web.json_response(
+            {
+                "ok": False,
+                "discount": 0,
+                "message": "Promo kod bo'sh",
+                "code": "",
+            }
+        )
+    discount, msg = calc_promo_discount(code, subtotal)
+    ok = msg == "OK" and discount > 0
+    return web.json_response(
+        {
+            "ok": ok,
+            "discount": discount if ok else 0,
+            "message": msg,
+            "code": code.upper() if ok else code,
         }
     )
 
@@ -429,35 +582,7 @@ async def api_order(request: web.Request) -> web.Response:
     except Exception as exc:
         raise web.HTTPBadRequest(text="JSON noto'g'ri") from exc
 
-    init_data = (body.get("initData") or body.get("init_data") or "").strip()
-    validated = validate_webapp_init_data(init_data)
-
-    user_id: int | None = None
-    full_name = "Mini App mijoz"
-    username: str | None = None
-
-    if validated and isinstance(validated.get("user"), dict):
-        user = validated["user"]
-        user_id = int(user.get("id"))
-        full_name = (
-            f"{user.get('first_name') or ''} {user.get('last_name') or ''}".strip()
-            or full_name
-        )
-        username = user.get("username")
-    elif init_data:
-        fallback_user = parse_init_data_user_fallback(init_data)
-        if fallback_user:
-            logger.warning(
-                "initData hash o'tmadi, auth_date bilan fallback user=%s",
-                fallback_user.get("id"),
-            )
-            user_id = int(fallback_user["id"])
-            full_name = (
-                f"{fallback_user.get('first_name') or ''} "
-                f"{fallback_user.get('last_name') or ''}".strip()
-                or full_name
-            )
-            username = fallback_user.get("username")
+    user_id, full_name, username = extract_user_from_request(request, body)
     if user_id is None:
         # Telegram WebView ba'zan initData bermaydi — klient yuborgan user
         unsafe = body.get("telegram_user") or {}
@@ -475,6 +600,7 @@ async def api_order(request: web.Request) -> web.Response:
             user_id = int(dev_raw)
             full_name = f"Dev user {user_id}"
         else:
+            init_data = str(body.get("initData") or body.get("init_data") or "")
             logger.warning(
                 "Order 401: initData_len=%s has_unsafe=%s",
                 len(init_data),
@@ -485,7 +611,13 @@ async def api_order(request: web.Request) -> web.Response:
             )
 
     try:
-        order_id, total, subtotal, text = place_miniapp_order(
+        bonus_raw = body.get("bonus_spent") or 0
+        bonus_spent = int(bonus_raw)
+    except (TypeError, ValueError):
+        raise web.HTTPBadRequest(text="bonus_spent noto'g'ri")
+
+    try:
+        order_id, total, subtotal, delivery_fee, text = place_miniapp_order(
             user_id=user_id,
             full_name=full_name,
             username=username,
@@ -494,6 +626,9 @@ async def api_order(request: web.Request) -> web.Response:
             slot=str(body.get("slot") or "").strip(),
             note=str(body.get("note") or "").strip(),
             items_raw=body.get("items") or [],
+            promo_code=str(body.get("promo_code") or "").strip(),
+            bonus_spent=bonus_spent,
+            payment_method=str(body.get("payment_method") or "pending"),
         )
     except ValueError as exc:
         raise web.HTTPBadRequest(text=str(exc)) from exc
@@ -501,9 +636,15 @@ async def api_order(request: web.Request) -> web.Response:
         raise web.HTTPBadRequest(text="items format noto'g'ri") from exc
 
     if _bot is not None:
+        from bot.keyboards import admin_order_keyboard, payment_keyboard
+
         for admin_id in ADMIN_IDS:
             try:
-                await _bot.send_message(admin_id, f"🆕 Mini App\n{text}")
+                await _bot.send_message(
+                    admin_id,
+                    f"🆕 Mini App\n{text}",
+                    reply_markup=admin_order_keyboard(order_id),
+                )
             except Exception as exc:
                 logger.warning("Admin xabar xatosi %s: %s", admin_id, exc)
         try:
@@ -511,8 +652,16 @@ async def api_order(request: web.Request) -> web.Response:
                 user_id,
                 f"✅ Buyurtmangiz qabul qilindi!\n\n{text}",
             )
+            await _bot.send_message(
+                user_id,
+                "To'lov usulini tanlang:",
+                reply_markup=payment_keyboard(order_id, amount=total),
+            )
         except Exception as exc:
             logger.warning("Mijoz xabar xatosi %s: %s", user_id, exc)
+
+    # payment_link_with_amount — config/test uchun import saqlanadi
+    _ = payment_link_with_amount
 
     return web.json_response(
         {
@@ -520,7 +669,7 @@ async def api_order(request: web.Request) -> web.Response:
             "order_id": order_id,
             "total": total,
             "subtotal": subtotal,
-            "delivery_price": DELIVERY_PRICE,
+            "delivery_price": delivery_fee,
         }
     )
 
@@ -536,6 +685,8 @@ def create_app() -> web.Application:
     app = web.Application(middlewares=[cors_middleware])
     app.router.add_get("/health", api_health)
     app.router.add_get("/api/config", api_config)
+    app.router.add_get("/api/user", api_user)
+    app.router.add_post("/api/promo", api_promo)
     app.router.add_get("/api/categories", api_categories)
     app.router.add_get("/api/products", api_products)
     app.router.add_get("/api/barcode/{code}", api_barcode)

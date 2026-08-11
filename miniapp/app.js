@@ -18,6 +18,9 @@
     products: [],
     categoryId: null,
     cart: loadCart(),
+    bonusPoints: 0,
+    discount: 0,
+    promoCode: "",
   };
 
   const els = {
@@ -28,11 +31,16 @@
     cartList: document.getElementById("cartList"),
     subtotalLabel: document.getElementById("subtotalLabel"),
     deliveryLabel: document.getElementById("deliveryLabel"),
+    discountLabel: document.getElementById("discountLabel"),
     totalLabel: document.getElementById("totalLabel"),
     minOrderHint: document.getElementById("minOrderHint"),
+    bonusHint: document.getElementById("bonusHint"),
     phone: document.getElementById("phone"),
     address: document.getElementById("address"),
     slot: document.getElementById("slot"),
+    promo: document.getElementById("promo"),
+    bonus: document.getElementById("bonus"),
+    paymentMethod: document.getElementById("paymentMethod"),
     note: document.getElementById("note"),
     form: document.getElementById("checkoutForm"),
     submit: document.getElementById("submitOrder"),
@@ -72,6 +80,23 @@
 
   function cartSubtotal() {
     return state.cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  }
+
+  function bonusSpent() {
+    const n = Math.max(0, Math.round(Number(els.bonus && els.bonus.value) || 0));
+    return Math.min(n, state.bonusPoints || 0);
+  }
+
+  function calcTotals() {
+    const delivery = state.config ? state.config.delivery_price : 0;
+    const subtotal = cartSubtotal();
+    const discount = state.discount || 0;
+    const bonus = bonusSpent();
+    const total = Math.max(
+      0,
+      subtotal + (subtotal > 0 ? delivery : 0) - discount - bonus
+    );
+    return { delivery, subtotal, discount, bonus, total };
   }
 
   async function api(path, options) {
@@ -263,19 +288,25 @@
   }
 
   function renderCart() {
-    const delivery = state.config ? state.config.delivery_price : 0;
     const minOrder = state.config ? state.config.min_order : 0;
-    const subtotal = cartSubtotal();
-    const total = subtotal + (subtotal > 0 ? delivery : 0);
+    const { delivery, subtotal, discount, bonus, total } = calcTotals();
 
     els.subtotalLabel.textContent = formatMoney(subtotal);
     els.deliveryLabel.textContent = formatMoney(subtotal > 0 ? delivery : 0);
+    if (els.discountLabel) {
+      els.discountLabel.textContent = formatMoney(discount + bonus);
+    }
     els.totalLabel.textContent = formatMoney(total);
 
     if (subtotal > 0 && subtotal < minOrder) {
       els.minOrderHint.textContent = `Minimal buyurtma: ${formatMoney(minOrder)}`;
     } else {
       els.minOrderHint.textContent = "";
+    }
+    if (els.bonusHint) {
+      els.bonusHint.textContent = state.bonusPoints
+        ? `🎁 Bonus: ${state.bonusPoints.toLocaleString("uz-UZ")} ball`
+        : "";
     }
 
     els.submit.disabled = state.cart.length === 0 || subtotal < minOrder;
@@ -341,12 +372,62 @@
     renderProducts();
   }
 
+  async function validatePromo() {
+    const code = (els.promo && els.promo.value || "").trim();
+    state.promoCode = code;
+    if (!code) {
+      state.discount = 0;
+      renderCart();
+      return;
+    }
+    try {
+      const result = await api("/api/promo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, subtotal: cartSubtotal() }),
+      });
+      if (result.ok) {
+        state.discount = Number(result.discount) || 0;
+      } else {
+        state.discount = 0;
+        if (els.status) {
+          els.status.hidden = false;
+          els.status.classList.add("error");
+          els.status.textContent = result.message || "Promo xato";
+        }
+      }
+    } catch (err) {
+      state.discount = 0;
+    }
+    renderCart();
+  }
+
+  async function loadUserBonus() {
+    const initData = getInitData();
+    if (!initData) return;
+    try {
+      const user = await api(
+        `/api/user?initData=${encodeURIComponent(initData)}`
+      );
+      state.bonusPoints = Number(user.bonus_points) || 0;
+    } catch (_) {
+      state.bonusPoints = 0;
+    }
+  }
+
   async function bootstrap() {
     document.querySelectorAll(".nav-btn").forEach((btn) => {
       btn.addEventListener("click", () => showView(btn.dataset.view));
     });
 
     els.form.addEventListener("submit", onCheckout);
+    if (els.promo) {
+      els.promo.addEventListener("change", validatePromo);
+      els.promo.addEventListener("blur", validatePromo);
+    }
+    if (els.bonus) {
+      els.bonus.addEventListener("input", () => renderCart());
+    }
 
     const [config, categories] = await Promise.all([
       api("/api/config"),
@@ -369,6 +450,7 @@
     fillSlots();
     renderCategories();
     updateBadge();
+    await loadUserBonus();
     await loadProducts();
   }
 
@@ -402,6 +484,9 @@
           slot: payload.slot,
           note: payload.note,
           items: payload.items,
+          promo_code: payload.promo_code,
+          bonus_spent: payload.bonus_spent,
+          payment_method: payload.payment_method,
         })
       );
       return true;
@@ -434,6 +519,9 @@
       address: els.address.value.trim(),
       slot: els.slot.value,
       note: els.note.value.trim(),
+      promo_code: (els.promo && els.promo.value.trim()) || "",
+      bonus_spent: bonusSpent(),
+      payment_method: (els.paymentMethod && els.paymentMethod.value) || "pending",
       items: state.cart.map((item) => ({
         product_id: item.product_id,
         quantity: item.quantity,
