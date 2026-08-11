@@ -3,8 +3,10 @@ export type Tab =
   | 'orders'
   | 'payments'
   | 'warehouse'
-  | 'moves'
   | 'products'
+  | 'more'
+
+export type MorePanel = 'moves' | 'broadcast' | 'csv' | 'contacts'
 
 export type Order = {
   id: number
@@ -60,6 +62,16 @@ export type Movement = {
   order_id: number | null
   admin_id: number | null
   created_at: string
+}
+
+export type Contact = {
+  id: number
+  name: string
+  phone: string
+  note: string
+  telegram_user_id: number | null
+  created_at: string
+  updated_at: string
 }
 
 export type StatsPayload = {

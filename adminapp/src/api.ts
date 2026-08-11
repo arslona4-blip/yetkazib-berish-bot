@@ -143,4 +143,46 @@ export const api = {
       auth,
       { method: 'PATCH', body: JSON.stringify(body) },
     ),
+  broadcast: (auth: AuthState | null, text: string) =>
+    req<{ ok: boolean; sent: number; failed: number; total: number }>(
+      '/api/admin/broadcast',
+      auth,
+      { method: 'POST', body: JSON.stringify({ text }) },
+    ),
+  exportCsv: async (auth: AuthState | null) => {
+    const res = await fetch('/api/admin/products/export', {
+      headers: headers(auth),
+    })
+    if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`)
+    return res.text()
+  },
+  importCsv: (auth: AuthState | null, csv: string) =>
+    req<{ ok: boolean; imported: number }>('/api/admin/products/import', auth, {
+      method: 'POST',
+      body: JSON.stringify({ csv }),
+    }),
+  contacts: (auth: AuthState | null) =>
+    req<{ ok: boolean; contacts: import('./types').Contact[] }>(
+      '/api/admin/contacts',
+      auth,
+    ),
+  createContact: (
+    auth: AuthState | null,
+    body: { name: string; phone?: string; note?: string },
+  ) =>
+    req<{ ok: boolean; contact: import('./types').Contact }>(
+      '/api/admin/contacts',
+      auth,
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
+  updateContact: (
+    auth: AuthState | null,
+    id: number,
+    body: { name?: string; phone?: string; note?: string },
+  ) =>
+    req<{ ok: boolean; contact: import('./types').Contact }>(
+      `/api/admin/contacts/${id}`,
+      auth,
+      { method: 'PATCH', body: JSON.stringify(body) },
+    ),
 }
