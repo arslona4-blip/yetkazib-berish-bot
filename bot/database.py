@@ -1844,6 +1844,63 @@ def get_low_stock_products(threshold: int) -> list[sqlite3.Row]:
     return list(rows)
 
 
+def get_inventory_products(
+    *,
+    low_only: bool = False,
+    threshold: int | None = None,
+    limit: int = 40,
+) -> list[sqlite3.Row]:
+    """Ombor paneli: mahsulotlar qoldiq bo'yicha."""
+    from bot.config import LOW_STOCK_THRESHOLD
+
+    thr = int(threshold if threshold is not None else LOW_STOCK_THRESHOLD)
+    with get_connection() as conn:
+        if low_only:
+            rows = conn.execute(
+                """
+                SELECT p.*, c.name AS category_name
+                FROM products p
+                LEFT JOIN categories c ON c.id = p.category_id
+                WHERE p.is_active = 1
+                  AND COALESCE(p.stock, 0) <= ?
+                ORDER BY p.stock ASC, p.name COLLATE NOCASE
+                LIMIT ?
+                """,
+                (thr, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT p.*, c.name AS category_name
+                FROM products p
+                LEFT JOIN categories c ON c.id = p.category_id
+                WHERE p.is_active = 1
+                ORDER BY p.stock ASC, p.name COLLATE NOCASE
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+    return list(rows)
+
+
+def adjust_product_stock(product_id: int, delta: int) -> int:
+    """Qoldiqni +/− qiladi. Yangi stock qaytaradi."""
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE products
+            SET stock = MAX(COALESCE(stock, 0) + ?, 0)
+            WHERE id = ?
+            """,
+            (int(delta), int(product_id)),
+        )
+        row = conn.execute(
+            "SELECT stock FROM products WHERE id = ?", (int(product_id),)
+        ).fetchone()
+    return int(row["stock"]) if row else 0
+
+
+
 def create_recurring_order(
     user_id: int,
     source_order_id: int,

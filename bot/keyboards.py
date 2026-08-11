@@ -390,12 +390,6 @@ def payment_keyboard(
                 callback_data=f"pay_card:{order_id}",
             )
         ],
-        [
-            InlineKeyboardButton(
-                "📒 Qarzga",
-                callback_data=f"pay_debt:{order_id}",
-            )
-        ],
     ]
     payme_url = payment_link_with_amount(PAYME_LINK, amount, order_id)
     if payme_url:
@@ -463,12 +457,6 @@ def admin_payment_keyboard(order_id: int) -> InlineKeyboardMarkup:
                     callback_data=f"pay_reject:{order_id}",
                 ),
             ],
-            [
-                InlineKeyboardButton(
-                    "📒 Qarzga yozish",
-                    callback_data=f"pay_debt:{order_id}",
-                )
-            ],
         ]
     )
 
@@ -511,12 +499,10 @@ def admin_menu_keyboard() -> InlineKeyboardMarkup:
                 )
             ],
             [InlineKeyboardButton("🛍 Mahsulotlar", callback_data="admin:products")],
+            [InlineKeyboardButton("📦 Ombor", callback_data="admin:stock")],
             [
                 InlineKeyboardButton(
                     "👥 Kontaktlar", callback_data="admin:contacts"
-                ),
-                InlineKeyboardButton(
-                    "📒 Qarzdorlar", callback_data="contact:debtors"
                 ),
             ],
             [InlineKeyboardButton("📊 Statistika", callback_data="admin:stats")],
@@ -527,6 +513,43 @@ def admin_menu_keyboard() -> InlineKeyboardMarkup:
         ]
     )
     return InlineKeyboardMarkup(rows)
+
+
+def admin_stock_keyboard(*, low_only: bool = False) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                "📋 Hammasi" if low_only else "⚠️ Kam qoldiq",
+                callback_data="admin:stock" if low_only else "admin:stock_low",
+            )
+        ],
+        [InlineKeyboardButton("⬅️ Admin panel", callback_data="admin:menu")],
+    ]
+    return InlineKeyboardMarkup(rows)
+
+
+def admin_stock_item_keyboard(product_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "➖ −1", callback_data=f"admin_stock:dec:{product_id}"
+                ),
+                InlineKeyboardButton(
+                    "➕ +1", callback_data=f"admin_stock:inc:{product_id}"
+                ),
+                InlineKeyboardButton(
+                    "➕ +10", callback_data=f"admin_stock:add10:{product_id}"
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "✏️ Son yozish",
+                    callback_data=f"admin_prod:stock:{product_id}",
+                )
+            ],
+        ]
+    )
 
 
 def delivery_slots_keyboard(slots) -> InlineKeyboardMarkup:
@@ -869,14 +892,6 @@ def admin_order_keyboard(order_id: int) -> InlineKeyboardMarkup:
         )
 
     rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
-    rows.append(
-        [
-            InlineKeyboardButton(
-                "📒 Qarzga yozish",
-                callback_data=f"pay_debt:{order_id}",
-            )
-        ]
-    )
     rows.append(
         [
             InlineKeyboardButton(
