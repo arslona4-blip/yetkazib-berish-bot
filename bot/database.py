@@ -1682,41 +1682,16 @@ def set_user_language(user_id: int, lang: str) -> None:
 def get_delivery_fee(
     address: str, lat: float | None = None, lon: float | None = None
 ) -> tuple[int, str]:
-    _ = (lat, lon)
-    addr = (address or "").casefold()
-    zones = list_delivery_zones(active_only=True)
-    for zone in zones:
-        keywords = (zone["keywords"] or "").strip()
-        if not keywords:
-            continue
-        for kw in keywords.split(","):
-            token = kw.strip().casefold()
-            if token and token in addr:
-                return int(zone["price"]), str(zone["name"])
-    for zone in zones:
-        if (zone["name"] or "").strip().casefold() == "standart":
-            return int(zone["price"]), str(zone["name"])
-    if zones:
-        z = zones[0]
-        return int(z["price"]), str(z["name"])
-    return DELIVERY_PRICE, "Standart"
+    """Bitta mahalla — doimiy yetkazish narxi."""
+    _ = (address, lat, lon)
+    from bot.config import DELIVERY_AREA
+
+    return DELIVERY_PRICE, DELIVERY_AREA
 
 
 def list_delivery_zones(active_only: bool = False) -> list[sqlite3.Row]:
-    with get_connection() as conn:
-        if active_only:
-            rows = conn.execute(
-                """
-                SELECT * FROM delivery_zones
-                WHERE is_active = 1
-                ORDER BY id
-                """
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT * FROM delivery_zones ORDER BY id"
-            ).fetchall()
-    return list(rows)
+    """Eski API — endi ishlatilmaydi."""
+    return []
 
 
 def upsert_zone(
@@ -1727,34 +1702,11 @@ def upsert_zone(
     price: int,
     is_active: int = 1,
 ) -> int:
-    with get_connection() as conn:
-        if zone_id:
-            conn.execute(
-                """
-                UPDATE delivery_zones
-                SET name = ?, keywords = ?, price = ?, is_active = ?
-                WHERE id = ?
-                """,
-                (name.strip(), keywords.strip(), int(price), int(is_active), zone_id),
-            )
-            return int(zone_id)
-        cur = conn.execute(
-            """
-            INSERT INTO delivery_zones (name, keywords, price, is_active)
-            VALUES (?, ?, ?, ?)
-            """,
-            (name.strip(), keywords.strip(), int(price), int(is_active)),
-        )
-        return int(cur.lastrowid)
+    return 0
 
 
 def deactivate_zone(zone_id: int) -> bool:
-    with get_connection() as conn:
-        cur = conn.execute(
-            "UPDATE delivery_zones SET is_active = 0 WHERE id = ?",
-            (zone_id,),
-        )
-        return cur.rowcount > 0
+    return False
 
 
 def save_order_review(

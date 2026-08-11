@@ -499,7 +499,6 @@ def admin_menu_keyboard() -> InlineKeyboardMarkup:
             ],
             [InlineKeyboardButton("📊 Statistika", callback_data="admin:stats")],
             [InlineKeyboardButton("📈 Kunlik hisobot", callback_data="admin:report")],
-            [InlineKeyboardButton("🗺 Zonalar", callback_data="admin:zones")],
             [InlineKeyboardButton("📣 Broadcast", callback_data="admin:broadcast")],
             [InlineKeyboardButton("📤 Excel eksport", callback_data="admin:export")],
             [InlineKeyboardButton("📥 Excel import", callback_data="admin:import")],
@@ -927,14 +926,5 @@ def recurring_interval_keyboard(order_id: int) -> InlineKeyboardMarkup:
                 InlineKeyboardButton("30 kun", callback_data=f"recur_set:{order_id}:30"),
             ],
             [InlineKeyboardButton("❌ Bekor", callback_data="recur_cancel")],
-        ]
-    )
-
-
-def zones_admin_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        [
-            [InlineKeyboardButton("➕ Zona qo'shish", callback_data="zone:add")],
-            [InlineKeyboardButton("⬅️ Orqaga", callback_data="admin:menu")],
         ]
     )

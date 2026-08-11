@@ -558,8 +558,6 @@ async def do_sale(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 def build_extra_conversations() -> list:
-    from bot.features_handlers import do_add_zone, start_add_zone
-
     return [
         ConversationHandler(
             entry_points=[MessageHandler(filters.Regex("^🔍 Qidiruv$"), start_search)],
@@ -655,20 +653,6 @@ def build_extra_conversations() -> list:
             states={
                 ExtraState.SALE: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, do_sale)
-                ]
-            },
-            fallbacks=[
-                MessageHandler(filters.Regex("^❌ Bekor qilish$"), cancel_extra),
-            ],
-            allow_reentry=True,
-        ),
-        ConversationHandler(
-            entry_points=[
-                CallbackQueryHandler(start_add_zone, pattern=r"^zone:add$")
-            ],
-            states={
-                1: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, do_add_zone)
                 ]
             },
             fallbacks=[

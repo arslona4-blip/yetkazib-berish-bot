@@ -41,12 +41,22 @@ PAYMENT_STATUS_LABELS = {
 }
 
 DELIVERY_PRICE = int(os.getenv("DELIVERY_PRICE", "10000"))
+# Faqat shu mahalla ichida yetkaziladi
+DELIVERY_AREA = os.getenv("DELIVERY_AREA", "Saruyz mahallasi").strip() or "Saruyz mahallasi"
+DELIVERY_AREA_KEYWORDS = [
+    k.strip().casefold()
+    for k in os.getenv(
+        "DELIVERY_AREA_KEYWORDS",
+        "saruyz,saruiz,саруйз,саруиз",
+    ).split(",")
+    if k.strip()
+]
 MIN_ORDER_AMOUNT = int(os.getenv("MIN_ORDER_AMOUNT", "30000"))
 BONUS_PERCENT = int(os.getenv("BONUS_PERCENT", "2"))
 BONUS_RATE = int(os.getenv("BONUS_RATE", "100"))  # 100 so'm = 1 ball
 
 SHOP_NAME = os.getenv("SHOP_NAME", "Do'kon")
-SHOP_ADDRESS = os.getenv("SHOP_ADDRESS", "Toshkent sh.")
+SHOP_ADDRESS = os.getenv("SHOP_ADDRESS", "Saruyz mahallasi")
 SHOP_PHONE = os.getenv("SHOP_PHONE", "+998 90 123 45 67")
 SHOP_TELEGRAM = os.getenv("SHOP_TELEGRAM", "@support")
 SHOP_HOURS = os.getenv("SHOP_HOURS", "09:00 - 22:00")
@@ -87,3 +97,15 @@ def payment_link_with_amount(base_url: str, amount: int, order_id: int) -> str:
         return ""
     sep = "&" if "?" in base_url else "?"
     return f"{base_url}{sep}amount={int(amount)}&order_id={int(order_id)}"
+
+
+def is_in_delivery_area(address: str) -> bool:
+    """Manzil Saruyz mahallasi ichidami (kalit so'z bo'yicha)."""
+    addr = (address or "").casefold()
+    if not addr:
+        return False
+    # Lokatsiya yuborilganda matn "Lokatsiya" bo'ladi — alohida ruxsat
+    if addr in {"lokatsiya", "location"}:
+        return True
+    keywords = DELIVERY_AREA_KEYWORDS or ["saruyz"]
+    return any(kw in addr for kw in keywords)
