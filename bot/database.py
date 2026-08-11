@@ -322,6 +322,13 @@ def _migrate_features(conn: sqlite3.Connection) -> None:
             is_active INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS shajara_shares (
+            code TEXT PRIMARY KEY,
+            payload TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
         """
     )
     zone_count = conn.execute("SELECT COUNT(*) FROM delivery_zones").fetchone()[0]
@@ -1945,3 +1952,57 @@ def deactivate_recurring(recurring_id: int, user_id: int | None = None) -> bool:
                 (recurring_id,),
             )
         return cur.rowcount > 0
+
+
+# --- Mening Shajaram share ---
+def _new_shajara_code() -> str:
+    import random
+    import string
+
+    alphabet = string.ascii_uppercase + string.digits
+    alphabet = alphabet.replace("O", "").replace("0", "").replace("I", "").replace("1", "")
+    return "".join(random.choice(alphabet) for _ in range(6))
+
+
+def save_shajara_share(payload_json: str, code: str | None = None) -> str:
+    """Yangi yoki mavjud kod bilan shajarani saqlaydi. Qaytaradi: code."""
+    now = _now_iso()
+    with get_connection() as conn:
+        if code:
+            code = code.strip().upper()
+            row = conn.execute(
+                "SELECT code FROM shajara_shares WHERE code = ?", (code,)
+            ).fetchone()
+            if row:
+                conn.execute(
+                    """
+                    UPDATE shajara_shares
+                    SET payload = ?, updated_at = ?
+                    WHERE code = ?
+                    """,
+                    (payload_json, now, code),
+                )
+                return code
+        for _ in range(12):
+            candidate = _new_shajara_code()
+            try:
+                conn.execute(
+                    """
+                    INSERT INTO shajara_shares (code, payload, created_at, updated_at)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (candidate, payload_json, now, now),
+                )
+                return candidate
+            except sqlite3.IntegrityError:
+                continue
+    raise RuntimeError("Share kod yaratilmadi")
+
+
+def get_shajara_share(code: str) -> str | None:
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT payload FROM shajara_shares WHERE code = ?",
+            (code.strip().upper(),),
+        ).fetchone()
+    return str(row["payload"]) if row else None
