@@ -306,6 +306,9 @@ def place_miniapp_order(
         subtotal=subtotal,
     )
     save_order_items_direct(order_id, order_items)
+    from bot.database import decrease_stock_for_order_items
+
+    decrease_stock_for_order_items(order_id, order_items)
     if payment_method != "pending":
         update_payment_status(order_id, payment_method)
     order_row = get_order(order_id)

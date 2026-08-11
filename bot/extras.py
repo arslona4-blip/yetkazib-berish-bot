@@ -302,7 +302,13 @@ async def do_stock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         await update.message.reply_text("Raqam yozing.")
         return ExtraState.STOCK
     pid = context.user_data.get("stock_product_id")
-    set_product_stock(pid, int(text))
+    set_product_stock(
+        pid,
+        int(text),
+        reason="inventory",
+        note="Qo'lda son yozish",
+        admin_id=update.effective_user.id,
+    )
     await update.message.reply_text(
         f"✅ Ombor yangilandi: {text}",
         reply_markup=menu_kb(update.effective_user.id),

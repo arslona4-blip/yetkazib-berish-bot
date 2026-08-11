@@ -1312,8 +1312,6 @@ async def confirm_order_callback(
         await query.edit_message_text("Bonus yetarli emas. Qaytadan urinib ko'ring.")
         return ConversationHandler.END
 
-    decrease_stock_for_cart(user_id)
-
     order_id = create_order(
         user_id=user_id,
         pickup_address=order_data["pickup_address"],
@@ -1330,6 +1328,7 @@ async def confirm_order_callback(
         subtotal=subtotal,
     )
     save_order_items(order_id, user_id)
+    decrease_stock_for_cart(user_id, order_id=order_id)
     clear_cart(user_id)
     context.user_data.pop("order", None)
 
@@ -1512,7 +1511,9 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await contacts_home(update, context)
         return
 
-    if action in {"stock", "stock_low", "stock_all"} or action.startswith("stock_cat:"):
+    if action in {"stock", "stock_low", "stock_all", "stock_cats"} or action.startswith(
+        "stock_cat:"
+    ):
         await show_admin_stock_panel(update, context, action)
         return
 
@@ -1565,14 +1566,20 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def show_admin_stock_panel(
     update: Update, context: ContextTypes.DEFAULT_TYPE, action: str
 ) -> None:
-    """Ombor: toifalar yoki toifa bo'yicha spiska."""
+    """Ombor: professional home / toifalar / spiska."""
     query = update.callback_query
     from bot.config import LOW_STOCK_THRESHOLD
     from bot.database import get_inventory_categories, get_inventory_products
 
+    if action == "stock":
+        from bot.warehouse import show_warehouse_home
+
+        await show_warehouse_home(update, context)
+        return
+
     low_only = action == "stock_low"
 
-    if action in {"stock", "stock_low"}:
+    if action in {"stock_cats", "stock_low"}:
         cats = get_inventory_categories(low_only=low_only)
         title = "⚠️ Kam qoldiq — toifalar" if low_only else "📦 Ombor — toifalar"
         if not cats:
@@ -1654,7 +1661,7 @@ async def show_admin_stock_panel(
         await query.edit_message_text(
             text,
             reply_markup=admin_stock_list_keyboard(
-                products, back_callback="admin:stock"
+                products, back_callback="admin:stock_cats"
             ),
             parse_mode="HTML",
         )
@@ -2440,7 +2447,9 @@ async def admin_stock_callback(
         delta = 10
     else:
         return
-    stock = adjust_product_stock(product_id, delta)
+    stock = adjust_product_stock(
+        product_id, delta, reason="adjust", admin_id=query.from_user.id
+    )
     await query.edit_message_text(
         f"📦 <b>{product['name']}</b>\nQoldiq: <b>{stock}</b> dona",
         reply_markup=admin_stock_item_keyboard(product_id),

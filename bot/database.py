@@ -329,7 +329,28 @@ def _migrate_features(conn: sqlite3.Connection) -> None:
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS stock_movements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_id INTEGER NOT NULL,
+            delta INTEGER NOT NULL,
+            stock_after INTEGER NOT NULL,
+            reason TEXT NOT NULL,
+            note TEXT,
+            order_id INTEGER,
+            admin_id INTEGER,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (product_id) REFERENCES products (id)
+        );
         """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_stock_movements_product "
+        "ON stock_movements(product_id, created_at)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_stock_movements_created "
+        "ON stock_movements(created_at)"
     )
     zone_count = conn.execute("SELECT COUNT(*) FROM delivery_zones").fetchone()[0]
     if zone_count == 0:
@@ -1280,9 +1301,240 @@ def spend_bonus(user_id: int, points: int) -> bool:
     return True
 
 
-def set_product_stock(product_id: int, stock: int) -> None:
+def set_product_stock(
+    product_id: int,
+    stock: int,
+    *,
+    reason: str = "inventory",
+    note: str = "",
+    admin_id: int | None = None,
+    order_id: int | None = None,
+) -> int:
+    """Absolut qoldiqni o'rnatadi va jurnalga yozadi."""
+    stock = max(0, int(stock))
     with get_connection() as conn:
-        conn.execute("UPDATE products SET stock = ? WHERE id = ?", (stock, product_id))
+        row = conn.execute(
+            "SELECT COALESCE(stock, 0) AS stock FROM products WHERE id = ?",
+            (int(product_id),),
+        ).fetchone()
+        if not row:
+            raise ValueError("Mahsulot topilmadi")
+        old = int(row["stock"])
+        delta = stock - old
+        conn.execute(
+            "UPDATE products SET stock = ? WHERE id = ?",
+            (stock, int(product_id)),
+        )
+        conn.execute(
+            """
+            INSERT INTO stock_movements (
+                product_id, delta, stock_after, reason, note, order_id, admin_id, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                int(product_id),
+                delta,
+                stock,
+                reason,
+                (note or "").strip(),
+                order_id,
+                admin_id,
+                _now_iso(),
+            ),
+        )
+    return stock
+
+
+def adjust_product_stock(
+    product_id: int,
+    delta: int,
+    *,
+    reason: str = "adjust",
+    note: str = "",
+    admin_id: int | None = None,
+    order_id: int | None = None,
+) -> int:
+    """Qoldiqni +/− qiladi va jurnalga yozadi."""
+    delta = int(delta)
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT COALESCE(stock, 0) AS stock FROM products WHERE id = ?",
+            (int(product_id),),
+        ).fetchone()
+        if not row:
+            raise ValueError("Mahsulot topilmadi")
+        new_stock = max(0, int(row["stock"]) + delta)
+        actual_delta = new_stock - int(row["stock"])
+        conn.execute(
+            "UPDATE products SET stock = ? WHERE id = ?",
+            (new_stock, int(product_id)),
+        )
+        if actual_delta != 0 or delta == 0:
+            conn.execute(
+                """
+                INSERT INTO stock_movements (
+                    product_id, delta, stock_after, reason, note,
+                    order_id, admin_id, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    int(product_id),
+                    actual_delta,
+                    new_stock,
+                    reason,
+                    (note or "").strip(),
+                    order_id,
+                    admin_id,
+                    _now_iso(),
+                ),
+            )
+    return new_stock
+
+
+def decrease_stock_for_cart(user_id: int, order_id: int | None = None) -> None:
+    """Savatcha asosida ombordan chiqim (sotuv)."""
+    items = get_cart(user_id)
+    with get_connection() as conn:
+        for item in items:
+            pid = int(item["product_id"])
+            qty = int(item["quantity"])
+            row = conn.execute(
+                "SELECT COALESCE(stock, 0) AS stock FROM products WHERE id = ?",
+                (pid,),
+            ).fetchone()
+            if not row:
+                continue
+            old = int(row["stock"])
+            new_stock = max(0, old - qty)
+            conn.execute(
+                "UPDATE products SET stock = ? WHERE id = ?",
+                (new_stock, pid),
+            )
+            conn.execute(
+                """
+                INSERT INTO stock_movements (
+                    product_id, delta, stock_after, reason, note,
+                    order_id, admin_id, created_at
+                ) VALUES (?, ?, ?, 'sale', ?, ?, NULL, ?)
+                """,
+                (
+                    pid,
+                    new_stock - old,
+                    new_stock,
+                    f"Buyurtma #{order_id}" if order_id else "Savatcha sotuvi",
+                    order_id,
+                    _now_iso(),
+                ),
+            )
+
+
+def decrease_stock_for_order_items(order_id: int, items: list[dict]) -> None:
+    """Mini App / tashqi buyurtma chiqimi."""
+    with get_connection() as conn:
+        for item in items:
+            try:
+                pid = int(item.get("product_id") or 0)
+                qty = int(item.get("quantity") or 0)
+            except (TypeError, ValueError):
+                continue
+            if pid <= 0 or qty <= 0:
+                continue
+            row = conn.execute(
+                "SELECT COALESCE(stock, 0) AS stock FROM products WHERE id = ?",
+                (pid,),
+            ).fetchone()
+            if not row:
+                continue
+            old = int(row["stock"])
+            new_stock = max(0, old - qty)
+            conn.execute(
+                "UPDATE products SET stock = ? WHERE id = ?",
+                (new_stock, pid),
+            )
+            conn.execute(
+                """
+                INSERT INTO stock_movements (
+                    product_id, delta, stock_after, reason, note,
+                    order_id, admin_id, created_at
+                ) VALUES (?, ?, ?, 'sale', ?, ?, NULL, ?)
+                """,
+                (
+                    pid,
+                    new_stock - old,
+                    new_stock,
+                    f"Buyurtma #{order_id}",
+                    order_id,
+                    _now_iso(),
+                ),
+            )
+
+
+def get_stock_movements(
+    *,
+    limit: int = 30,
+    product_id: int | None = None,
+    reason: str | None = None,
+) -> list[sqlite3.Row]:
+    clauses: list[str] = []
+    params: list[Any] = []
+    if product_id is not None:
+        clauses.append("m.product_id = ?")
+        params.append(int(product_id))
+    if reason:
+        clauses.append("m.reason = ?")
+        params.append(reason)
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    params.append(int(limit))
+    with get_connection() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT m.*, p.name AS product_name
+            FROM stock_movements m
+            LEFT JOIN products p ON p.id = m.product_id
+            {where}
+            ORDER BY m.id DESC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+    return list(rows)
+
+
+def get_warehouse_summary() -> dict[str, int]:
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT
+              COUNT(*) AS products,
+              COALESCE(SUM(COALESCE(stock, 0)), 0) AS units,
+              COALESCE(SUM(CASE WHEN COALESCE(stock, 0) <= 0 THEN 1 ELSE 0 END), 0)
+                AS zero_stock
+            FROM products
+            WHERE is_active = 1
+            """
+        ).fetchone()
+        today = conn.execute(
+            """
+            SELECT
+              COALESCE(SUM(CASE WHEN delta > 0 THEN delta ELSE 0 END), 0) AS in_qty,
+              COALESCE(SUM(CASE WHEN delta < 0 THEN -delta ELSE 0 END), 0) AS out_qty,
+              COUNT(*) AS moves
+            FROM stock_movements
+            WHERE date(created_at) = date('now', 'localtime')
+            """
+        ).fetchone()
+    from bot.config import LOW_STOCK_THRESHOLD
+
+    low = len(get_low_stock_products(LOW_STOCK_THRESHOLD))
+    return {
+        "products": int(row["products"] or 0),
+        "units": int(row["units"] or 0),
+        "zero_stock": int(row["zero_stock"] or 0),
+        "low_stock": low,
+        "today_in": int(today["in_qty"] or 0),
+        "today_out": int(today["out_qty"] or 0),
+        "today_moves": int(today["moves"] or 0),
+    }
 
 
 def set_product_image(product_id: int, file_id: str) -> None:
@@ -1291,16 +1543,6 @@ def set_product_image(product_id: int, file_id: str) -> None:
             "UPDATE products SET image_file_id = ? WHERE id = ?",
             (file_id, product_id),
         )
-
-
-def decrease_stock_for_cart(user_id: int) -> None:
-    items = get_cart(user_id)
-    with get_connection() as conn:
-        for item in items:
-            conn.execute(
-                "UPDATE products SET stock = MAX(stock - ?, 0) WHERE id = ?",
-                (item["quantity"], item["product_id"]),
-            )
 
 
 def refill_cart_from_order(user_id: int, order_id: int) -> int:
@@ -1948,24 +2190,6 @@ def get_inventory_categories(
     if low_only:
         result = [c for c in result if c["low_count"] > 0]
     return result
-
-
-def adjust_product_stock(product_id: int, delta: int) -> int:
-    """Qoldiqni +/− qiladi. Yangi stock qaytaradi."""
-    with get_connection() as conn:
-        conn.execute(
-            """
-            UPDATE products
-            SET stock = MAX(COALESCE(stock, 0) + ?, 0)
-            WHERE id = ?
-            """,
-            (int(delta), int(product_id)),
-        )
-        row = conn.execute(
-            "SELECT stock FROM products WHERE id = ?", (int(product_id),)
-        ).fetchone()
-    return int(row["stock"]) if row else 0
-
 
 
 def create_recurring_order(
