@@ -1848,39 +1848,106 @@ def get_inventory_products(
     *,
     low_only: bool = False,
     threshold: int | None = None,
-    limit: int = 40,
+    category_id: int | None = None,
+    limit: int = 200,
 ) -> list[sqlite3.Row]:
-    """Ombor paneli: mahsulotlar qoldiq bo'yicha."""
+    """Ombor paneli: mahsulotlar (toifa + qoldiq)."""
+    from bot.config import LOW_STOCK_THRESHOLD
+
+    thr = int(threshold if threshold is not None else LOW_STOCK_THRESHOLD)
+    clauses = ["p.is_active = 1"]
+    params: list[Any] = []
+    if low_only:
+        clauses.append("COALESCE(p.stock, 0) <= ?")
+        params.append(thr)
+    if category_id is not None:
+        if int(category_id) == 0:
+            clauses.append("p.category_id IS NULL")
+        else:
+            clauses.append("p.category_id = ?")
+            params.append(int(category_id))
+    where = " AND ".join(clauses)
+    params.append(int(limit))
+    with get_connection() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT p.*, c.name AS category_name
+            FROM products p
+            LEFT JOIN categories c ON c.id = p.category_id
+            WHERE {where}
+            ORDER BY c.name COLLATE NOCASE, p.name COLLATE NOCASE, p.id
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+    return list(rows)
+
+
+def get_inventory_categories(
+    *,
+    low_only: bool = False,
+    threshold: int | None = None,
+) -> list[dict[str, Any]]:
+    """Ombor: toifalar va mahsulot/qoldiq soni."""
     from bot.config import LOW_STOCK_THRESHOLD
 
     thr = int(threshold if threshold is not None else LOW_STOCK_THRESHOLD)
     with get_connection() as conn:
-        if low_only:
-            rows = conn.execute(
-                """
-                SELECT p.*, c.name AS category_name
-                FROM products p
-                LEFT JOIN categories c ON c.id = p.category_id
-                WHERE p.is_active = 1
-                  AND COALESCE(p.stock, 0) <= ?
-                ORDER BY p.stock ASC, p.name COLLATE NOCASE
-                LIMIT ?
-                """,
-                (thr, limit),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                """
-                SELECT p.*, c.name AS category_name
-                FROM products p
-                LEFT JOIN categories c ON c.id = p.category_id
-                WHERE p.is_active = 1
-                ORDER BY p.stock ASC, p.name COLLATE NOCASE
-                LIMIT ?
-                """,
-                (limit,),
-            ).fetchall()
-    return list(rows)
+        rows = conn.execute(
+            """
+            SELECT
+              c.id AS category_id,
+              c.name AS category_name,
+              COUNT(p.id) AS product_count,
+              COALESCE(SUM(CASE WHEN COALESCE(p.stock, 0) <= ? THEN 1 ELSE 0 END), 0)
+                AS low_count,
+              COALESCE(SUM(COALESCE(p.stock, 0)), 0) AS stock_sum
+            FROM categories c
+            LEFT JOIN products p
+              ON p.category_id = c.id AND p.is_active = 1
+            WHERE c.is_active = 1
+            GROUP BY c.id, c.name
+            HAVING product_count > 0
+            ORDER BY c.name COLLATE NOCASE
+            """,
+            (thr,),
+        ).fetchall()
+        uncategorized = conn.execute(
+            """
+            SELECT
+              COUNT(*) AS product_count,
+              COALESCE(SUM(CASE WHEN COALESCE(stock, 0) <= ? THEN 1 ELSE 0 END), 0)
+                AS low_count,
+              COALESCE(SUM(COALESCE(stock, 0)), 0) AS stock_sum
+            FROM products
+            WHERE is_active = 1 AND category_id IS NULL
+            """,
+            (thr,),
+        ).fetchone()
+
+    result: list[dict[str, Any]] = [
+        {
+            "category_id": int(r["category_id"]),
+            "category_name": r["category_name"],
+            "product_count": int(r["product_count"]),
+            "low_count": int(r["low_count"]),
+            "stock_sum": int(r["stock_sum"]),
+        }
+        for r in rows
+    ]
+    if uncategorized and int(uncategorized["product_count"] or 0) > 0:
+        result.append(
+            {
+                "category_id": 0,
+                "category_name": "Toifasiz",
+                "product_count": int(uncategorized["product_count"]),
+                "low_count": int(uncategorized["low_count"]),
+                "stock_sum": int(uncategorized["stock_sum"]),
+            }
+        )
+    if low_only:
+        result = [c for c in result if c["low_count"] > 0]
+    return result
 
 
 def adjust_product_stock(product_id: int, delta: int) -> int:
