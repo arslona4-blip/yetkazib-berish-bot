@@ -5,3 +5,6 @@ __pycache__/
 venv/
 data/
 *.db
+node_modules/
+mening-shajaram/dist/
+mening-shajaram/dev-dist/
