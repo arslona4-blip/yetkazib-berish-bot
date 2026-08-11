@@ -9,7 +9,13 @@ from telegram.ext import (
     filters,
 )
 
-from bot.config import BOT_TOKEN
+from bot.config import (
+    BOT_TOKEN,
+    WEBAPP_PORT,
+    WEBHOOK_PATH,
+    WEBHOOK_PORT,
+    WEBHOOK_URL,
+)
 from bot.contacts import build_contact_conversations, contact_callback
 from bot.database import init_db
 from bot.extras import (
@@ -20,6 +26,15 @@ from bot.extras import (
     reorder_callback,
     show_bonus,
     show_favorites,
+)
+from bot.features_handlers import (
+    ask_language,
+    language_callback,
+    rating_callback,
+    recur_callback,
+    show_recommendations,
+    show_recurring_list,
+    stop_recur_command,
 )
 from bot.handlers import (
     admin_awaiting_text,
@@ -46,21 +61,19 @@ from bot.handlers import (
     successful_payment,
     webapp_scan_data,
 )
+from bot.jobs import setup_jobs
 from bot.webapp import set_bot, start_webapp_server
 
 
 def _start_health_server() -> None:
-    """Eski Render health — endi Mini App /health orqali; PORT band bo'lmasin."""
     return
 
 
 def _acquire_single_instance_lock() -> None:
-    """Bir vaqtda faqat bitta bot ishlasin (409 Conflict oldini olish)."""
     import socket
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        # Lokal port band bo'lsa — boshqa bot allaqachon ishlayapti
         sock.bind(("127.0.0.1", 47291))
     except OSError as exc:
         sock.close()
@@ -69,7 +82,7 @@ def _acquire_single_instance_lock() -> None:
         ) from exc
 
     global _BOT_LOCK_FILE  # noqa: PLW0603
-    _BOT_LOCK_FILE = sock  # referens saqlanadi, port bo'shamaydi
+    _BOT_LOCK_FILE = sock
 
 
 _BOT_LOCK_FILE = None
@@ -91,10 +104,10 @@ def main() -> None:
 
     async def post_init(application: Application) -> None:
         set_bot(application.bot)
+        setup_jobs(application)
 
     app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
 
-    # Toifa nomi kiritish — conversation dan mustaqil
     app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, admin_awaiting_text),
         group=-1,
@@ -102,6 +115,7 @@ def main() -> None:
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("stop_recur", stop_recur_command))
     app.add_handler(build_order_conversation())
     app.add_handler(build_product_admin_conversation())
     for conv in build_extra_conversations():
@@ -121,12 +135,30 @@ def main() -> None:
     app.add_handler(MessageHandler(filters.Regex("^📞 Aloqa$"), contact_info))
     app.add_handler(MessageHandler(filters.Regex("^🛠 Admin panel$"), admin_panel))
     app.add_handler(MessageHandler(filters.Regex("^🚴 Kuryer panel$"), courier_panel))
+    app.add_handler(MessageHandler(filters.Regex(r"^(🌐 Til|🌐 Язык)$"), ask_language))
+    app.add_handler(
+        MessageHandler(
+            filters.Regex(r"^(✨ Tavsiyalar|✨ Рекомендации)$"),
+            show_recommendations,
+        )
+    )
+    app.add_handler(
+        MessageHandler(
+            filters.Regex(r"^(🔁 Takroriy buyurtmalar|🔁 Повторные заказы)$"),
+            show_recurring_list,
+        )
+    )
 
     app.add_handler(CallbackQueryHandler(product_callback, pattern=r"^(product:|catalog:)"))
     app.add_handler(CallbackQueryHandler(cart_callback, pattern=r"^cart"))
     app.add_handler(CallbackQueryHandler(fav_callback, pattern=r"^fav:\d+$"))
     app.add_handler(CallbackQueryHandler(reorder_callback, pattern=r"^reorder:\d+$"))
     app.add_handler(CallbackQueryHandler(cancel_order_callback, pattern=r"^cancel_order:\d+$"))
+    app.add_handler(CallbackQueryHandler(language_callback, pattern=r"^lang:(uz|ru)$"))
+    app.add_handler(CallbackQueryHandler(rating_callback, pattern=r"^rate:\d+:\d+$"))
+    app.add_handler(
+        CallbackQueryHandler(recur_callback, pattern=r"^(recur:|recur_set:|recur_cancel)")
+    )
     app.add_handler(
         CallbackQueryHandler(
             contact_callback,
@@ -150,9 +182,21 @@ def main() -> None:
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, webapp_scan_data))
 
     print("Bot ishga tushdi...")
-    app.run_polling(
-        allowed_updates=["message", "callback_query", "pre_checkout_query"]
-    )
+    if WEBHOOK_URL:
+        listen_port = WEBHOOK_PORT or WEBAPP_PORT
+        webhook_url = f"{WEBHOOK_URL}/{WEBHOOK_PATH.lstrip('/')}"
+        print(f"Webhook: {webhook_url} (listen :{listen_port})")
+        app.run_webhook(
+            listen="0.0.0.0",
+            port=listen_port,
+            url_path=WEBHOOK_PATH,
+            webhook_url=webhook_url,
+            allowed_updates=["message", "callback_query", "pre_checkout_query"],
+        )
+    else:
+        app.run_polling(
+            allowed_updates=["message", "callback_query", "pre_checkout_query"]
+        )
 
 
 if __name__ == "__main__":

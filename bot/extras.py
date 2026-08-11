@@ -31,15 +31,16 @@ from bot.database import (
     search_products,
     set_product_barcode,
     set_product_image,
+    set_product_sale,
     set_product_stock,
     update_order_status,
 )
 from bot.keyboards import (
     admin_menu_keyboard,
-    admin_order_keyboard,
     barcode_attach_keyboard,
     cancel_keyboard,
     catalog_keyboard,
+    courier_order_keyboard,
     main_menu_keyboard,
 )
 
@@ -51,6 +52,7 @@ class ExtraState(IntEnum):
     STOCK = 4
     PHOTO = 5
     BARCODE = 6
+    SALE = 7
 
 
 def is_admin(user_id: int) -> bool:
@@ -205,7 +207,7 @@ async def courier_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     for order in orders[:10]:
         await update.message.reply_text(
             format_order(order),
-            reply_markup=admin_order_keyboard(order["id"]),
+            reply_markup=courier_order_keyboard(order["id"]),
         )
 
 
@@ -497,6 +499,64 @@ async def report_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     )
 
 
+async def start_sale(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    if not is_admin(query.from_user.id):
+        return ConversationHandler.END
+    product_id = int(query.data.split(":")[2])
+    context.user_data["sale_product_id"] = product_id
+    await query.message.reply_text(
+        "🔥 Aksiya: `narx kunlar` yoki `narx YYYY-MM-DD`\n"
+        "Masalan: `9000 3` (3 kun) yoki `9000 2026-08-20`\n"
+        "O'chirish: `0`",
+        parse_mode="Markdown",
+        reply_markup=cancel_keyboard(),
+    )
+    return ExtraState.SALE
+
+
+async def do_sale(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    text = (update.message.text or "").strip()
+    if text == "❌ Bekor qilish":
+        return await cancel_extra(update, context)
+    pid = context.user_data.get("sale_product_id")
+    if not pid:
+        await update.message.reply_text(
+            "Xatolik.", reply_markup=menu_kb(update.effective_user.id)
+        )
+        return ConversationHandler.END
+    if text == "0":
+        set_product_sale(pid, None, None)
+        await update.message.reply_text(
+            "✅ Aksiya o'chirildi",
+            reply_markup=menu_kb(update.effective_user.id),
+        )
+        return ConversationHandler.END
+    parts = text.split()
+    if len(parts) < 2 or not parts[0].isdigit():
+        await update.message.reply_text(
+            "Format: `9000 3` yoki `9000 2026-08-20`", parse_mode="Markdown"
+        )
+        return ExtraState.SALE
+    price = int(parts[0])
+    until_raw = parts[1]
+    if until_raw.isdigit():
+        from datetime import timedelta
+
+        from bot.timeutil import now_tashkent
+
+        until = (now_tashkent() + timedelta(days=int(until_raw))).strftime("%Y-%m-%d")
+    else:
+        until = until_raw[:10]
+    set_product_sale(pid, price, until)
+    await update.message.reply_text(
+        f"✅ Aksiya: {price:,} so'm gacha {until}",
+        reply_markup=menu_kb(update.effective_user.id),
+    )
+    return ConversationHandler.END
+
+
 def build_extra_conversations() -> list:
     return [
         ConversationHandler(
@@ -579,6 +639,20 @@ def build_extra_conversations() -> list:
                         filters.StatusUpdate.WEB_APP_DATA, do_barcode_webapp
                     ),
                     MessageHandler(filters.TEXT & ~filters.COMMAND, do_barcode),
+                ]
+            },
+            fallbacks=[
+                MessageHandler(filters.Regex("^❌ Bekor qilish$"), cancel_extra),
+            ],
+            allow_reentry=True,
+        ),
+        ConversationHandler(
+            entry_points=[
+                CallbackQueryHandler(start_sale, pattern=r"^admin_prod:sale:\d+$")
+            ],
+            states={
+                ExtraState.SALE: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, do_sale)
                 ]
             },
             fallbacks=[

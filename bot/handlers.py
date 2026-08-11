@@ -26,6 +26,7 @@ from bot.config import (
     CARD_HOLDER,
     CARD_NUMBER,
     COURIER_IDS,
+    DELIVERY_AREA,
     DELIVERY_PRICE,
     MIN_ORDER_AMOUNT,
     MINIAPP_URL,
@@ -37,6 +38,7 @@ from bot.config import (
     SHOP_PHONE,
     SHOP_TELEGRAM,
     card_payment_enabled,
+    is_in_delivery_area,
     online_payment_enabled,
 )
 from bot.database import (
@@ -60,6 +62,7 @@ from bot.database import (
     get_cart_totals,
     get_categories,
     get_category,
+    get_delivery_fee,
     get_favorites,
     get_order,
     get_orders_by_status,
@@ -107,6 +110,7 @@ from bot.keyboards import (
     category_pick_keyboard,
     confirm_order_keyboard,
     contact_keyboard,
+    courier_order_keyboard,
     delivery_slots_keyboard,
     location_keyboard,
     main_menu_keyboard,
@@ -115,6 +119,7 @@ from bot.keyboards import (
     payment_keyboard,
     product_keyboard,
     promo_keyboard,
+    rating_keyboard,
     new_product_barcode_keyboard,
     scan_sale_keyboard,
     shop_inline_button,
@@ -149,10 +154,25 @@ def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
 
 
+def is_courier(user_id: int) -> bool:
+    return user_id in COURIER_IDS
+
+
 def menu_for(user_id: int):
     return main_menu_keyboard(
         is_admin(user_id),
-        user_id in COURIER_IDS or is_admin(user_id),
+        is_courier(user_id) or is_admin(user_id),
+    )
+
+
+def _order_delivery_fee(order_data: dict | None) -> tuple[int, str]:
+    if not order_data:
+        return DELIVERY_PRICE, "Standart"
+    address = str(order_data.get("delivery_address") or "")
+    return get_delivery_fee(
+        address,
+        order_data.get("latitude"),
+        order_data.get("longitude"),
     )
 
 
@@ -309,7 +329,7 @@ async def webapp_scan_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         from bot.webapp import place_miniapp_order
 
         try:
-            order_id, _total, _sub, text = place_miniapp_order(
+            order_id, total, _sub, _delivery, text = place_miniapp_order(
                 user_id=user.id,
                 full_name=user.full_name or user.first_name or "Mijoz",
                 username=user.username,
@@ -318,6 +338,9 @@ async def webapp_scan_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 slot=str(payload.get("slot") or "").strip(),
                 note=str(payload.get("note") or "").strip(),
                 items_raw=payload.get("items") or [],
+                promo_code=str(payload.get("promo_code") or "").strip(),
+                bonus_spent=int(payload.get("bonus_spent") or 0),
+                payment_method=str(payload.get("payment_method") or "pending"),
             )
         except ValueError as exc:
             await msg.reply_text(f"❌ {exc}", reply_markup=menu_for(user.id))
@@ -330,9 +353,17 @@ async def webapp_scan_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             f"✅ Buyurtmangiz qabul qilindi!\n\n{text}",
             reply_markup=menu_for(user.id),
         )
+        await msg.reply_text(
+            "To'lov usulini tanlang:",
+            reply_markup=payment_keyboard(order_id, amount=total),
+        )
         for admin_id in ADMIN_IDS:
             try:
-                await context.bot.send_message(admin_id, f"🆕 Mini App\n{text}")
+                await context.bot.send_message(
+                    admin_id,
+                    f"🆕 Mini App\n{text}",
+                    reply_markup=admin_order_keyboard(order_id),
+                )
             except Exception:
                 pass
         return
@@ -434,6 +465,7 @@ async def contact_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         f"📱 Telefon: <b>{SHOP_PHONE}</b>\n"
         f"💬 Telegram: {SHOP_TELEGRAM}\n"
         f"📍 Manzil: {SHOP_ADDRESS}\n"
+        f"🚚 Yetkazish: faqat <b>{DELIVERY_AREA}</b> ichida\n"
         f"🕐 Ish vaqti: {SHOP_HOURS}\n\n"
         f"⏳ Buyurtmangizni tez qabul qilamiz!",
         parse_mode="HTML",
@@ -443,7 +475,7 @@ async def contact_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def show_more_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "✨ <b>Qo‘shimcha imkoniyatlar</b>\n"
-        "Qidiruv, sevimlilar, bonus va yordam shu yerda:",
+        "Qidiruv, sevimlilar, tavsiyalar, til va yordam:",
         reply_markup=more_menu_keyboard(),
         parse_mode="HTML",
     )
@@ -870,8 +902,10 @@ async def start_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     last_addr = get_last_delivery_address(user_id)
     text = (
         f"{format_cart(user_id)}\n\n"
-        "📍 Qayerga yetkazilsin?\n"
-        "«📍 Joylashuvni yuborish» yoki manzilni yozing."
+        f"📍 Qayerga yetkazilsin?\n"
+        f"Faqat <b>{DELIVERY_AREA}</b> ichida.\n"
+        "«📍 Joylashuvni yuborish» yoki manzilni yozing\n"
+        f"(masalan: {DELIVERY_AREA}, 12-uy)."
     )
     if last_addr:
         text += "\nYoki oxirgi manzilni tanlang."
@@ -1035,7 +1069,8 @@ async def receive_bonus_callback(
     discount = context.user_data["order"].get("discount", 0)
     if query.data == "bonus:use":
         bonus = get_bonus(user_id)
-        max_use = max(0, subtotal + DELIVERY_PRICE - discount - 1000)
+        delivery_fee, _ = _order_delivery_fee(context.user_data.get("order"))
+        max_use = max(0, subtotal + delivery_fee - discount - 1000)
         use = min(bonus, max_use)
         context.user_data["order"]["bonus_spent"] = use
         await query.edit_message_text(f"🎁 Bonus: −{use:,} so'm")
@@ -1059,8 +1094,14 @@ async def receive_delivery(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         lon = location.longitude
         context.user_data["order"]["latitude"] = lat
         context.user_data["order"]["longitude"] = lon
-        context.user_data["order"]["delivery_address"] = "Lokatsiya"
-        await update.message.reply_text("✅ Joylashuv qabul qilindi.")
+        context.user_data["order"]["delivery_address"] = f"{DELIVERY_AREA} (lokatsiya)"
+        fee, area = _order_delivery_fee(context.user_data["order"])
+        context.user_data["order"]["delivery_fee"] = fee
+        context.user_data["order"]["delivery_zone"] = area
+        await update.message.reply_text(
+            f"✅ Joylashuv qabul qilindi.\n"
+            f"🚚 {area} — {fee:,} so'm"
+        )
         return await continue_after_delivery(update, context)
 
     text = (update.message.text or "").strip()
@@ -1073,10 +1114,26 @@ async def receive_delivery(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 text = last
 
     if text and text not in {"📍 Joylashuv", "📍 Joylashuvni yuborish"}:
+        if not is_in_delivery_area(text):
+            await update.message.reply_text(
+                f"❌ Hozircha faqat <b>{DELIVERY_AREA}</b> ichiga yetkazamiz.\n"
+                f"Manzilda «Saruyz» yozing, masalan:\n"
+                f"<code>{DELIVERY_AREA}, 5-uy</code>",
+                parse_mode="HTML",
+                reply_markup=location_keyboard(
+                    get_last_delivery_address(update.effective_user.id)
+                ),
+            )
+            return OrderState.DELIVERY
         context.user_data["order"]["latitude"] = None
         context.user_data["order"]["longitude"] = None
         context.user_data["order"]["delivery_address"] = text
-        await update.message.reply_text("✅ Manzil qabul qilindi.")
+        fee, area = _order_delivery_fee(context.user_data["order"])
+        context.user_data["order"]["delivery_fee"] = fee
+        context.user_data["order"]["delivery_zone"] = area
+        await update.message.reply_text(
+            f"✅ Manzil qabul qilindi.\n🚚 {area} — {fee:,} so'm"
+        )
         return await continue_after_delivery(update, context)
 
     last_addr = get_last_delivery_address(update.effective_user.id)
@@ -1167,7 +1224,10 @@ async def show_order_summary_message(message, user, context: ContextTypes.DEFAUL
     _, subtotal = get_cart_totals(user_id)
     discount = order.get("discount", 0)
     bonus_spent = order.get("bonus_spent", 0)
-    total = max(0, subtotal + DELIVERY_PRICE - discount - bonus_spent)
+    delivery_fee, zone = _order_delivery_fee(order)
+    order["delivery_fee"] = delivery_fee
+    order["delivery_zone"] = zone
+    total = max(0, subtotal + delivery_fee - discount - bonus_spent)
     order["subtotal"] = subtotal
     order["price"] = total
 
@@ -1177,6 +1237,7 @@ async def show_order_summary_message(message, user, context: ContextTypes.DEFAUL
         f"{format_now_html()}\n\n"
         f"{cart_text}\n\n"
         f"🕒 Yetkazish: <b><u>{order.get('delivery_slot') or '—'}</u></b>\n"
+        f"🚚 Hudud: {zone} ({delivery_fee:,} so'm)\n"
         f"🏷 Promo: {order.get('promo_code') or '—'} (−{discount:,})\n"
         f"🎁 Bonus: −{bonus_spent:,}\n"
         f"📍 Qayerdan: {order['pickup_address']}\n"
@@ -1240,7 +1301,8 @@ async def confirm_order_callback(
     _, subtotal = get_cart_totals(user_id)
     discount = int(order_data.get("discount") or 0)
     bonus_spent = int(order_data.get("bonus_spent") or 0)
-    total = max(0, subtotal + DELIVERY_PRICE - discount - bonus_spent)
+    delivery_fee, _zone = _order_delivery_fee(order_data)
+    total = max(0, subtotal + delivery_fee - discount - bonus_spent)
 
     if bonus_spent and not spend_bonus(user_id, bonus_spent):
         await query.edit_message_text("Bonus yetarli emas. Qaytadan urinib ko'ring.")
@@ -2179,19 +2241,39 @@ async def admin_status_callback(
     query = update.callback_query
     await query.answer()
 
-    if not is_admin(query.from_user.id):
+    uid = query.from_user.id
+    if not (is_admin(uid) or is_courier(uid)):
         await query.edit_message_text("Ruxsat yo'q.")
         return
 
     _, order_id_str, status = query.data.split(":", 2)
     order_id = int(order_id_str)
+
+    if is_courier(uid) and not is_admin(uid):
+        if status not in {"accepted", "in_delivery", "delivered"}:
+            await query.answer("Bu status kuryer uchun emas", show_alert=True)
+            return
+
     update_order_status(order_id, status)
 
     order = get_order(order_id)
-    await query.edit_message_text(
-        format_order(order),
-        reply_markup=admin_order_keyboard(order_id),
+    kb = (
+        admin_order_keyboard(order_id)
+        if is_admin(uid)
+        else courier_order_keyboard(order_id)
     )
+    await query.edit_message_text(format_order(order), reply_markup=kb)
+
+    if is_courier(uid) and not is_admin(uid):
+        for admin_id in ADMIN_IDS:
+            try:
+                await context.bot.send_message(
+                    admin_id,
+                    f"🚴 Kuryer #{order_id} holatini yangiladi:\n{format_order(order)}",
+                    reply_markup=admin_order_keyboard(order_id),
+                )
+            except Exception:
+                pass
 
     try:
         text = (
@@ -2207,6 +2289,15 @@ async def admin_status_callback(
             text=text,
             reply_markup=markup,
         )
+        if status == "delivered":
+            from bot.i18n import get_user_lang, t
+
+            lang = get_user_lang(int(order["user_id"]))
+            await context.bot.send_message(
+                chat_id=order["user_id"],
+                text=t("rating_ask", lang, order_id=order_id),
+                reply_markup=rating_keyboard(order_id),
+            )
     except Exception:
         pass
 

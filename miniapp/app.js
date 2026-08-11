@@ -18,6 +18,9 @@
     products: [],
     categoryId: null,
     cart: loadCart(),
+    bonusPoints: 0,
+    discount: 0,
+    promoCode: "",
   };
 
   const els = {
@@ -28,11 +31,16 @@
     cartList: document.getElementById("cartList"),
     subtotalLabel: document.getElementById("subtotalLabel"),
     deliveryLabel: document.getElementById("deliveryLabel"),
+    discountLabel: document.getElementById("discountLabel"),
     totalLabel: document.getElementById("totalLabel"),
     minOrderHint: document.getElementById("minOrderHint"),
+    bonusHint: document.getElementById("bonusHint"),
     phone: document.getElementById("phone"),
     address: document.getElementById("address"),
     slot: document.getElementById("slot"),
+    promo: document.getElementById("promo"),
+    bonus: document.getElementById("bonus"),
+    paymentMethod: document.getElementById("paymentMethod"),
     note: document.getElementById("note"),
     form: document.getElementById("checkoutForm"),
     submit: document.getElementById("submitOrder"),
@@ -72,6 +80,22 @@
 
   function cartSubtotal() {
     return state.cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  }
+
+  function bonusSpentValue() {
+    const raw = els.bonus ? Number(els.bonus.value || 0) : 0;
+    if (!Number.isFinite(raw) || raw < 0) return 0;
+    return Math.min(Math.floor(raw), state.bonusPoints || 0);
+  }
+
+  function calcTotals() {
+    const delivery = state.config ? Number(state.config.delivery_price) || 0 : 0;
+    const subtotal = cartSubtotal();
+    const discount = Math.max(0, Number(state.discount) || 0);
+    const bonus = subtotal > 0 ? bonusSpentValue() : 0;
+    const deliveryFee = subtotal > 0 ? delivery : 0;
+    const total = Math.max(0, subtotal + deliveryFee - discount - bonus);
+    return { subtotal, delivery: deliveryFee, discount, bonus, total };
   }
 
   async function api(path, options) {
@@ -263,19 +287,28 @@
   }
 
   function renderCart() {
-    const delivery = state.config ? state.config.delivery_price : 0;
     const minOrder = state.config ? state.config.min_order : 0;
-    const subtotal = cartSubtotal();
-    const total = subtotal + (subtotal > 0 ? delivery : 0);
+    const { subtotal, delivery, discount, bonus, total } = calcTotals();
 
     els.subtotalLabel.textContent = formatMoney(subtotal);
-    els.deliveryLabel.textContent = formatMoney(subtotal > 0 ? delivery : 0);
+    els.deliveryLabel.textContent = formatMoney(delivery);
+    if (els.discountLabel) {
+      const off = discount + bonus;
+      els.discountLabel.textContent =
+        off > 0 ? `−${formatMoney(off)}` : formatMoney(0);
+    }
     els.totalLabel.textContent = formatMoney(total);
 
     if (subtotal > 0 && subtotal < minOrder) {
       els.minOrderHint.textContent = `Minimal buyurtma: ${formatMoney(minOrder)}`;
     } else {
       els.minOrderHint.textContent = "";
+    }
+
+    if (els.bonusHint) {
+      els.bonusHint.textContent = state.bonusPoints
+        ? `Bonus balansi: ${formatMoney(state.bonusPoints)}`
+        : "";
     }
 
     els.submit.disabled = state.cart.length === 0 || subtotal < minOrder;
@@ -341,12 +374,93 @@
     renderProducts();
   }
 
+  async function loadUserBonus() {
+    const initData = getInitData();
+    if (!initData) return;
+    try {
+      const data = await api(`/api/user?initData=${encodeURIComponent(initData)}`, {
+        headers: { "X-Telegram-Init-Data": initData },
+      });
+      state.bonusPoints = Number(data.bonus_points) || 0;
+      if (els.bonus) {
+        els.bonus.max = String(state.bonusPoints);
+        els.bonus.placeholder = state.bonusPoints
+          ? `0 — ${state.bonusPoints}`
+          : "0";
+      }
+      if (els.bonusHint) {
+        els.bonusHint.textContent = state.bonusPoints
+          ? `Bonus balansi: ${formatMoney(state.bonusPoints)}`
+          : "";
+      }
+    } catch (_) {
+      state.bonusPoints = 0;
+    }
+  }
+
+  async function validatePromo() {
+    const code = (els.promo && els.promo.value.trim()) || "";
+    if (!code) {
+      state.discount = 0;
+      state.promoCode = "";
+      renderCart();
+      return;
+    }
+    const subtotal = cartSubtotal();
+    try {
+      const data = await api("/api/promo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, subtotal }),
+      });
+      if (data && data.ok) {
+        state.discount = Number(data.discount) || 0;
+        state.promoCode = data.code || code.toUpperCase();
+        if (els.status) {
+          els.status.hidden = false;
+          els.status.classList.remove("error");
+          els.status.textContent = `Promo qo'llandi: −${formatMoney(state.discount)}`;
+        }
+      } else {
+        state.discount = 0;
+        state.promoCode = "";
+        if (els.status) {
+          els.status.hidden = false;
+          els.status.classList.add("error");
+          els.status.textContent = (data && data.message) || "Promo yaroqsiz";
+        }
+      }
+    } catch (err) {
+      state.discount = 0;
+      state.promoCode = "";
+      if (els.status) {
+        els.status.hidden = false;
+        els.status.classList.add("error");
+        els.status.textContent = err.message || "Promo tekshirilmadi";
+      }
+    }
+    renderCart();
+  }
+
   async function bootstrap() {
     document.querySelectorAll(".nav-btn").forEach((btn) => {
       btn.addEventListener("click", () => showView(btn.dataset.view));
     });
 
     els.form.addEventListener("submit", onCheckout);
+
+    if (els.promo) {
+      els.promo.addEventListener("change", () => {
+        validatePromo();
+      });
+      els.promo.addEventListener("blur", () => {
+        validatePromo();
+      });
+    }
+    if (els.bonus) {
+      els.bonus.addEventListener("input", () => renderCart());
+      els.bonus.addEventListener("change", () => renderCart());
+    }
 
     const [config, categories] = await Promise.all([
       api("/api/config"),
@@ -358,6 +472,10 @@
     els.shopName.textContent = config.shop_name || "Do'kon";
     const metaParts = [config.shop_hours, config.shop_phone].filter(Boolean);
     els.shopMeta.textContent = metaParts.join(" · ");
+    const areaHint = document.getElementById("areaHint");
+    if (areaHint && config.delivery_area) {
+      areaHint.textContent = `Faqat ${config.delivery_area} ichiga yetkaziladi`;
+    }
 
     if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
       const u = tg.initDataUnsafe.user;
@@ -369,7 +487,7 @@
     fillSlots();
     renderCategories();
     updateBadge();
-    await loadProducts();
+    await Promise.all([loadProducts(), loadUserBonus()]);
   }
 
   function getInitData() {
@@ -402,6 +520,9 @@
           slot: payload.slot,
           note: payload.note,
           items: payload.items,
+          promo_code: payload.promo_code || "",
+          bonus_spent: payload.bonus_spent || 0,
+          payment_method: payload.payment_method || "pending",
         })
       );
       return true;
@@ -422,10 +543,33 @@
       return;
     }
 
+    const addr = (els.address.value || "").trim().toLowerCase();
+    const areaOk =
+      addr.includes("saruyz") ||
+      addr.includes("saruiz") ||
+      addr.includes("саруйз") ||
+      addr.includes("саруиз");
+    if (!areaOk) {
+      els.status.hidden = false;
+      els.status.classList.add("error");
+      els.status.textContent =
+        "Faqat Saruyz mahallasi ichiga yetkazamiz. Manzilda «Saruyz» yozing.";
+      return;
+    }
+
+    const promoInput = (els.promo && els.promo.value.trim()) || "";
+    if (promoInput && promoInput.toUpperCase() !== (state.promoCode || "").toUpperCase()) {
+      await validatePromo();
+      if (promoInput && !state.promoCode) {
+        return;
+      }
+    }
+
     const initData = getInitData();
     const telegramUser = getTelegramUser();
     const params = new URLSearchParams(window.location.search);
     const devUser = params.get("dev_user_id");
+    const { bonus } = calcTotals();
 
     const payload = {
       initData,
@@ -434,6 +578,9 @@
       address: els.address.value.trim(),
       slot: els.slot.value,
       note: els.note.value.trim(),
+      promo_code: state.promoCode || "",
+      bonus_spent: bonus,
+      payment_method: (els.paymentMethod && els.paymentMethod.value) || "pending",
       items: state.cart.map((item) => ({
         product_id: item.product_id,
         quantity: item.quantity,
@@ -450,6 +597,8 @@
     // 1) Eng ishonchli: botga sendData (klaviatura Do'kon tugmasi)
     if (checkoutViaSendData(payload)) {
       state.cart = [];
+      state.discount = 0;
+      state.promoCode = "";
       saveCart();
       updateBadge();
       els.status.hidden = false;
@@ -475,8 +624,13 @@
         body: JSON.stringify(payload),
       });
       state.cart = [];
+      state.discount = 0;
+      state.promoCode = "";
+      if (els.promo) els.promo.value = "";
+      if (els.bonus) els.bonus.value = "";
       saveCart();
       updateBadge();
+      await loadUserBonus();
       renderCart();
       els.status.hidden = false;
       els.status.textContent = `Buyurtma #${result.order_id} qabul qilindi!`;
