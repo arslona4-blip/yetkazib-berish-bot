@@ -7,6 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY bot ./bot
 COPY miniapp ./miniapp
+COPY shajara ./shajara
 
 RUN mkdir -p /data
 

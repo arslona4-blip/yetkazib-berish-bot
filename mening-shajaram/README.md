@@ -2,7 +2,13 @@
 
 Oila shajarasi PWA — telefonda ochiladi, uy ekraniga o‘rnatiladi.
 
-## Ishga tushirish
+## Online (Railway)
+
+Deploy qilingandan keyin:
+
+https://worker-production-1646.up.railway.app/shajara/
+
+## Ishga tushirish (local)
 
 ```bash
 cd mening-shajaram
@@ -10,11 +16,11 @@ npm install
 npm run dev
 ```
 
-## Build
+Production build (Railway uchun `shajara/` papkasiga):
 
 ```bash
 npm run build
-npm run preview
+rm -rf ../shajara && cp -R dist ../shajara
 ```
 
 ## MVP imkoniyatlar
