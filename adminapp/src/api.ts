@@ -1,10 +1,11 @@
-const AUTH_KEY = 'baraka-admin-auth-v1'
+const AUTH_KEY = 'baraka-admin-auth-v2'
 
 export type AuthState = {
-  mode: 'tg' | 'pin'
+  mode: 'tg' | 'pin' | 'session'
   initData?: string
   pin?: string
   adminId?: number
+  session?: string
 }
 
 export function loadAuth(): AuthState | null {
@@ -22,6 +23,11 @@ export function saveAuth(auth: AuthState) {
 
 export function clearAuth() {
   localStorage.removeItem(AUTH_KEY)
+  try {
+    localStorage.removeItem('baraka-admin-auth-v1')
+  } catch {
+    /* ignore */
+  }
 }
 
 function headers(auth: AuthState | null): HeadersInit {
@@ -29,6 +35,8 @@ function headers(auth: AuthState | null): HeadersInit {
   if (!auth) return h
   if (auth.mode === 'tg' && auth.initData) {
     h['X-Telegram-Init-Data'] = auth.initData
+  } else if (auth.mode === 'session' && auth.session) {
+    h['X-Admin-Session'] = auth.session
   } else if (auth.mode === 'pin' && auth.pin && auth.adminId) {
     h['X-Admin-Pin'] = auth.pin
     h['X-Admin-Id'] = String(auth.adminId)
@@ -53,6 +61,18 @@ async function req<T>(
 }
 
 export const api = {
+  login: (adminId: number, code: string) =>
+    req<{
+      ok: boolean
+      admin_id: number
+      session: string
+      shop_name: string
+    }>('/api/admin/login', null, {
+      method: 'POST',
+      body: JSON.stringify({ admin_id: adminId, code }),
+    }),
+  logout: (auth: AuthState | null) =>
+    req<{ ok: boolean }>('/api/admin/logout', auth, { method: 'POST' }),
   me: (auth: AuthState | null) =>
     req<{ ok: boolean; admin_id: number; shop_name: string }>('/api/admin/me', auth),
   stats: (auth: AuthState | null) =>
