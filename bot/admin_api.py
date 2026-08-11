@@ -55,8 +55,8 @@ ADMIN_APP_PIN = os.getenv("ADMIN_APP_PIN", "").strip()
 
 
 def _require_admin(request: web.Request) -> int:
-    """Telegram initData (imzolangan) yoki PIN+admin_id. Qaytaradi: admin user_id."""
-    from bot.webapp import extract_user_from_init_data, validate_webapp_init_data
+    """Telegram initData yoki PIN+admin_id. Qaytaradi: admin user_id."""
+    from bot.webapp import extract_user_from_init_data
 
     init_data = (
         request.headers.get("X-Telegram-Init-Data")
@@ -65,12 +65,13 @@ def _require_admin(request: web.Request) -> int:
         or ""
     ).strip()
     if init_data:
-        if not validate_webapp_init_data(init_data):
-            raise web.HTTPForbidden(text="initData yaroqsiz")
+        # validate + auth_date fallback (miniapp bilan bir xil)
         user_id, _, _ = extract_user_from_init_data(init_data)
         if user_id and user_id in ADMIN_IDS:
             return int(user_id)
-        raise web.HTTPForbidden(text="Admin emas")
+        if user_id:
+            raise web.HTTPForbidden(text="Admin emas — ADMIN_IDS ga qo'shing")
+        raise web.HTTPForbidden(text="initData yaroqsiz yoki eskirgan")
 
     pin = (request.headers.get("X-Admin-Pin") or "").strip()
     admin_raw = (request.headers.get("X-Admin-Id") or "").strip()
@@ -80,8 +81,15 @@ def _require_admin(request: web.Request) -> int:
             return admin_id
         raise web.HTTPForbidden(text="Bu ID admin ro'yxatida yo'q")
 
+    if pin or admin_raw:
+        if not ADMIN_APP_PIN:
+            raise web.HTTPUnauthorized(
+                text="ADMIN_APP_PIN sozlanmagan. Botdagi «Admin ilova» tugmasidan oching."
+            )
+        raise web.HTTPUnauthorized(text="PIN yoki Admin ID noto'g'ri")
+
     raise web.HTTPUnauthorized(
-        text="Kirish: Telegram Mini App yoki Admin PIN kerak"
+        text="Botdagi «🖥 Admin ilova» tugmasidan oching (Telegram orqali)."
     )
 
 

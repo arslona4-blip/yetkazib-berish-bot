@@ -26,10 +26,15 @@ declare global {
         initData?: string
         ready?: () => void
         expand?: () => void
+        platform?: string
         themeParams?: Record<string, string>
       }
     }
   }
+}
+
+function readTgInitData(): string {
+  return (window.Telegram?.WebApp?.initData || '').trim()
 }
 
 const REASON: Record<string, string> = {
@@ -52,7 +57,7 @@ function money(n: number) {
 }
 
 export default function App() {
-  const [auth, setAuth] = useState<AuthState | null>(() => loadAuth())
+  const [auth, setAuth] = useState<AuthState | null>(null)
   const [tab, setTab] = useState<Tab>('dash')
   const [shop, setShop] = useState('Admin')
   const [error, setError] = useState('')
@@ -90,21 +95,10 @@ export default function App() {
     phone: '',
     note: '',
   })
-
-  const tgInit = window.Telegram?.WebApp?.initData || ''
-
-  useEffect(() => {
-    window.Telegram?.WebApp?.ready?.()
-    window.Telegram?.WebApp?.expand?.()
-  }, [])
-
-  useEffect(() => {
-    if (tgInit && (!auth || auth.mode !== 'tg')) {
-      const next: AuthState = { mode: 'tg', initData: tgInit }
-      saveAuth(next)
-      setAuth(next)
-    }
-  }, [tgInit]) // eslint-disable-line react-hooks/exhaustive-deps
+  const [tgInit, setTgInit] = useState('')
+  const [tgReady, setTgReady] = useState(false)
+  const [showPin, setShowPin] = useState(false)
+  const [booting, setBooting] = useState(true)
 
   async function bootstrap(a: AuthState) {
     setBusy(true)
@@ -121,8 +115,54 @@ export default function App() {
       setError(e instanceof Error ? e.message : 'Kirish xato')
     } finally {
       setBusy(false)
+      setBooting(false)
     }
   }
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function start() {
+      window.Telegram?.WebApp?.ready?.()
+      window.Telegram?.WebApp?.expand?.()
+
+      let data = ''
+      for (let i = 0; i < 25; i++) {
+        data = readTgInitData()
+        if (data) break
+        await new Promise((r) => setTimeout(r, 80))
+      }
+      if (cancelled) return
+
+      setTgInit(data)
+      setTgReady(true)
+
+      if (data) {
+        // Telegram ichida — eski PIN sessiyasini e'tiborsiz qoldiramiz
+        await bootstrap({ mode: 'tg', initData: data })
+        return
+      }
+
+      // Brauzer: faqat saqlangan PIN sessiyasi
+      const saved = loadAuth()
+      if (saved?.mode === 'pin' && saved.pin && saved.adminId) {
+        await bootstrap(saved)
+        return
+      }
+      if (saved?.mode === 'tg') {
+        // Eski initData odatda eskirgan — tozalaymiz
+        clearAuth()
+      }
+      setAuth(null)
+      setBooting(false)
+    }
+
+    void start()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function refreshAll(a: AuthState | null = auth, silent = false) {
     if (!a) return
@@ -152,11 +192,6 @@ export default function App() {
       if (!silent) setBusy(false)
     }
   }
-
-  useEffect(() => {
-    if (auth) void bootstrap(auth)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   useEffect(() => {
     if (!auth) return
@@ -518,6 +553,20 @@ export default function App() {
     )
   }
 
+  if (booting) {
+    return (
+      <div className="login">
+        <div className="login-box">
+          <div className="login-mark" aria-hidden />
+          <h1>
+            Admin <span style={{ color: 'var(--accent)' }}>Panel</span>
+          </h1>
+          <p>Telegram orqali tekshirilmoqda…</p>
+        </div>
+      </div>
+    )
+  }
+
   if (!auth) {
     return (
       <div className="login">
@@ -527,58 +576,81 @@ export default function App() {
             Admin <span style={{ color: 'var(--accent)' }}>Panel</span>
           </h1>
           <p>
-            Professional boshqaruv: buyurtmalar, to‘lovlar, ombor va hisobotlar.
+            PIN kerak emas. Botdagi <b>🖥 Admin ilova</b> tugmasini bosing —
+            Telegram avtomatik kiritadi.
           </p>
           {tgInit ? (
             <button
               type="button"
               className="btn btn-primary"
               style={{ width: '100%', marginBottom: 12 }}
+              disabled={busy}
               onClick={() =>
                 void bootstrap({ mode: 'tg', initData: tgInit })
               }
             >
               Telegram orqali kirish
             </button>
-          ) : null}
-          <div className="field">
-            <label>Telegram Admin ID</label>
-            <input
-              value={pinForm.adminId}
-              onChange={(e) =>
-                setPinForm((s) => ({ ...s, adminId: e.target.value }))
-              }
-              placeholder="123456789"
-              inputMode="numeric"
-            />
-          </div>
-          <div className="field">
-            <label>Admin PIN</label>
-            <input
-              type="password"
-              value={pinForm.pin}
-              onChange={(e) =>
-                setPinForm((s) => ({ ...s, pin: e.target.value }))
-              }
-              placeholder="••••"
-            />
-          </div>
+          ) : (
+            <p className="muted-sm" style={{ marginBottom: 12 }}>
+              {tgReady
+                ? 'Hozir brauzerda ochilgan. Telegram bot ichidan oching.'
+                : 'Telegram kutilyapti…'}
+            </p>
+          )}
           {error ? <div className="error">{error}</div> : null}
           <button
             type="button"
-            className="btn btn-primary"
+            className="btn btn-ghost"
             style={{ width: '100%' }}
-            disabled={busy}
-            onClick={() =>
-              void bootstrap({
-                mode: 'pin',
-                pin: pinForm.pin,
-                adminId: Number(pinForm.adminId),
-              })
-            }
+            onClick={() => setShowPin((v) => !v)}
           >
-            Kirish
+            {showPin ? 'PIN yopish' : 'Brauzer PIN (ixtiyoriy)'}
           </button>
+          {showPin ? (
+            <>
+              <p className="muted-sm" style={{ marginTop: 12 }}>
+                Faqat Railway’da <code>ADMIN_APP_PIN</code> sozlanganda ishlaydi.
+              </p>
+              <div className="field">
+                <label>Telegram Admin ID</label>
+                <input
+                  value={pinForm.adminId}
+                  onChange={(e) =>
+                    setPinForm((s) => ({ ...s, adminId: e.target.value }))
+                  }
+                  placeholder="123456789"
+                  inputMode="numeric"
+                />
+              </div>
+              <div className="field">
+                <label>Admin PIN</label>
+                <input
+                  type="password"
+                  value={pinForm.pin}
+                  onChange={(e) =>
+                    setPinForm((s) => ({ ...s, pin: e.target.value }))
+                  }
+                  placeholder="••••"
+                />
+              </div>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ width: '100%' }}
+                disabled={busy}
+                onClick={() =>
+                  void bootstrap({
+                    mode: 'pin',
+                    pin: pinForm.pin,
+                    adminId: Number(pinForm.adminId),
+                  })
+                }
+              >
+                PIN bilan kirish
+              </button>
+            </>
+          ) : null}
         </div>
       </div>
     )
