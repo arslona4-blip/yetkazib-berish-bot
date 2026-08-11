@@ -8,3 +8,5 @@ data/
 node_modules/
 mening-shajaram/dist/
 mening-shajaram/dev-dist/
+adminapp/dist/
+adminapp/dev-dist/

@@ -13,6 +13,22 @@ def miniapp_shop_url() -> str:
     return (MINIAPP_URL or "").rstrip("/")
 
 
+def admin_app_url() -> str:
+    """MINIAPP_URL dan /admin/ manzilini hosil qiladi."""
+    url = miniapp_shop_url()
+    if not url:
+        return ""
+    if url.endswith("/miniapp"):
+        return f"{url[: -len('/miniapp')]}/admin/"
+    # origin yoki boshqa path — host + /admin/
+    from urllib.parse import urlsplit, urlunsplit
+
+    parts = urlsplit(url)
+    if not parts.scheme or not parts.netloc:
+        return ""
+    return urlunsplit((parts.scheme, parts.netloc, "/admin/", "", ""))
+
+
 def shop_reply_button(label: str = "🛒 Do'kon") -> KeyboardButton | None:
     url = miniapp_shop_url()
     if not url:
@@ -22,6 +38,15 @@ def shop_reply_button(label: str = "🛒 Do'kon") -> KeyboardButton | None:
 
 def shop_inline_button(label: str = "🛒 Do'kon") -> InlineKeyboardButton | None:
     url = miniapp_shop_url()
+    if not url:
+        return None
+    return InlineKeyboardButton(label, web_app=WebAppInfo(url=url))
+
+
+def admin_app_inline_button(
+    label: str = "🖥 Admin ilova",
+) -> InlineKeyboardButton | None:
+    url = admin_app_url()
     if not url:
         return None
     return InlineKeyboardButton(label, web_app=WebAppInfo(url=url))
@@ -485,10 +510,13 @@ def admin_menu_keyboard() -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     shop = shop_inline_button("🛒 Do'kon")
     scan = scan_inline_button()
+    admin_app = admin_app_inline_button()
     if shop and scan:
         rows.append([shop, scan])
     elif shop:
         rows.append([shop])
+    if admin_app:
+        rows.append([admin_app])
     rows.extend(
         [
             [InlineKeyboardButton("📦 Buyurtmalar", callback_data="admin:orders")],
