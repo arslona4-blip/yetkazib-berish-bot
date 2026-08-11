@@ -30,9 +30,11 @@ rm -rf ../shajara && cp -R dist ../shajara
 - Ota, ona, turmush o‘rtog‘i bog‘lash
 - Daraxt ko‘rinishi (ota-ona / markaz / farzandlar)
 - Ma’lumotlar `localStorage` da (qurilmada)
+- **Ulashish kodi** (bulut) + havola `?code=`
+- **JSON zaxira** yuklab olish / tiklash
 
 ## Keyingi bosqich
 
-- Akkaunt + bulut sinxron
-- Oilani havola orqali taklif qilish
+- Akkaunt + doimiy bulut sinxron
 - Export (PDF / rasm)
+- Rasmlarni ham ulashish
