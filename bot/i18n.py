@@ -58,12 +58,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "ru": "Сегодня день повторного заказа — добавлено в корзину",
     },
     "zone_delivery": {
-        "uz": "🚚 Yetkazish ({zone}): {price:,} so'm",
-        "ru": "🚚 Доставка ({zone}): {price:,} сум",
-    },
-    "area_only": {
-        "uz": "Faqat {area} ichiga yetkazamiz.",
-        "ru": "Доставляем только в {area}.",
+        "uz": "🚚 Yetkazish: {price:,} so'm",
+        "ru": "🚚 Доставка: {price:,} сум",
     },
     "no_recommendations": {
         "uz": "Hozircha tavsiyalar yo'q.",

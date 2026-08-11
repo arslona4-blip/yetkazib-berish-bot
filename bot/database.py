@@ -1680,17 +1680,14 @@ def set_user_language(user_id: int, lang: str) -> None:
 
 
 def get_delivery_fee(
-    address: str, lat: float | None = None, lon: float | None = None
+    address: str = "", lat: float | None = None, lon: float | None = None
 ) -> tuple[int, str]:
-    """Bitta mahalla — doimiy yetkazish narxi."""
+    """Doimiy yetkazish narxi (zona yo'q)."""
     _ = (address, lat, lon)
-    from bot.config import DELIVERY_AREA
-
-    return DELIVERY_PRICE, DELIVERY_AREA
+    return DELIVERY_PRICE, "Yetkazish"
 
 
 def list_delivery_zones(active_only: bool = False) -> list[sqlite3.Row]:
-    """Eski API — endi ishlatilmaydi."""
     return []
 
 
