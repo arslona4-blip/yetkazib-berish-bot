@@ -11,6 +11,11 @@ from telegram.ext import (
 
 from bot.config import (
     BOT_TOKEN,
+    MIN_ORDER_AMOUNT,
+    SHOP_ADDRESS,
+    SHOP_HOURS,
+    SHOP_NAME,
+    SHOP_PHONE,
     WEBAPP_PORT,
     WEBHOOK_PATH,
     WEBHOOK_PORT,
@@ -90,6 +95,55 @@ def _acquire_single_instance_lock() -> None:
 _BOT_LOCK_FILE = None
 
 
+def _bot_description_uz() -> str:
+    """Bo'sh chatda flamingo o'rnida ko'rinadigan matn (max 512)."""
+    return (
+        f"🏪 {SHOP_NAME}\n"
+        f"🚚 Uyingizgacha tez yetkazib beramiz\n\n"
+        f"📍 {SHOP_ADDRESS}\n"
+        f"🕐 {SHOP_HOURS}\n"
+        f"📞 {SHOP_PHONE}\n\n"
+        f"🛒 Do'kon — katalog va buyurtma\n"
+        f"📷 Skaner — shtrix-kod bilan savatga\n"
+        f"📋 Mening buyurtmalarim — holatni kuzating\n\n"
+        f"🏷 Promo: BARAKA10 (10%, min {MIN_ORDER_AMOUNT:,} so'm)\n\n"
+        f"Boshlash: /start"
+    )
+
+
+def _bot_short_description_uz() -> str:
+    """Bot profilida qisqa tavsif (max 120)."""
+    text = f"{SHOP_NAME} — uyga yetkazib berish. /start bosing."
+    return text[:120]
+
+
+async def _set_bot_profile_texts(application: Application) -> None:
+    """Telegram bo'sh chatda bot haqida ma'lumot ko'rsatadi."""
+    bot = application.bot
+    description = _bot_description_uz()[:512]
+    short = _bot_short_description_uz()
+    try:
+        await bot.set_my_description(description=description)
+        await bot.set_my_short_description(short_description=short)
+        await bot.set_my_description(
+            description=(
+                f"🏪 {SHOP_NAME}\n"
+                f"🚚 Быстрая доставка домой\n\n"
+                f"📍 {SHOP_ADDRESS}\n"
+                f"🕐 {SHOP_HOURS}\n"
+                f"📞 {SHOP_PHONE}\n\n"
+                f"Нажмите /start чтобы начать"
+            )[:512],
+            language_code="ru",
+        )
+        await bot.set_my_short_description(
+            short_description=f"{SHOP_NAME} — доставка на дом. /start"[:120],
+            language_code="ru",
+        )
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Bot description o'rnatilmadi: %s", exc)
+
+
 def main() -> None:
     logging.basicConfig(
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -107,6 +161,7 @@ def main() -> None:
     async def post_init(application: Application) -> None:
         set_bot(application.bot)
         setup_jobs(application)
+        await _set_bot_profile_texts(application)
 
     app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
 
