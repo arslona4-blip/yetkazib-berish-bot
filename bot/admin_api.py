@@ -10,18 +10,23 @@ from aiohttp import web
 
 from bot.config import (
     ADMIN_IDS,
+    BONUS_PERCENT,
     LOW_STOCK_THRESHOLD,
     ORDER_STATUS_LABELS,
     PAYMENT_STATUS_LABELS,
     SHOP_NAME,
 )
 from bot.database import (
+    add_bonus,
     adjust_product_stock,
+    delete_order,
     format_order,
     get_daily_report,
     get_inventory_categories,
     get_inventory_products,
     get_order,
+    get_order_items,
+    get_orders_by_payment,
     get_orders_by_status,
     get_product_by_id,
     get_products,
@@ -29,7 +34,11 @@ from bot.database import (
     get_stats,
     get_stock_movements,
     get_warehouse_summary,
+    search_orders,
+    set_product_active,
     set_product_stock,
+    update_payment_status,
+    update_product_price,
     update_order_status,
 )
 
@@ -91,6 +100,17 @@ def _order_dict(row) -> dict[str, Any]:
     }
 
 
+def _item_dict(row) -> dict[str, Any]:
+    return {
+        "id": int(row["id"]),
+        "product_id": int(row["product_id"]) if row["product_id"] else None,
+        "product_name": row["product_name"] or "",
+        "price": int(row["price"] or 0),
+        "quantity": int(row["quantity"] or 0),
+        "line_total": int(row["price"] or 0) * int(row["quantity"] or 0),
+    }
+
+
 def _product_dict(row) -> dict[str, Any]:
     keys = row.keys()
     return {
@@ -100,10 +120,45 @@ def _product_dict(row) -> dict[str, Any]:
         "stock": int(row["stock"] or 0) if "stock" in keys else 0,
         "category_id": int(row["category_id"]) if row["category_id"] else 0,
         "category_name": (
-            row["category_name"] if "category_name" in keys and row["category_name"] else "Toifasiz"
+            row["category_name"]
+            if "category_name" in keys and row["category_name"]
+            else "Toifasiz"
         ),
         "is_active": bool(row["is_active"]),
     }
+
+
+def _daily_payload(report: dict[str, Any]) -> dict[str, Any]:
+    top = []
+    for row in report.get("top") or []:
+        top.append(
+            {
+                "product_name": row["product_name"],
+                "qty": int(row["qty"] or 0),
+            }
+        )
+    return {
+        "date": report.get("date", ""),
+        "orders_count": report.get("orders_count", 0),
+        "revenue": report.get("orders_sum", 0),
+        "paid_count": report.get("paid_count", 0),
+        "paid_sum": report.get("paid_sum", 0),
+        "waiting_count": report.get("waiting_count", 0),
+        "waiting_sum": report.get("waiting_sum", 0),
+        "top": top,
+    }
+
+
+async def _notify_user(user_id: int, text: str, reply_markup=None) -> None:
+    from bot.webapp import get_bot
+
+    bot = get_bot()
+    if bot is None:
+        return
+    try:
+        await bot.send_message(chat_id=user_id, text=text, reply_markup=reply_markup)
+    except Exception as exc:
+        logger.warning("Mijoz xabar xatosi %s: %s", user_id, exc)
 
 
 async def admin_me(request: web.Request) -> web.Response:
@@ -123,16 +178,14 @@ async def admin_stats(request: web.Request) -> web.Response:
     stats = get_stats()
     wh = get_warehouse_summary()
     report = get_daily_report()
+    waiting = get_orders_by_payment("card_waiting", limit=50)
     return web.json_response(
         {
             "ok": True,
             "stats": stats,
             "warehouse": wh,
-            "daily": {
-                "orders_count": report.get("orders_count", 0),
-                "revenue": report.get("orders_sum", 0),
-                "date": report.get("date", ""),
-            },
+            "daily": _daily_payload(report),
+            "payments_waiting": len(waiting),
             "low_stock_threshold": LOW_STOCK_THRESHOLD,
         }
     )
@@ -141,20 +194,41 @@ async def admin_stats(request: web.Request) -> web.Response:
 async def admin_orders(request: web.Request) -> web.Response:
     _require_admin(request)
     status = (request.rel_url.query.get("status") or "new").strip().lower()
-    if status == "active":
+    q = (request.rel_url.query.get("q") or "").strip()
+    if q:
+        orders = search_orders(q, limit=40)
+    elif status == "active":
         orders = get_queue_orders(["accepted", "in_delivery"], limit=50)
     elif status == "delivered":
         orders = get_orders_by_status("delivered", limit=40)
     elif status == "cancelled":
         orders = get_orders_by_status("cancelled", limit=40)
+    elif status == "payments":
+        orders = get_orders_by_payment("card_waiting", limit=50)
     else:
         orders = get_queue_orders(["new"], limit=50)
     return web.json_response(
         {
             "ok": True,
             "status": status,
+            "q": q,
             "orders": [_order_dict(o) for o in orders],
         }
+    )
+
+
+async def admin_order_detail(request: web.Request) -> web.Response:
+    _require_admin(request)
+    try:
+        order_id = int(request.match_info["order_id"])
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text="order_id noto'g'ri") from exc
+    order = get_order(order_id)
+    if not order:
+        raise web.HTTPNotFound(text="Buyurtma topilmadi")
+    items = [_item_dict(i) for i in get_order_items(order_id)]
+    return web.json_response(
+        {"ok": True, "order": _order_dict(order), "items": items}
     )
 
 
@@ -177,7 +251,85 @@ async def admin_order_status(request: web.Request) -> web.Response:
     update_order_status(order_id, status)
     order = get_order(order_id)
     logger.info("Admin %s order #%s -> %s", admin_id, order_id, status)
+
+    text = (
+        f"🔔 Buyurtma #{order_id} holati yangilandi:\n"
+        f"{format_order(order)}"
+    )
+    markup = None
+    if order["payment_status"] in {"pending", "rejected"}:
+        from bot.keyboards import payment_keyboard
+
+        text += "\n\nTo'lov qilish uchun pastdagi tugmalardan foydalaning:"
+        markup = payment_keyboard(order_id)
+    await _notify_user(int(order["user_id"]), text, markup)
+    if status == "delivered":
+        try:
+            from bot.i18n import get_user_lang, t
+            from bot.keyboards import rating_keyboard
+
+            lang = get_user_lang(int(order["user_id"]))
+            await _notify_user(
+                int(order["user_id"]),
+                t("rating_ask", lang, order_id=order_id),
+                rating_keyboard(order_id),
+            )
+        except Exception as exc:
+            logger.warning("Rating so'rov xato: %s", exc)
+
     return web.json_response({"ok": True, "order": _order_dict(order)})
+
+
+async def admin_order_payment(request: web.Request) -> web.Response:
+    admin_id = _require_admin(request)
+    try:
+        order_id = int(request.match_info["order_id"])
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text="order_id noto'g'ri") from exc
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise web.HTTPBadRequest(text="JSON noto'g'ri") from exc
+    action = str(body.get("action") or "").strip().lower()
+    order = get_order(order_id)
+    if not order:
+        raise web.HTTPNotFound(text="Buyurtma topilmadi")
+    if action == "confirm":
+        update_payment_status(order_id, "paid")
+        order = get_order(order_id)
+        points = max(1, int(order["price"] * BONUS_PERCENT / 100))
+        add_bonus(int(order["user_id"]), points)
+        await _notify_user(
+            int(order["user_id"]),
+            f"✅ To'lovingiz tasdiqlandi!\nBuyurtma #{order_id} qabul qilindi.",
+        )
+    elif action == "reject":
+        update_payment_status(order_id, "rejected")
+        order = get_order(order_id)
+        from bot.keyboards import payment_keyboard
+
+        await _notify_user(
+            int(order["user_id"]),
+            f"❌ Buyurtma #{order_id} to'lovi tasdiqlanmadi.\n"
+            "Qayta to'lov qiling yoki admin bilan bog'laning.",
+            payment_keyboard(order_id),
+        )
+    else:
+        raise web.HTTPBadRequest(text="action: confirm|reject")
+    logger.info("Admin %s payment #%s -> %s", admin_id, order_id, action)
+    return web.json_response({"ok": True, "order": _order_dict(order)})
+
+
+async def admin_order_delete(request: web.Request) -> web.Response:
+    admin_id = _require_admin(request)
+    try:
+        order_id = int(request.match_info["order_id"])
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text="order_id noto'g'ri") from exc
+    if not delete_order(order_id):
+        raise web.HTTPNotFound(text="Buyurtma topilmadi")
+    logger.info("Admin %s deleted order #%s", admin_id, order_id)
+    return web.json_response({"ok": True, "deleted": order_id})
 
 
 async def admin_warehouse_summary(request: web.Request) -> web.Response:
@@ -284,7 +436,6 @@ async def admin_warehouse_stock(request: web.Request) -> web.Response:
 async def admin_products(request: web.Request) -> web.Response:
     _require_admin(request)
     products = get_products(active_only=False)
-    # attach category names via inventory query is easier
     inv = {p["id"]: p for p in get_inventory_products(limit=500)}
     out = []
     for p in products:
@@ -296,14 +447,46 @@ async def admin_products(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "products": out})
 
 
+async def admin_product_patch(request: web.Request) -> web.Response:
+    admin_id = _require_admin(request)
+    try:
+        product_id = int(request.match_info["product_id"])
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text="product_id noto'g'ri") from exc
+    product = get_product_by_id(product_id)
+    if not product:
+        raise web.HTTPNotFound(text="Mahsulot topilmadi")
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise web.HTTPBadRequest(text="JSON noto'g'ri") from exc
+    if "price" in body:
+        try:
+            price = int(body["price"])
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(text="price noto'g'ri") from exc
+        if price < 0:
+            raise web.HTTPBadRequest(text="price musbat bo'lsin")
+        update_product_price(product_id, price)
+    if "is_active" in body:
+        set_product_active(product_id, bool(body["is_active"]))
+    product = get_product_by_id(product_id)
+    logger.info("Admin %s patched product #%s", admin_id, product_id)
+    return web.json_response({"ok": True, "product": _product_dict(product)})
+
+
 def register_admin_routes(app: web.Application) -> None:
     app.router.add_get("/api/admin/me", admin_me)
     app.router.add_get("/api/admin/stats", admin_stats)
     app.router.add_get("/api/admin/orders", admin_orders)
+    app.router.add_get("/api/admin/orders/{order_id}", admin_order_detail)
     app.router.add_post("/api/admin/orders/{order_id}/status", admin_order_status)
+    app.router.add_post("/api/admin/orders/{order_id}/payment", admin_order_payment)
+    app.router.add_delete("/api/admin/orders/{order_id}", admin_order_delete)
     app.router.add_get("/api/admin/warehouse/summary", admin_warehouse_summary)
     app.router.add_get("/api/admin/warehouse/categories", admin_warehouse_categories)
     app.router.add_get("/api/admin/warehouse/products", admin_warehouse_products)
     app.router.add_get("/api/admin/warehouse/movements", admin_warehouse_movements)
     app.router.add_post("/api/admin/warehouse/stock", admin_warehouse_stock)
     app.router.add_get("/api/admin/products", admin_products)
+    app.router.add_patch("/api/admin/products/{product_id}", admin_product_patch)

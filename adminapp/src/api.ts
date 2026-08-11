@@ -57,27 +57,48 @@ export const api = {
     req<{ ok: boolean; admin_id: number; shop_name: string }>('/api/admin/me', auth),
   stats: (auth: AuthState | null) =>
     req<import('./types').StatsPayload & { ok: boolean }>('/api/admin/stats', auth),
-  orders: (auth: AuthState | null, status: string) =>
-    req<{ ok: boolean; orders: import('./types').Order[] }>(
-      `/api/admin/orders?status=${encodeURIComponent(status)}`,
+  orders: (auth: AuthState | null, status: string, q = '') => {
+    const params = new URLSearchParams({ status })
+    if (q.trim()) params.set('q', q.trim())
+    return req<{ ok: boolean; orders: import('./types').Order[] }>(
+      `/api/admin/orders?${params}`,
       auth,
-    ),
+    )
+  },
+  orderDetail: (auth: AuthState | null, orderId: number) =>
+    req<{
+      ok: boolean
+      order: import('./types').Order
+      items: import('./types').OrderItem[]
+    }>(`/api/admin/orders/${orderId}`, auth),
   setStatus: (auth: AuthState | null, orderId: number, status: string) =>
     req<{ ok: boolean; order: import('./types').Order }>(
       `/api/admin/orders/${orderId}/status`,
       auth,
       { method: 'POST', body: JSON.stringify({ status }) },
     ),
-  whSummary: (auth: AuthState | null) =>
-    req<Record<string, number> & { ok: boolean }>(
-      '/api/admin/warehouse/summary',
+  setPayment: (
+    auth: AuthState | null,
+    orderId: number,
+    action: 'confirm' | 'reject',
+  ) =>
+    req<{ ok: boolean; order: import('./types').Order }>(
+      `/api/admin/orders/${orderId}/payment`,
       auth,
+      { method: 'POST', body: JSON.stringify({ action }) },
     ),
-  whCategories: (auth: AuthState | null) =>
-    req<{ ok: boolean; categories: import('./types').Category[] }>(
-      '/api/admin/warehouse/categories',
+  deleteOrder: (auth: AuthState | null, orderId: number) =>
+    req<{ ok: boolean; deleted: number }>(`/api/admin/orders/${orderId}`, auth, {
+      method: 'DELETE',
+    }),
+  whCategories: (auth: AuthState | null, lowOnly?: boolean) => {
+    const q = new URLSearchParams()
+    if (lowOnly) q.set('low_only', '1')
+    return req<{ ok: boolean; categories: import('./types').Category[] }>(
+      `/api/admin/warehouse/categories?${q}`,
       auth,
-    ),
+    )
+  },
   whProducts: (auth: AuthState | null, categoryId?: number, lowOnly?: boolean) => {
     const q = new URLSearchParams()
     if (categoryId !== undefined) q.set('category_id', String(categoryId))
@@ -111,5 +132,15 @@ export const api = {
     req<{ ok: boolean; products: import('./types').Product[] }>(
       '/api/admin/products',
       auth,
+    ),
+  patchProduct: (
+    auth: AuthState | null,
+    productId: number,
+    body: { price?: number; is_active?: boolean },
+  ) =>
+    req<{ ok: boolean; product: import('./types').Product }>(
+      `/api/admin/products/${productId}`,
+      auth,
+      { method: 'PATCH', body: JSON.stringify(body) },
     ),
 }

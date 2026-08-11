@@ -1043,6 +1043,53 @@ def get_queue_orders(
     return list(rows)
 
 
+def get_orders_by_payment(
+    payment_status: str,
+    limit: int = 40,
+) -> list[sqlite3.Row]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM orders
+            WHERE payment_status = ?
+              AND status != 'cancelled'
+            ORDER BY id ASC
+            LIMIT ?
+            """,
+            (payment_status, limit),
+        ).fetchall()
+    return list(rows)
+
+
+def search_orders(query: str, limit: int = 30) -> list[sqlite3.Row]:
+    """ID yoki telefon bo'yicha qidiruv."""
+    q = (query or "").strip()
+    if not q:
+        return []
+    with get_connection() as conn:
+        if q.isdigit():
+            rows = conn.execute(
+                """
+                SELECT * FROM orders
+                WHERE id = ? OR phone LIKE ?
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (int(q), f"%{q}%", limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT * FROM orders
+                WHERE phone LIKE ? OR delivery_address LIKE ?
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (f"%{q}%", f"%{q}%", limit),
+            ).fetchall()
+    return list(rows)
+
+
 def update_order_status(order_id: int, status: str) -> None:
     with get_connection() as conn:
         conn.execute(
