@@ -52,6 +52,15 @@ def admin_app_inline_button(
     return InlineKeyboardButton(label, web_app=WebAppInfo(url=url))
 
 
+def admin_app_reply_button(
+    label: str = "🖥 Admin ilova",
+) -> KeyboardButton | None:
+    url = admin_app_url()
+    if not url:
+        return None
+    return KeyboardButton(label, web_app=WebAppInfo(url=url))
+
+
 def scan_inline_button(label: str = "📷 Skaner") -> InlineKeyboardButton | None:
     url = miniapp_shop_url()
     if not url:
@@ -85,6 +94,9 @@ def main_menu_keyboard(is_admin: bool = False, is_courier: bool = False) -> Repl
         rows.append(["⋯ Ko'proq"])
     staff_row = []
     if is_admin:
+        admin_app = admin_app_reply_button()
+        if admin_app:
+            rows.append([admin_app])
         staff_row.append("📦 Buyurtmalar")
         staff_row.append("🛠 Admin panel")
     if is_courier:
