@@ -95,6 +95,8 @@ from bot.keyboards import (
     admin_category_products_list_keyboard,
     admin_menu_keyboard,
     admin_orders_keyboard,
+    admin_stock_keyboard,
+    admin_stock_item_keyboard,
     admin_delete_order_confirm_keyboard,
     admin_order_keyboard,
     admin_payment_keyboard,
@@ -1508,6 +1510,43 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await contacts_home(update, context)
         return
 
+    if action in {"stock", "stock_low"}:
+        from bot.config import LOW_STOCK_THRESHOLD
+        from bot.database import get_inventory_products
+
+        low_only = action == "stock_low"
+        products = get_inventory_products(low_only=low_only, limit=25)
+        title = "⚠️ Kam qoldiq" if low_only else "📦 Ombor"
+        if not products:
+            await query.edit_message_text(
+                f"{title}\n\nMahsulot topilmadi.",
+                reply_markup=admin_stock_keyboard(low_only=low_only),
+            )
+            return
+        lines = [
+            f"<b>{title}</b>",
+            format_now_html(),
+            f"Chegara: ≤ {LOW_STOCK_THRESHOLD} dona",
+            "",
+        ]
+        for p in products[:15]:
+            stock = int(p["stock"] if "stock" in p.keys() else 0)
+            mark = "⚠️" if stock <= LOW_STOCK_THRESHOLD else "✅"
+            lines.append(f"{mark} <b>{p['name']}</b> — {stock} dona")
+        await query.edit_message_text(
+            "\n".join(lines),
+            reply_markup=admin_stock_keyboard(low_only=low_only),
+            parse_mode="HTML",
+        )
+        for p in products[:12]:
+            stock = int(p["stock"] if "stock" in p.keys() else 0)
+            await query.message.reply_text(
+                f"📦 {p['name']}\nQoldiq: <b>{stock}</b> dona",
+                reply_markup=admin_stock_item_keyboard(p["id"]),
+                parse_mode="HTML",
+            )
+        return
+
     if action == "new":
         orders = get_queue_orders(["new"], limit=30)
         title = "🆕 Yangi buyurtmalar"
@@ -2287,6 +2326,46 @@ async def cancel_product_admin(
     return ConversationHandler.END
 
 
+async def admin_stock_callback(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Ombor: +1 / -1 / +10."""
+    query = update.callback_query
+    await query.answer()
+    if not is_admin(query.from_user.id):
+        await query.edit_message_text("Ruxsat yo'q.")
+        return
+    parts = (query.data or "").split(":")
+    if len(parts) < 3:
+        return
+    action, pid_s = parts[1], parts[2]
+    try:
+        product_id = int(pid_s)
+    except ValueError:
+        return
+    from bot.database import adjust_product_stock, get_product_by_id
+
+    product = get_product_by_id(product_id)
+    if not product:
+        await query.edit_message_text("Mahsulot topilmadi.")
+        return
+    delta = 0
+    if action == "inc":
+        delta = 1
+    elif action == "dec":
+        delta = -1
+    elif action == "add10":
+        delta = 10
+    else:
+        return
+    stock = adjust_product_stock(product_id, delta)
+    await query.edit_message_text(
+        f"📦 {product['name']}\nQoldiq: <b>{stock}</b> dona",
+        reply_markup=admin_stock_item_keyboard(product_id),
+        parse_mode="HTML",
+    )
+
+
 async def admin_status_callback(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -2441,41 +2520,7 @@ async def payment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
 
     if data.startswith("pay_debt:"):
-        order_id = int(data.split(":")[1])
-        order = get_order(order_id)
-        if not order:
-            await query.edit_message_text("Buyurtma topilmadi.")
-            return
-        from bot.database import get_contact, mark_order_as_debt
-
-        try:
-            cid, bal = mark_order_as_debt(
-                order_id, created_by=query.from_user.id
-            )
-        except ValueError as exc:
-            await query.answer(str(exc), show_alert=True)
-            return
-        contact = get_contact(cid)
-        name = contact["name"] if contact else f"#{cid}"
-        await query.edit_message_text(
-            f"📒 Buyurtma #{order_id} qarzga yozildi.\n"
-            f"Kontakt: {name}\n"
-            f"Summa: {order['price']:,} so'm\n"
-            f"Jami qarz: {bal:,} so'm\n\n"
-            "Admin panel → Kontaktlar dan to'lovni yozishingiz mumkin."
-        )
-        for admin_id in ADMIN_IDS:
-            try:
-                await context.bot.send_message(
-                    admin_id,
-                    f"📒 Qarz\nBuyurtma #{order_id}\n"
-                    f"Mijoz: {query.from_user.full_name}\n"
-                    f"Kontakt: {name}\n"
-                    f"Summa: {order['price']:,} so'm\n"
-                    f"Jami qarz: {bal:,} so'm",
-                )
-            except Exception:
-                pass
+        await query.answer("Qarz funksiyasi o‘chirilgan.", show_alert=True)
         return
 
     if data.startswith("pay_card:"):

@@ -49,6 +49,7 @@ from bot.handlers import (
     admin_panel,
     admin_product_callback,
     admin_status_callback,
+    admin_stock_callback,
     back_to_main_menu,
     build_order_conversation,
     build_product_admin_conversation,
@@ -221,7 +222,7 @@ def main() -> None:
     app.add_handler(
         CallbackQueryHandler(
             contact_callback,
-            pattern=r"^contact:(home|list|debtors|view:\d+|hist:\d+)$",
+            pattern=r"^contact:(home|list|debtors|view:\d+|hist:\d+|debt:\d+|pay:\d+)$",
         )
     )
     app.add_handler(CallbackQueryHandler(admin_callback, pattern=r"^admin:"))
@@ -230,6 +231,9 @@ def main() -> None:
             admin_product_callback,
             pattern=r"^admin_prod:(list|cats|viewcat:\d+|item:\d+|toggle:\d+|del:\d+|delcat:\d+|delsize:\d+|addcat)$",
         )
+    )
+    app.add_handler(
+        CallbackQueryHandler(admin_stock_callback, pattern=r"^admin_stock:")
     )
     app.add_handler(CallbackQueryHandler(admin_status_callback, pattern=r"^admin_status:"))
     app.add_handler(
