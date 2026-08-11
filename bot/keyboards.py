@@ -519,12 +519,137 @@ def admin_stock_keyboard(*, low_only: bool = False) -> InlineKeyboardMarkup:
     rows = [
         [
             InlineKeyboardButton(
+                "📋 Hammasi (toifa bo‘yicha)",
+                callback_data="admin:stock_all",
+            )
+        ],
+        [
+            InlineKeyboardButton(
                 "📋 Hammasi" if low_only else "⚠️ Kam qoldiq",
                 callback_data="admin:stock" if low_only else "admin:stock_low",
             )
         ],
         [InlineKeyboardButton("⬅️ Admin panel", callback_data="admin:menu")],
     ]
+    return InlineKeyboardMarkup(rows)
+
+
+def admin_stock_categories_keyboard(
+    categories: list[dict], *, low_only: bool = False
+) -> InlineKeyboardMarkup:
+    """Ombor: toifalar spiskasi."""
+    rows: list[list[InlineKeyboardButton]] = []
+    for cat in categories:
+        low = int(cat.get("low_count") or 0)
+        count = int(cat.get("product_count") or 0)
+        mark = "⚠️" if low else "📁"
+        extra = f" · ⚠️{low}" if low else ""
+        label = f"{mark} {cat['category_name']} — {count} ta{extra}"
+        if len(label) > 64:
+            label = label[:61] + "..."
+        cid = int(cat["category_id"])
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    label,
+                    callback_data=f"admin:stock_cat:{cid}",
+                )
+            ]
+        )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                "📋 Hammasi (toifa bo‘yicha)",
+                callback_data="admin:stock_all",
+            )
+        ]
+    )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                "📋 Toifalar" if low_only else "⚠️ Kam qoldiq",
+                callback_data="admin:stock" if low_only else "admin:stock_low",
+            )
+        ]
+    )
+    rows.append([InlineKeyboardButton("⬅️ Admin panel", callback_data="admin:menu")])
+    return InlineKeyboardMarkup(rows)
+
+
+def admin_stock_list_keyboard(
+    products,
+    *,
+    low_only: bool = False,
+    back_callback: str = "admin:stock",
+) -> InlineKeyboardMarkup:
+    """Ombor: mahsulotlar toifa bo'yicha guruhlangan spiska."""
+    from collections import defaultdict
+
+    from bot.config import LOW_STOCK_THRESHOLD
+
+    grouped: dict[str, list] = defaultdict(list)
+    for product in products:
+        try:
+            cat_name = product["category_name"] or "Toifasiz"
+        except (KeyError, IndexError, TypeError):
+            cat_name = "Toifasiz"
+        grouped[cat_name].append(product)
+
+    rows: list[list[InlineKeyboardButton]] = []
+    for cat_name in sorted(grouped.keys(), key=lambda x: x.casefold()):
+        items = sorted(
+            grouped[cat_name],
+            key=lambda p: (p["name"] or "").casefold(),
+        )
+        header = f"━━ 📁 {cat_name} · {len(items)} ta ━━"
+        if len(header) > 64:
+            header = f"━━ 📁 {cat_name[:40]}… ━━"
+        # Header — shu toifani ochish
+        cat_id = None
+        try:
+            cat_id = items[0]["category_id"]
+        except (KeyError, IndexError, TypeError):
+            cat_id = None
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    header,
+                    callback_data=(
+                        f"admin:stock_cat:{int(cat_id)}"
+                        if cat_id
+                        else "admin:stock"
+                    ),
+                )
+            ]
+        )
+        for product in items:
+            stock = 0
+            try:
+                stock = int(product["stock"] or 0)
+            except (KeyError, IndexError, TypeError, ValueError):
+                stock = 0
+            mark = "⚠️" if stock <= LOW_STOCK_THRESHOLD else "✅"
+            label = f"　　{mark} {product['name']} — {stock} dona"
+            if len(label) > 64:
+                label = label[:61] + "..."
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        label,
+                        callback_data=f"admin_stock:item:{product['id']}",
+                    )
+                ]
+            )
+
+    rows.append(
+        [
+            InlineKeyboardButton(
+                "📋 Toifalar" if low_only else "⚠️ Kam qoldiq",
+                callback_data="admin:stock" if low_only else "admin:stock_low",
+            )
+        ]
+    )
+    rows.append([InlineKeyboardButton("⬅️ Orqaga", callback_data=back_callback)])
     return InlineKeyboardMarkup(rows)
 
 
@@ -546,6 +671,11 @@ def admin_stock_item_keyboard(product_id: int) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     "✏️ Son yozish",
                     callback_data=f"admin_prod:stock:{product_id}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "⬅️ Ombor spiska", callback_data="admin:stock_all"
                 )
             ],
         ]
