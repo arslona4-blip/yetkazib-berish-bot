@@ -1461,6 +1461,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"🆕 Yangi: <b>{stats['new_orders']}</b>\n"
             f"🚚 Faol: <b>{stats['active_orders']}</b>\n"
             f"✅ Yetkazilgan: <b>{stats['delivered_orders']}</b>\n\n"
+            "Navbat: eski buyurtma birinchi ✅\n"
             "Bo‘limni tanlang:",
             reply_markup=admin_orders_keyboard(),
             parse_mode="HTML",
