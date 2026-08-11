@@ -73,6 +73,10 @@ def set_bot(bot) -> None:
     _bot = bot
 
 
+def get_bot():
+    return _bot
+
+
 def photo_cache_path(product_id: int) -> Path:
     return PHOTOS_DIR / f"{product_id}.jpg"
 

@@ -273,7 +273,7 @@ select {
   width: min(980px, 100%);
   margin: 0 auto;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 4px;
   border: 1px solid var(--line);
   background: rgba(11, 18, 32, 0.92);
@@ -286,17 +286,33 @@ select {
   background: transparent;
   color: var(--muted);
   border-radius: 12px;
-  padding: 8px 4px;
-  font-size: 0.68rem;
+  padding: 8px 2px;
+  font-size: 0.62rem;
   font-weight: 700;
   display: grid;
   gap: 2px;
   justify-items: center;
+  position: relative;
 }
 
 .nav-btn.active {
   color: var(--text);
   background: rgba(61, 214, 198, 0.16);
+}
+
+.nav-dot {
+  position: absolute;
+  top: 2px;
+  right: 8px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--accent2);
+  color: #1a1400;
+  font-size: 0.62rem;
+  display: grid;
+  place-items: center;
+  padding: 0 4px;
 }
 
 .login {
@@ -400,4 +416,67 @@ select {
 
 .mono {
   font-family: var(--mono);
+}
+
+.card.clickable {
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  color: inherit;
+}
+
+.top-actions {
+  margin-top: 0;
+}
+
+.item-head {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+}
+
+.detail {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.lines li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.note {
+  margin-top: 8px !important;
+  font-style: italic;
+}
+
+.muted-sm {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.price-input {
+  width: 110px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  padding: 8px 10px;
 }

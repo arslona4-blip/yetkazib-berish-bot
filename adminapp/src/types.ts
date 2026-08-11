@@ -1,7 +1,14 @@
-export type Tab = 'dash' | 'orders' | 'warehouse' | 'moves' | 'products'
+export type Tab =
+  | 'dash'
+  | 'orders'
+  | 'payments'
+  | 'warehouse'
+  | 'moves'
+  | 'products'
 
 export type Order = {
   id: number
+  user_id: number
   status: string
   status_label: string
   payment_status: string
@@ -13,6 +20,15 @@ export type Order = {
   delivery_slot: string
   created_at: string
   text: string
+}
+
+export type OrderItem = {
+  id: number
+  product_id: number | null
+  product_name: string
+  price: number
+  quantity: number
+  line_total: number
 }
 
 export type Product = {
@@ -66,6 +82,16 @@ export type StatsPayload = {
     today_out: number
     today_moves: number
   }
-  daily: { orders_count: number; revenue: number; date: string }
+  daily: {
+    orders_count: number
+    revenue: number
+    date: string
+    paid_count: number
+    paid_sum: number
+    waiting_count: number
+    waiting_sum: number
+    top: { product_name: string; qty: number }[]
+  }
+  payments_waiting: number
   low_stock_threshold: number
 }

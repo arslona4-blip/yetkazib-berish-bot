@@ -10,6 +10,7 @@ import type {
   Category,
   Movement,
   Order,
+  OrderItem,
   Product,
   StatsPayload,
   Tab,
@@ -37,6 +38,13 @@ const REASON: Record<string, string> = {
   adjust: '✏️ Tuzatish',
 }
 
+const ORDER_FILTERS: [string, string][] = [
+  ['new', 'Yangi'],
+  ['active', 'Faol'],
+  ['delivered', 'Yetkazilgan'],
+  ['cancelled', 'Bekor'],
+]
+
 function money(n: number) {
   return `${Number(n || 0).toLocaleString('uz-UZ')} so‘m`
 }
@@ -47,12 +55,19 @@ export default function App() {
   const [shop, setShop] = useState('Admin')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [lastSync, setLastSync] = useState('')
   const [stats, setStats] = useState<StatsPayload | null>(null)
   const [orderStatus, setOrderStatus] = useState('new')
+  const [orderQuery, setOrderQuery] = useState('')
   const [orders, setOrders] = useState<Order[]>([])
+  const [payments, setPayments] = useState<Order[]>([])
+  const [openOrderId, setOpenOrderId] = useState<number | null>(null)
+  const [orderItems, setOrderItems] = useState<OrderItem[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [products, setProducts] = useState<Product[]>([])
+  const [catalog, setCatalog] = useState<Product[]>([])
   const [selectedCat, setSelectedCat] = useState<number | 'all'>('all')
+  const [lowOnly, setLowOnly] = useState(false)
   const [moves, setMoves] = useState<Movement[]>([])
   const [stockForm, setStockForm] = useState({
     product_id: 0,
@@ -61,6 +76,7 @@ export default function App() {
     note: '',
   })
   const [pinForm, setPinForm] = useState({ adminId: '', pin: '' })
+  const [priceEdit, setPriceEdit] = useState<Record<number, string>>({})
 
   const tgInit = window.Telegram?.WebApp?.initData || ''
 
@@ -95,27 +111,32 @@ export default function App() {
     }
   }
 
-  async function refreshAll(a: AuthState | null = auth) {
+  async function refreshAll(a: AuthState | null = auth, silent = false) {
     if (!a) return
-    setBusy(true)
+    if (!silent) setBusy(true)
     setError('')
     try {
-      const [st, or, cats, prods, mv] = await Promise.all([
+      const [st, or, pay, cats, prods, mv, cat] = await Promise.all([
         api.stats(a),
-        api.orders(a, orderStatus),
-        api.whCategories(a),
-        api.whProducts(a),
+        api.orders(a, orderStatus, orderQuery),
+        api.orders(a, 'payments'),
+        api.whCategories(a, lowOnly),
+        api.whProducts(a, selectedCat === 'all' ? undefined : selectedCat, lowOnly),
         api.whMoves(a),
+        api.products(a),
       ])
       setStats(st)
       setOrders(or.orders)
+      setPayments(pay.orders)
       setCategories(cats.categories)
       setProducts(prods.products)
       setMoves(mv.movements)
+      setCatalog(cat.products)
+      setLastSync(new Date().toLocaleTimeString('uz-UZ'))
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Yuklash xato')
+      if (!silent) setError(e instanceof Error ? e.message : 'Yuklash xato')
     } finally {
-      setBusy(false)
+      if (!silent) setBusy(false)
     }
   }
 
@@ -126,34 +147,101 @@ export default function App() {
 
   useEffect(() => {
     if (!auth) return
+    const id = window.setInterval(() => {
+      void refreshAll(auth, true)
+    }, 20000)
+    return () => window.clearInterval(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth, orderStatus, orderQuery, lowOnly, selectedCat])
+
+  useEffect(() => {
+    if (!auth) return
     void (async () => {
       try {
-        const or = await api.orders(auth, orderStatus)
+        const or = await api.orders(auth, orderStatus, orderQuery)
         setOrders(or.orders)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Buyurtmalar xato')
       }
     })()
-  }, [orderStatus, auth])
+  }, [orderStatus, orderQuery, auth])
 
-  const filteredProducts = useMemo(() => {
-    if (selectedCat === 'all') return products
-    return products.filter((p) => p.category_id === selectedCat)
-  }, [products, selectedCat])
+  useEffect(() => {
+    if (!auth) return
+    void (async () => {
+      try {
+        const [cats, prods] = await Promise.all([
+          api.whCategories(auth, lowOnly),
+          api.whProducts(
+            auth,
+            selectedCat === 'all' ? undefined : selectedCat,
+            lowOnly,
+          ),
+        ])
+        setCategories(cats.categories)
+        setProducts(prods.products)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Ombor xato')
+      }
+    })()
+  }, [lowOnly, selectedCat, auth])
+
+  const filteredProducts = useMemo(() => products, [products])
 
   async function changeStatus(orderId: number, status: string) {
     if (!auth) return
     setBusy(true)
     try {
       await api.setStatus(auth, orderId, status)
-      const or = await api.orders(auth, orderStatus)
-      setOrders(or.orders)
-      const st = await api.stats(auth)
-      setStats(st)
+      await refreshAll(auth, true)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Status xato')
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function changePayment(orderId: number, action: 'confirm' | 'reject') {
+    if (!auth) return
+    setBusy(true)
+    try {
+      await api.setPayment(auth, orderId, action)
+      await refreshAll(auth, true)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'To‘lov xato')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function removeOrder(orderId: number) {
+    if (!auth) return
+    if (!window.confirm(`#${orderId} o‘chirilsinmi?`)) return
+    setBusy(true)
+    try {
+      await api.deleteOrder(auth, orderId)
+      setOpenOrderId(null)
+      await refreshAll(auth, true)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'O‘chirish xato')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function toggleDetail(orderId: number) {
+    if (!auth) return
+    if (openOrderId === orderId) {
+      setOpenOrderId(null)
+      setOrderItems([])
+      return
+    }
+    try {
+      const detail = await api.orderDetail(auth, orderId)
+      setOpenOrderId(orderId)
+      setOrderItems(detail.items)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Tafsilot xato')
     }
   }
 
@@ -167,20 +255,164 @@ export default function App() {
         qty: Number(stockForm.qty),
         note: stockForm.note,
       })
-      const [prods, mv, st] = await Promise.all([
-        api.whProducts(auth),
-        api.whMoves(auth),
-        api.stats(auth),
-      ])
-      setProducts(prods.products)
-      setMoves(mv.movements)
-      setStats(st)
       setStockForm((s) => ({ ...s, qty: 1, note: '' }))
+      await refreshAll(auth, true)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ombor xato')
     } finally {
       setBusy(false)
     }
+  }
+
+  async function quickIn(productId: number, qty: number) {
+    if (!auth) return
+    setBusy(true)
+    try {
+      await api.whStock(auth, {
+        product_id: productId,
+        mode: 'in',
+        qty,
+        note: 'Tezkor kirim',
+      })
+      await refreshAll(auth, true)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Kirim xato')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function toggleProduct(p: Product) {
+    if (!auth) return
+    setBusy(true)
+    try {
+      await api.patchProduct(auth, p.id, { is_active: !p.is_active })
+      const cat = await api.products(auth)
+      setCatalog(cat.products)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Mahsulot xato')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function savePrice(p: Product) {
+    if (!auth) return
+    const raw = priceEdit[p.id]
+    if (raw === undefined) return
+    const price = Number(raw)
+    if (!Number.isFinite(price) || price < 0) {
+      setError('Narx noto‘g‘ri')
+      return
+    }
+    setBusy(true)
+    try {
+      await api.patchProduct(auth, p.id, { price })
+      setPriceEdit((s) => {
+        const next = { ...s }
+        delete next[p.id]
+        return next
+      })
+      const cat = await api.products(auth)
+      setCatalog(cat.products)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Narx xato')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function renderOrderCard(o: Order, showPay = false) {
+    const open = openOrderId === o.id
+    return (
+      <article key={o.id} className="item">
+        <button
+          type="button"
+          className="item-head"
+          onClick={() => void toggleDetail(o.id)}
+        >
+          <div className="row-between">
+            <h3>
+              #{o.id} · {money(o.price)}
+            </h3>
+            <span className="badge">{o.status_label}</span>
+          </div>
+          <p>
+            {o.phone || '—'} · {o.delivery_address || 'Manzil yo‘q'}
+            {o.delivery_slot ? ` · ${o.delivery_slot}` : ''}
+          </p>
+          <div className="meta">
+            <span className="badge warn">{o.payment_label}</span>
+            <span className="muted-sm">{o.created_at}</span>
+          </div>
+        </button>
+
+        {open ? (
+          <div className="detail">
+            {orderItems.length === 0 ? (
+              <p className="muted-sm">Mahsulotlar yo‘q</p>
+            ) : (
+              <ul className="lines">
+                {orderItems.map((it) => (
+                  <li key={it.id}>
+                    <span>
+                      {it.product_name} × {it.quantity}
+                    </span>
+                    <span className="mono">{money(it.line_total)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {o.description ? <p className="note">{o.description}</p> : null}
+          </div>
+        ) : null}
+
+        {showPay ? (
+          <div className="actions">
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => void changePayment(o.id, 'confirm')}
+            >
+              Tasdiqlash
+            </button>
+            <button
+              type="button"
+              className="btn btn-danger"
+              onClick={() => void changePayment(o.id, 'reject')}
+            >
+              Rad etish
+            </button>
+          </div>
+        ) : (
+          <div className="actions">
+            {['accepted', 'in_delivery', 'delivered', 'cancelled'].map((st) => (
+              <button
+                key={st}
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => void changeStatus(o.id, st)}
+              >
+                {st === 'accepted'
+                  ? 'Qabul'
+                  : st === 'in_delivery'
+                    ? 'Yo‘lda'
+                    : st === 'delivered'
+                      ? 'Yetkazildi'
+                      : 'Bekor'}
+              </button>
+            ))}
+            <button
+              type="button"
+              className="btn btn-danger"
+              onClick={() => void removeOrder(o.id)}
+            >
+              O‘chirish
+            </button>
+          </div>
+        )}
+      </article>
+    )
   }
 
   if (!auth) {
@@ -192,8 +424,7 @@ export default function App() {
             Admin <span style={{ color: 'var(--accent)' }}>Panel</span>
           </h1>
           <p>
-            Professional boshqaruv: buyurtmalar, ombor va hisobotlar. Telegramdan
-            oching yoki Admin ID + PIN bilan kiring.
+            Professional boshqaruv: buyurtmalar, to‘lovlar, ombor va hisobotlar.
           </p>
           {tgInit ? (
             <button
@@ -257,9 +488,12 @@ export default function App() {
           <h1 className="brand">
             {shop} <span>Admin</span>
           </h1>
-          <p className="sub">Professional boshqaruv paneli</p>
+          <p className="sub">
+            Professional boshqaruv
+            {lastSync ? ` · yangilandi ${lastSync}` : ''}
+          </p>
         </div>
-        <div className="actions">
+        <div className="actions top-actions">
           <button
             type="button"
             className="btn btn-ghost"
@@ -285,50 +519,101 @@ export default function App() {
       {tab === 'dash' && stats ? (
         <>
           <div className="grid grid-4">
-            <div className="card">
+            <button
+              type="button"
+              className="card clickable"
+              onClick={() => {
+                setOrderStatus('new')
+                setTab('orders')
+              }}
+            >
               <div className="label">Yangi</div>
               <div className="value accent">{stats.stats.new_orders}</div>
-            </div>
-            <div className="card">
+            </button>
+            <button
+              type="button"
+              className="card clickable"
+              onClick={() => {
+                setOrderStatus('active')
+                setTab('orders')
+              }}
+            >
               <div className="label">Faol</div>
               <div className="value">{stats.stats.active_orders}</div>
-            </div>
-            <div className="card">
-              <div className="label">Bugun savdo</div>
-              <div className="value warn mono">
-                {money(stats.stats.today_sum)}
-              </div>
-            </div>
-            <div className="card">
+            </button>
+            <button
+              type="button"
+              className="card clickable"
+              onClick={() => setTab('payments')}
+            >
+              <div className="label">Karta kutmoqda</div>
+              <div className="value warn">{stats.payments_waiting}</div>
+            </button>
+            <button
+              type="button"
+              className="card clickable"
+              onClick={() => {
+                setLowOnly(true)
+                setTab('warehouse')
+              }}
+            >
               <div className="label">Kam qoldiq</div>
               <div className="value warn">{stats.warehouse.low_stock}</div>
-            </div>
+            </button>
           </div>
+
           <div className="section grid">
             <div className="card">
-              <div className="label">Ombor birlik</div>
-              <div className="value">{stats.warehouse.units.toLocaleString()}</div>
+              <div className="label">Bugun savdo</div>
+              <div className="value mono">{money(stats.daily.revenue)}</div>
+              <p className="muted-sm">{stats.daily.orders_count} buyurtma</p>
             </div>
             <div className="card">
-              <div className="label">Bugun kirim / chiqim</div>
-              <div className="value">
-                +{stats.warehouse.today_in} / −{stats.warehouse.today_out}
+              <div className="label">To‘langan / kutayotgan</div>
+              <div className="value" style={{ fontSize: '1rem' }}>
+                {money(stats.daily.paid_sum)}
+                <span className="muted-sm"> / </span>
+                {money(stats.daily.waiting_sum)}
               </div>
             </div>
+            <div className="card">
+              <div className="label">Ombor</div>
+              <div className="value">{stats.warehouse.units.toLocaleString()}</div>
+              <p className="muted-sm">
+                +{stats.warehouse.today_in} / −{stats.warehouse.today_out}
+              </p>
+            </div>
           </div>
+
+          {stats.daily.top?.length ? (
+            <section className="section">
+              <h2>Bugungi top mahsulotlar</h2>
+              <div className="list">
+                {stats.daily.top.map((t) => (
+                  <div key={t.product_name} className="item row-between">
+                    <h3>{t.product_name}</h3>
+                    <span className="mono">{t.qty} dona</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
         </>
       ) : null}
 
       {tab === 'orders' ? (
         <section className="section">
           <h2>Buyurtmalar</h2>
+          <div className="field">
+            <label>Qidiruv (ID / telefon)</label>
+            <input
+              value={orderQuery}
+              onChange={(e) => setOrderQuery(e.target.value)}
+              placeholder="masalan 102 yoki 90..."
+            />
+          </div>
           <div className="tabs-inline">
-            {[
-              ['new', 'Yangi'],
-              ['active', 'Faol'],
-              ['delivered', 'Yetkazilgan'],
-              ['cancelled', 'Bekor'],
-            ].map(([k, label]) => (
+            {ORDER_FILTERS.map(([k, label]) => (
               <button
                 key={k}
                 type="button"
@@ -343,41 +628,23 @@ export default function App() {
             {orders.length === 0 ? (
               <div className="empty">Buyurtma yo‘q</div>
             ) : (
-              orders.map((o) => (
-                <article key={o.id} className="item">
-                  <div className="row-between">
-                    <h3>#{o.id} · {money(o.price)}</h3>
-                    <span className="badge">{o.status_label}</span>
-                  </div>
-                  <p>
-                    {o.phone} · {o.delivery_address}
-                    {o.delivery_slot ? ` · ${o.delivery_slot}` : ''}
-                  </p>
-                  <div className="meta">
-                    <span className="badge warn">{o.payment_label}</span>
-                  </div>
-                  <div className="actions">
-                    {['accepted', 'in_delivery', 'delivered', 'cancelled'].map(
-                      (st) => (
-                        <button
-                          key={st}
-                          type="button"
-                          className="btn btn-ghost"
-                          onClick={() => void changeStatus(o.id, st)}
-                        >
-                          {st === 'accepted'
-                            ? 'Qabul'
-                            : st === 'in_delivery'
-                              ? 'Yo‘lda'
-                              : st === 'delivered'
-                                ? 'Yetkazildi'
-                                : 'Bekor'}
-                        </button>
-                      ),
-                    )}
-                  </div>
-                </article>
-              ))
+              orders.map((o) => renderOrderCard(o))
+            )}
+          </div>
+        </section>
+      ) : null}
+
+      {tab === 'payments' ? (
+        <section className="section">
+          <h2>To‘lovlar (karta)</h2>
+          <p className="sub" style={{ marginBottom: 12 }}>
+            Mijoz karta orqali to‘lov yuborgan buyurtmalar
+          </p>
+          <div className="list">
+            {payments.length === 0 ? (
+              <div className="empty">Kutayotgan to‘lov yo‘q</div>
+            ) : (
+              payments.map((o) => renderOrderCard(o, true))
             )}
           </div>
         </section>
@@ -385,7 +652,16 @@ export default function App() {
 
       {tab === 'warehouse' ? (
         <section className="section">
-          <h2>Ombor</h2>
+          <div className="row-between" style={{ marginBottom: 10 }}>
+            <h2 style={{ margin: 0 }}>Ombor</h2>
+            <button
+              type="button"
+              className={`chip${lowOnly ? ' active' : ''}`}
+              onClick={() => setLowOnly((v) => !v)}
+            >
+              Faqat kam qoldiq
+            </button>
+          </div>
           <div className="card" style={{ marginBottom: 12 }}>
             <div className="field">
               <label>Amal</label>
@@ -465,39 +741,59 @@ export default function App() {
                 onClick={() => setSelectedCat(c.category_id)}
               >
                 {c.category_name}
+                {c.low_count ? ` · ${c.low_count}` : ''}
               </button>
             ))}
           </div>
           <div className="list">
             {filteredProducts.map((p) => (
-              <div key={p.id} className="item row-between">
-                <div>
-                  <h3>{p.name}</h3>
-                  <p>
-                    {p.category_name} · {money(p.price)}
-                  </p>
-                </div>
-                <div className="mono value" style={{ fontSize: '1.1rem' }}>
-                  {p.stock}
+              <div key={p.id} className="item">
+                <div className="row-between">
                   <div>
-                    <button
-                      type="button"
-                      className="btn btn-ghost"
-                      onClick={() =>
-                        setStockForm({
-                          product_id: p.id,
-                          mode: 'in',
-                          qty: 1,
-                          note: '',
-                        })
-                      }
-                    >
-                      Tanlash
-                    </button>
+                    <h3>{p.name}</h3>
+                    <p>
+                      {p.category_name} · {money(p.price)}
+                    </p>
                   </div>
+                  <div className="mono value" style={{ fontSize: '1.1rem' }}>
+                    {p.stock}
+                  </div>
+                </div>
+                <div className="actions">
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => void quickIn(p.id, 1)}
+                  >
+                    +1
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => void quickIn(p.id, 10)}
+                  >
+                    +10
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() =>
+                      setStockForm({
+                        product_id: p.id,
+                        mode: 'in',
+                        qty: 1,
+                        note: '',
+                      })
+                    }
+                  >
+                    Forma
+                  </button>
                 </div>
               </div>
             ))}
+            {filteredProducts.length === 0 ? (
+              <div className="empty">Mahsulot yo‘q</div>
+            ) : null}
           </div>
         </section>
       ) : null}
@@ -533,17 +829,44 @@ export default function App() {
         <section className="section">
           <h2>Mahsulotlar</h2>
           <div className="list">
-            {products.map((p) => (
-              <div key={p.id} className="item row-between">
-                <div>
-                  <h3>
-                    {p.is_active ? '✅' : '🚫'} {p.name}
-                  </h3>
-                  <p>
-                    {p.category_name} · {money(p.price)}
-                  </p>
+            {catalog.map((p) => (
+              <div key={p.id} className="item">
+                <div className="row-between">
+                  <div>
+                    <h3>
+                      {p.is_active ? '✅' : '🚫'} {p.name}
+                    </h3>
+                    <p>
+                      {p.category_name} · {p.stock} dona
+                    </p>
+                  </div>
+                  <div className="mono">{money(p.price)}</div>
                 </div>
-                <div className="mono">{p.stock} dona</div>
+                <div className="actions">
+                  <input
+                    className="price-input"
+                    type="number"
+                    min={0}
+                    value={priceEdit[p.id] ?? String(p.price)}
+                    onChange={(e) =>
+                      setPriceEdit((s) => ({ ...s, [p.id]: e.target.value }))
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => void savePrice(p)}
+                  >
+                    Narx
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => void toggleProduct(p)}
+                  >
+                    {p.is_active ? 'Yashirish' : 'Ko‘rsatish'}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -554,8 +877,9 @@ export default function App() {
         <div className="nav-inner">
           {(
             [
-              ['dash', '📊', 'Dashboard'],
+              ['dash', '📊', 'Home'],
               ['orders', '📦', 'Buyurtma'],
+              ['payments', '💳', 'To‘lov'],
               ['warehouse', '🏭', 'Ombor'],
               ['moves', '📜', 'Jurnal'],
               ['products', '🛍', 'Tovar'],
@@ -569,6 +893,9 @@ export default function App() {
             >
               <span>{ico}</span>
               {label}
+              {id === 'payments' && stats && stats.payments_waiting > 0 ? (
+                <span className="nav-dot">{stats.payments_waiting}</span>
+              ) : null}
             </button>
           ))}
         </div>
