@@ -57,6 +57,7 @@ from bot.handlers import (
     show_cart_message,
     show_catalog,
     show_more_menu,
+    show_my_id,
     start,
     successful_payment,
     webapp_scan_data,
@@ -115,6 +116,7 @@ def main() -> None:
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("id", show_my_id))
     app.add_handler(CommandHandler("stop_recur", stop_recur_command))
     app.add_handler(build_order_conversation())
     app.add_handler(build_product_admin_conversation())
