@@ -20,6 +20,9 @@ COURIER_IDS = {
     for cid in os.getenv("COURIER_IDS", "").split(",")
     if cid.strip().isdigit()
 }
+# Bo'sh bo'lsa — adminlar ham kuryer panelidan foydalana oladi
+if not COURIER_IDS:
+    COURIER_IDS = set(ADMIN_IDS)
 PAYMENT_PROVIDER_TOKEN = os.getenv("PAYMENT_PROVIDER_TOKEN", "").strip()
 DATABASE_PATH = os.getenv("DATABASE_PATH", str(DATA_DIR / "bot.db"))
 

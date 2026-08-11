@@ -202,6 +202,24 @@ async def edit_or_reply(query, text: str, reply_markup=None, parse_mode=None) ->
     await message.reply_text(text, reply_markup=reply_markup, parse_mode=parse_mode)
 
 
+async def show_my_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Telegram ID — COURIER_IDS / ADMIN_IDS uchun."""
+    user = update.effective_user
+    roles = []
+    if is_admin(user.id):
+        roles.append("admin")
+    if is_courier(user.id):
+        roles.append("kuryer")
+    role_text = ", ".join(roles) if roles else "mijoz"
+    await update.message.reply_text(
+        f"👤 Sizning Telegram ID: <code>{user.id}</code>\n"
+        f"Rol: {role_text}\n\n"
+        f"Kuryer qilish uchun .env ga yozing:\n"
+        f"<code>COURIER_IDS={user.id}</code>",
+        parse_mode="HTML",
+    )
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     is_new = get_user(user.id) is None
@@ -240,6 +258,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"{format_now_html()}\n\n"
         f"┌──────────────┐\n"
         f"│ 📍 {SHOP_ADDRESS}\n"
+        f"│ 🚚 Faqat {DELIVERY_AREA}\n"
         f"│ 🕐 {SHOP_HOURS}\n"
         f"│ 📞 {SHOP_PHONE}\n"
         f"└──────────────┘\n\n"
