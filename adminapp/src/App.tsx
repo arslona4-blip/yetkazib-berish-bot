@@ -82,7 +82,7 @@ export default function App() {
     qty: 1,
     note: '',
   })
-  const [pinForm, setPinForm] = useState({ adminId: '', pin: '' })
+  const [pinForm, setPinForm] = useState({ adminId: '', pin: '', code: '' })
   const [priceEdit, setPriceEdit] = useState<Record<number, string>>({})
   const [morePanel, setMorePanel] = useState<MorePanel>('broadcast')
   const [broadcastText, setBroadcastText] = useState('')
@@ -119,6 +119,27 @@ export default function App() {
     }
   }
 
+  async function loginWithCode() {
+    setBusy(true)
+    setError('')
+    try {
+      const res = await api.login(Number(pinForm.adminId), pinForm.code.trim())
+      const next: AuthState = {
+        mode: 'session',
+        session: res.session,
+        adminId: res.admin_id,
+      }
+      setShop(res.shop_name || 'Admin')
+      saveAuth(next)
+      setAuth(next)
+      await refreshAll(next)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Kod xato')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   useEffect(() => {
     let cancelled = false
 
@@ -138,21 +159,20 @@ export default function App() {
       setTgReady(true)
 
       if (data) {
-        // Telegram ichida — eski PIN sessiyasini e'tiborsiz qoldiramiz
         await bootstrap({ mode: 'tg', initData: data })
         return
       }
 
-      // Brauzer: faqat saqlangan PIN sessiyasi
       const saved = loadAuth()
+      if (saved?.mode === 'session' && saved.session) {
+        await bootstrap(saved)
+        return
+      }
       if (saved?.mode === 'pin' && saved.pin && saved.adminId) {
         await bootstrap(saved)
         return
       }
-      if (saved?.mode === 'tg') {
-        // Eski initData odatda eskirgan — tozalaymiz
-        clearAuth()
-      }
+      clearAuth()
       setAuth(null)
       setBooting(false)
     }
@@ -575,42 +595,26 @@ export default function App() {
           <h1>
             Admin <span style={{ color: 'var(--accent)' }}>Panel</span>
           </h1>
-          <p>
-            PIN kerak emas. Botdagi <b>🖥 Admin ilova</b> tugmasini bosing —
-            Telegram avtomatik kiritadi.
-          </p>
           {tgInit ? (
-            <button
-              type="button"
-              className="btn btn-primary"
-              style={{ width: '100%', marginBottom: 12 }}
-              disabled={busy}
-              onClick={() =>
-                void bootstrap({ mode: 'tg', initData: tgInit })
-              }
-            >
-              Telegram orqali kirish
-            </button>
-          ) : (
-            <p className="muted-sm" style={{ marginBottom: 12 }}>
-              {tgReady
-                ? 'Hozir brauzerda ochilgan. Telegram bot ichidan oching.'
-                : 'Telegram kutilyapti…'}
-            </p>
-          )}
-          {error ? <div className="error">{error}</div> : null}
-          <button
-            type="button"
-            className="btn btn-ghost"
-            style={{ width: '100%' }}
-            onClick={() => setShowPin((v) => !v)}
-          >
-            {showPin ? 'PIN yopish' : 'Brauzer PIN (ixtiyoriy)'}
-          </button>
-          {showPin ? (
             <>
-              <p className="muted-sm" style={{ marginTop: 12 }}>
-                Faqat Railway’da <code>ADMIN_APP_PIN</code> sozlanganda ishlaydi.
+              <p>Telegram ichidasiz — bir bosishda kiring.</p>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ width: '100%', marginBottom: 12 }}
+                disabled={busy}
+                onClick={() =>
+                  void bootstrap({ mode: 'tg', initData: tgInit })
+                }
+              >
+                Telegram orqali kirish
+              </button>
+            </>
+          ) : (
+            <>
+              <p>
+                Brauzerdan kirish: botda <b>🛠 Admin panel</b> →{' '}
+                <b>🔑 Kirish kodi</b> bosing, keyin ID + kodni shu yerga yozing.
               </p>
               <div className="field">
                 <label>Telegram Admin ID</label>
@@ -623,6 +627,48 @@ export default function App() {
                   inputMode="numeric"
                 />
               </div>
+              <div className="field">
+                <label>Kirish kodi (botdan)</label>
+                <input
+                  value={pinForm.code}
+                  onChange={(e) =>
+                    setPinForm((s) => ({ ...s, code: e.target.value }))
+                  }
+                  placeholder="123456"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                />
+              </div>
+              {error ? <div className="error">{error}</div> : null}
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ width: '100%' }}
+                disabled={busy}
+                onClick={() => void loginWithCode()}
+              >
+                Kod bilan kirish
+              </button>
+              <p className="muted-sm" style={{ marginTop: 12 }}>
+                {tgReady
+                  ? 'Yoki botdagi 🖥 Admin ilova tugmasini Telegram ichida bosing.'
+                  : 'Telegram kutilyapti…'}
+              </p>
+            </>
+          )}
+          <button
+            type="button"
+            className="btn btn-ghost"
+            style={{ width: '100%', marginTop: 10 }}
+            onClick={() => setShowPin((v) => !v)}
+          >
+            {showPin ? 'PIN yopish' : 'ADMIN_APP_PIN (ixtiyoriy)'}
+          </button>
+          {showPin ? (
+            <>
+              <p className="muted-sm" style={{ marginTop: 12 }}>
+                Faqat Railway’da <code>ADMIN_APP_PIN</code> bo‘lsa.
+              </p>
               <div className="field">
                 <label>Admin PIN</label>
                 <input
@@ -651,6 +697,7 @@ export default function App() {
               </button>
             </>
           ) : null}
+          {tgInit && error ? <div className="error">{error}</div> : null}
         </div>
       </div>
     )
@@ -680,6 +727,7 @@ export default function App() {
             type="button"
             className="btn btn-danger"
             onClick={() => {
+              void api.logout(auth)
               clearAuth()
               setAuth(null)
             }}

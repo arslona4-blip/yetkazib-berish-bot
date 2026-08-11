@@ -19,10 +19,13 @@ from bot.config import (
 from bot.database import (
     add_bonus,
     adjust_product_stock,
+    consume_admin_login_code,
+    create_admin_session,
     create_contact,
     delete_order,
     export_products_csv,
     format_order,
+    get_admin_id_by_session,
     get_all_user_ids,
     get_contact,
     get_daily_report,
@@ -40,6 +43,7 @@ from bot.database import (
     get_warehouse_summary,
     import_products_csv,
     list_contacts,
+    revoke_admin_session,
     search_orders,
     set_product_active,
     set_product_stock,
@@ -55,7 +59,7 @@ ADMIN_APP_PIN = os.getenv("ADMIN_APP_PIN", "").strip()
 
 
 def _require_admin(request: web.Request) -> int:
-    """Telegram initData yoki PIN+admin_id. Qaytaradi: admin user_id."""
+    """Telegram initData, session token, OTP/PIN. Qaytaradi: admin user_id."""
     from bot.webapp import extract_user_from_init_data
 
     init_data = (
@@ -65,7 +69,6 @@ def _require_admin(request: web.Request) -> int:
         or ""
     ).strip()
     if init_data:
-        # validate + auth_date fallback (miniapp bilan bir xil)
         user_id, _, _ = extract_user_from_init_data(init_data)
         if user_id and user_id in ADMIN_IDS:
             return int(user_id)
@@ -73,24 +76,74 @@ def _require_admin(request: web.Request) -> int:
             raise web.HTTPForbidden(text="Admin emas — ADMIN_IDS ga qo'shing")
         raise web.HTTPForbidden(text="initData yaroqsiz yoki eskirgan")
 
-    pin = (request.headers.get("X-Admin-Pin") or "").strip()
-    admin_raw = (request.headers.get("X-Admin-Id") or "").strip()
-    if ADMIN_APP_PIN and pin == ADMIN_APP_PIN and admin_raw.isdigit():
-        admin_id = int(admin_raw)
-        if admin_id in ADMIN_IDS:
+    session = (
+        request.headers.get("X-Admin-Session")
+        or request.rel_url.query.get("session")
+        or ""
+    ).strip()
+    if session:
+        admin_id = get_admin_id_by_session(session)
+        if admin_id and admin_id in ADMIN_IDS:
             return admin_id
-        raise web.HTTPForbidden(text="Bu ID admin ro'yxatida yo'q")
+        raise web.HTTPUnauthorized(text="Sessiya eskirgan — yangi kod oling")
 
-    if pin or admin_raw:
-        if not ADMIN_APP_PIN:
-            raise web.HTTPUnauthorized(
-                text="ADMIN_APP_PIN sozlanmagan. Botdagi «Admin ilova» tugmasidan oching."
-            )
-        raise web.HTTPUnauthorized(text="PIN yoki Admin ID noto'g'ri")
+    pin = (request.headers.get("X-Admin-Pin") or "").strip()
+    code = (request.headers.get("X-Admin-Code") or "").strip()
+    admin_raw = (request.headers.get("X-Admin-Id") or "").strip()
+    if admin_raw.isdigit():
+        admin_id = int(admin_raw)
+        if admin_id not in ADMIN_IDS:
+            raise web.HTTPForbidden(text="Bu ID admin ro'yxatida yo'q")
+        if code and consume_admin_login_code(admin_id, code):
+            return admin_id
+        if ADMIN_APP_PIN and pin == ADMIN_APP_PIN:
+            return admin_id
+        if code:
+            raise web.HTTPUnauthorized(text="Kod noto'g'ri yoki eskirgan")
+        if pin:
+            if not ADMIN_APP_PIN:
+                raise web.HTTPUnauthorized(
+                    text="PIN sozlanmagan. Botdan «🔑 Kirish kodi» oling."
+                )
+            raise web.HTTPUnauthorized(text="PIN noto'g'ri")
 
     raise web.HTTPUnauthorized(
-        text="Botdagi «🖥 Admin ilova» tugmasidan oching (Telegram orqali)."
+        text="Botdan «🔑 Kirish kodi» oling yoki «🖥 Admin ilova»ni Telegram ichida oching."
     )
+
+
+async def admin_login(request: web.Request) -> web.Response:
+    """Brauzer: Admin ID + botdan kod → session token."""
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise web.HTTPBadRequest(text="JSON noto'g'ri") from exc
+    admin_raw = str(body.get("admin_id") or "").strip()
+    code = str(body.get("code") or "").strip()
+    if not admin_raw.isdigit():
+        raise web.HTTPBadRequest(text="Admin ID kerak")
+    admin_id = int(admin_raw)
+    if admin_id not in ADMIN_IDS:
+        raise web.HTTPForbidden(text="Bu ID admin ro'yxatida yo'q")
+    if not consume_admin_login_code(admin_id, code):
+        raise web.HTTPUnauthorized(text="Kod noto'g'ri yoki eskirgan")
+    token = create_admin_session(admin_id)
+    logger.info("Admin %s login via OTP session", admin_id)
+    return web.json_response(
+        {
+            "ok": True,
+            "admin_id": admin_id,
+            "session": token,
+            "shop_name": SHOP_NAME,
+        }
+    )
+
+
+async def admin_logout(request: web.Request) -> web.Response:
+    session = (request.headers.get("X-Admin-Session") or "").strip()
+    if session:
+        revoke_admin_session(session)
+    return web.json_response({"ok": True})
 
 
 def _order_dict(row) -> dict[str, Any]:
@@ -642,6 +695,8 @@ async def admin_contacts_update(request: web.Request) -> web.Response:
 
 
 def register_admin_routes(app: web.Application) -> None:
+    app.router.add_post("/api/admin/login", admin_login)
+    app.router.add_post("/api/admin/logout", admin_logout)
     app.router.add_get("/api/admin/me", admin_me)
     app.router.add_get("/api/admin/stats", admin_stats)
     app.router.add_get("/api/admin/orders", admin_orders)

@@ -342,6 +342,19 @@ def _migrate_features(conn: sqlite3.Connection) -> None:
             created_at TEXT NOT NULL,
             FOREIGN KEY (product_id) REFERENCES products (id)
         );
+
+        CREATE TABLE IF NOT EXISTS admin_login_codes (
+            admin_id INTEGER PRIMARY KEY,
+            code TEXT NOT NULL,
+            expires_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS admin_sessions (
+            token TEXT PRIMARY KEY,
+            admin_id INTEGER NOT NULL,
+            expires_at TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
         """
     )
     conn.execute(
@@ -1611,6 +1624,102 @@ def get_all_user_ids() -> list[int]:
     with get_connection() as conn:
         rows = conn.execute("SELECT user_id FROM users").fetchall()
     return [int(r["user_id"]) for r in rows]
+
+
+def issue_admin_login_code(admin_id: int, *, ttl_minutes: int = 10) -> str:
+    """6 xonali bir martalik admin kirish kodi."""
+    import secrets
+
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    expires = (now_tashkent() + timedelta(minutes=max(1, ttl_minutes))).isoformat()
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO admin_login_codes (admin_id, code, expires_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(admin_id) DO UPDATE SET
+              code = excluded.code,
+              expires_at = excluded.expires_at
+            """,
+            (int(admin_id), code, expires),
+        )
+    return code
+
+
+def consume_admin_login_code(admin_id: int, code: str) -> bool:
+    code = (code or "").strip()
+    if not code:
+        return False
+    now = now_tashkent().isoformat()
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT code, expires_at FROM admin_login_codes
+            WHERE admin_id = ?
+            """,
+            (int(admin_id),),
+        ).fetchone()
+        if not row:
+            return False
+        if str(row["expires_at"]) < now:
+            conn.execute(
+                "DELETE FROM admin_login_codes WHERE admin_id = ?",
+                (int(admin_id),),
+            )
+            return False
+        if str(row["code"]) != code:
+            return False
+        conn.execute(
+            "DELETE FROM admin_login_codes WHERE admin_id = ?",
+            (int(admin_id),),
+        )
+    return True
+
+
+def create_admin_session(admin_id: int, *, days: int = 30) -> str:
+    import secrets
+
+    token = secrets.token_urlsafe(32)
+    now = now_tashkent()
+    expires = (now + timedelta(days=max(1, days))).isoformat()
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO admin_sessions (token, admin_id, expires_at, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (token, int(admin_id), expires, now.isoformat()),
+        )
+    return token
+
+
+def get_admin_id_by_session(token: str) -> int | None:
+    token = (token or "").strip()
+    if not token:
+        return None
+    now = now_tashkent().isoformat()
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT admin_id, expires_at FROM admin_sessions
+            WHERE token = ?
+            """,
+            (token,),
+        ).fetchone()
+        if not row:
+            return None
+        if str(row["expires_at"]) < now:
+            conn.execute("DELETE FROM admin_sessions WHERE token = ?", (token,))
+            return None
+        return int(row["admin_id"])
+
+
+def revoke_admin_session(token: str) -> None:
+    token = (token or "").strip()
+    if not token:
+        return
+    with get_connection() as conn:
+        conn.execute("DELETE FROM admin_sessions WHERE token = ?", (token,))
 
 
 def get_daily_report() -> dict[str, Any]:

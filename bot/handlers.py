@@ -74,6 +74,7 @@ from bot.database import (
     get_user,
     get_user_orders,
     get_variants,
+    issue_admin_login_code,
     product_display_price,
     remove_from_cart,
     save_order_items,
@@ -89,6 +90,8 @@ from bot.database import (
 )
 from bot.keyboards import (
     admin_all_products_list_keyboard,
+    admin_app_inline_button,
+    admin_app_url,
     admin_categories_list_keyboard,
     admin_category_item_keyboard,
     admin_category_products_header_keyboard,
@@ -1452,6 +1455,32 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await query.edit_message_text(
             f"🛠 <b>Admin panel</b>\n{format_now_html()}",
             reply_markup=admin_menu_keyboard(),
+            parse_mode="HTML",
+        )
+        return
+
+    if action == "login_code":
+        uid = query.from_user.id
+        code = issue_admin_login_code(uid)
+        app_btn = admin_app_inline_button("🖥 Admin ilovani ochish")
+        rows = []
+        if app_btn:
+            rows.append([app_btn])
+        rows.append(
+            [InlineKeyboardButton("⬅️ Admin panel", callback_data="admin:menu")]
+        )
+        url = admin_app_url() or "https://…/admin/"
+        await query.edit_message_text(
+            f"🔑 <b>Admin kirish kodi</b>\n"
+            f"{format_now_html()}\n\n"
+            f"Admin ID: <code>{uid}</code>\n"
+            f"Kod: <code>{code}</code>\n"
+            f"⏱ 10 daqiqa amal qiladi\n\n"
+            f"1) {url} ni oching\n"
+            f"2) ID va kodni kiriting\n\n"
+            "Yoki pastdagi tugma bilan Telegram ichida oching "
+            "(u holda kod shart emas).",
+            reply_markup=InlineKeyboardMarkup(rows),
             parse_mode="HTML",
         )
         return

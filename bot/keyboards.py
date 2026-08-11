@@ -531,6 +531,11 @@ def admin_menu_keyboard() -> InlineKeyboardMarkup:
         rows.append([admin_app])
     rows.extend(
         [
+            [
+                InlineKeyboardButton(
+                    "🔑 Kirish kodi", callback_data="admin:login_code"
+                )
+            ],
             [InlineKeyboardButton("📦 Buyurtmalar", callback_data="admin:orders")],
             [InlineKeyboardButton("🆕 Yangi buyurtmalar", callback_data="admin:new")],
             [
