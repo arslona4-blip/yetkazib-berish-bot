@@ -203,10 +203,13 @@ async def courier_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if not orders:
         await update.message.reply_text("Faol buyurtmalar yo'q.")
         return
-    await update.message.reply_text(f"🚴 Faol: {len(orders)} ta")
-    for order in orders[:10]:
+    await update.message.reply_text(
+        f"🚴 Faol: {len(orders)} ta\n"
+        f"Navbat tartibida (eski → yangi)"
+    )
+    for i, order in enumerate(orders[:10], start=1):
         await update.message.reply_text(
-            format_order(order),
+            f"🔢 Navbat №{i}/{len(orders)}\n{format_order(order)}",
             reply_markup=courier_order_keyboard(order["id"]),
         )
 
