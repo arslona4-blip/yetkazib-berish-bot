@@ -26,7 +26,6 @@ from bot.config import (
     CARD_HOLDER,
     CARD_NUMBER,
     COURIER_IDS,
-    DELIVERY_AREA,
     DELIVERY_PRICE,
     MIN_ORDER_AMOUNT,
     MINIAPP_URL,
@@ -38,7 +37,6 @@ from bot.config import (
     SHOP_PHONE,
     SHOP_TELEGRAM,
     card_payment_enabled,
-    is_in_delivery_area,
     online_payment_enabled,
 )
 from bot.database import (
@@ -258,7 +256,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"{format_now_html()}\n\n"
         f"┌──────────────┐\n"
         f"│ 📍 {SHOP_ADDRESS}\n"
-        f"│ 🚚 Faqat {DELIVERY_AREA}\n"
         f"│ 🕐 {SHOP_HOURS}\n"
         f"│ 📞 {SHOP_PHONE}\n"
         f"└──────────────┘\n\n"
@@ -484,7 +481,6 @@ async def contact_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         f"📱 Telefon: <b>{SHOP_PHONE}</b>\n"
         f"💬 Telegram: {SHOP_TELEGRAM}\n"
         f"📍 Manzil: {SHOP_ADDRESS}\n"
-        f"🚚 Yetkazish: faqat <b>{DELIVERY_AREA}</b> ichida\n"
         f"🕐 Ish vaqti: {SHOP_HOURS}\n\n"
         f"⏳ Buyurtmangizni tez qabul qilamiz!",
         parse_mode="HTML",
@@ -921,10 +917,8 @@ async def start_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     last_addr = get_last_delivery_address(user_id)
     text = (
         f"{format_cart(user_id)}\n\n"
-        f"📍 Qayerga yetkazilsin?\n"
-        f"Faqat <b>{DELIVERY_AREA}</b> ichida.\n"
-        "«📍 Joylashuvni yuborish» yoki manzilni yozing\n"
-        f"(masalan: {DELIVERY_AREA}, 12-uy)."
+        "📍 Qayerga yetkazilsin?\n"
+        "«📍 Joylashuvni yuborish» yoki manzilni yozing."
     )
     if last_addr:
         text += "\nYoki oxirgi manzilni tanlang."
@@ -1113,13 +1107,11 @@ async def receive_delivery(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         lon = location.longitude
         context.user_data["order"]["latitude"] = lat
         context.user_data["order"]["longitude"] = lon
-        context.user_data["order"]["delivery_address"] = f"{DELIVERY_AREA} (lokatsiya)"
-        fee, area = _order_delivery_fee(context.user_data["order"])
+        context.user_data["order"]["delivery_address"] = "Lokatsiya"
+        fee, _label = _order_delivery_fee(context.user_data["order"])
         context.user_data["order"]["delivery_fee"] = fee
-        context.user_data["order"]["delivery_zone"] = area
         await update.message.reply_text(
-            f"✅ Joylashuv qabul qilindi.\n"
-            f"🚚 {area} — {fee:,} so'm"
+            f"✅ Joylashuv qabul qilindi.\n🚚 Yetkazish: {fee:,} so'm"
         )
         return await continue_after_delivery(update, context)
 
@@ -1133,25 +1125,13 @@ async def receive_delivery(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 text = last
 
     if text and text not in {"📍 Joylashuv", "📍 Joylashuvni yuborish"}:
-        if not is_in_delivery_area(text):
-            await update.message.reply_text(
-                f"❌ Hozircha faqat <b>{DELIVERY_AREA}</b> ichiga yetkazamiz.\n"
-                f"Manzilda «Saruyz» yozing, masalan:\n"
-                f"<code>{DELIVERY_AREA}, 5-uy</code>",
-                parse_mode="HTML",
-                reply_markup=location_keyboard(
-                    get_last_delivery_address(update.effective_user.id)
-                ),
-            )
-            return OrderState.DELIVERY
         context.user_data["order"]["latitude"] = None
         context.user_data["order"]["longitude"] = None
         context.user_data["order"]["delivery_address"] = text
-        fee, area = _order_delivery_fee(context.user_data["order"])
+        fee, _label = _order_delivery_fee(context.user_data["order"])
         context.user_data["order"]["delivery_fee"] = fee
-        context.user_data["order"]["delivery_zone"] = area
         await update.message.reply_text(
-            f"✅ Manzil qabul qilindi.\n🚚 {area} — {fee:,} so'm"
+            f"✅ Manzil qabul qilindi.\n🚚 Yetkazish: {fee:,} so'm"
         )
         return await continue_after_delivery(update, context)
 
@@ -1243,9 +1223,8 @@ async def show_order_summary_message(message, user, context: ContextTypes.DEFAUL
     _, subtotal = get_cart_totals(user_id)
     discount = order.get("discount", 0)
     bonus_spent = order.get("bonus_spent", 0)
-    delivery_fee, zone = _order_delivery_fee(order)
+    delivery_fee, _label = _order_delivery_fee(order)
     order["delivery_fee"] = delivery_fee
-    order["delivery_zone"] = zone
     total = max(0, subtotal + delivery_fee - discount - bonus_spent)
     order["subtotal"] = subtotal
     order["price"] = total
@@ -1256,7 +1235,7 @@ async def show_order_summary_message(message, user, context: ContextTypes.DEFAUL
         f"{format_now_html()}\n\n"
         f"{cart_text}\n\n"
         f"🕒 Yetkazish: <b><u>{order.get('delivery_slot') or '—'}</u></b>\n"
-        f"🚚 Hudud: {zone} ({delivery_fee:,} so'm)\n"
+        f"🚚 Yetkazish narxi: {delivery_fee:,} so'm\n"
         f"🏷 Promo: {order.get('promo_code') or '—'} (−{discount:,})\n"
         f"🎁 Bonus: −{bonus_spent:,}\n"
         f"📍 Qayerdan: {order['pickup_address']}\n"

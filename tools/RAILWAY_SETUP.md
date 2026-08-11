@@ -14,9 +14,7 @@
    - `ADMIN_IDS` (Telegram ID, vergul bilan)
    - `COURIER_IDS` (ixtiyoriy; bo'sh bo'lsa ADMIN_IDS ishlatiladi)
    - `DATABASE_PATH=/data/bot.db`
-   - `SHOP_NAME`, `SHOP_ADDRESS=Saruyz mahallasi`, `SHOP_PHONE`, …
-   - `DELIVERY_AREA=Saruyz mahallasi`
-   - `DELIVERY_AREA_KEYWORDS=saruyz,saruiz`
+   - `SHOP_NAME`, `SHOP_ADDRESS`, `SHOP_PHONE`, …
    - `DELIVERY_PRICE`, `MINIAPP_URL` (HTTPS)
 5. Settings → Volumes → Add → `/data`
 6. Deploy → Logs: Application started

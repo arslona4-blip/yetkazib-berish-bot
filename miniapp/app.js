@@ -472,10 +472,6 @@
     els.shopName.textContent = config.shop_name || "Do'kon";
     const metaParts = [config.shop_hours, config.shop_phone].filter(Boolean);
     els.shopMeta.textContent = metaParts.join(" · ");
-    const areaHint = document.getElementById("areaHint");
-    if (areaHint && config.delivery_area) {
-      areaHint.textContent = `Faqat ${config.delivery_area} ichiga yetkaziladi`;
-    }
 
     if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
       const u = tg.initDataUnsafe.user;
@@ -540,20 +536,6 @@
       els.status.hidden = false;
       els.status.classList.add("error");
       els.status.textContent = "Savatcha bo'sh";
-      return;
-    }
-
-    const addr = (els.address.value || "").trim().toLowerCase();
-    const areaOk =
-      addr.includes("saruyz") ||
-      addr.includes("saruiz") ||
-      addr.includes("саруйз") ||
-      addr.includes("саруиз");
-    if (!areaOk) {
-      els.status.hidden = false;
-      els.status.classList.add("error");
-      els.status.textContent =
-        "Faqat Saruyz mahallasi ichiga yetkazamiz. Manzilda «Saruyz» yozing.";
       return;
     }
 

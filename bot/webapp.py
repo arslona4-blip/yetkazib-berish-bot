@@ -21,7 +21,6 @@ from bot.config import (
     CARD_NUMBER,
     CLICK_LINK,
     DATABASE_PATH,
-    DELIVERY_AREA,
     DELIVERY_PRICE,
     MIN_ORDER_AMOUNT,
     PAYME_LINK,
@@ -32,7 +31,6 @@ from bot.config import (
     SHOP_TELEGRAM,
     WEBAPP_PORT,
     card_payment_enabled,
-    is_in_delivery_area,
     payment_link_with_amount,
 )
 from bot.database import (
@@ -259,11 +257,6 @@ def place_miniapp_order(
         raise ValueError("Telefon majburiy")
     if not address:
         raise ValueError("Manzil majburiy")
-    if not is_in_delivery_area(address):
-        raise ValueError(
-            f"Faqat {DELIVERY_AREA} ichiga yetkazamiz. "
-            f"Manzilda «Saruyz» yozing."
-        )
     if not isinstance(items_raw, list) or not items_raw:
         raise ValueError("Savatcha bo'sh")
     order_items, subtotal = resolve_order_items(items_raw)
@@ -418,7 +411,6 @@ async def api_config(_request: web.Request) -> web.Response:
             "shop_hours": SHOP_HOURS,
             "delivery_price": DELIVERY_PRICE,
             "min_order": MIN_ORDER_AMOUNT,
-            "delivery_area": DELIVERY_AREA,
             "slots": get_delivery_slots(),
             "payme_link": PAYME_LINK or payment_link_with_amount("", 0, 0),
             "click_link": CLICK_LINK or payment_link_with_amount("", 0, 0),
