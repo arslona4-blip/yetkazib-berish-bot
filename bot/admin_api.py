@@ -19,8 +19,12 @@ from bot.config import (
 from bot.database import (
     add_bonus,
     adjust_product_stock,
+    create_contact,
     delete_order,
+    export_products_csv,
     format_order,
+    get_all_user_ids,
+    get_contact,
     get_daily_report,
     get_inventory_categories,
     get_inventory_products,
@@ -34,9 +38,12 @@ from bot.database import (
     get_stats,
     get_stock_movements,
     get_warehouse_summary,
+    import_products_csv,
+    list_contacts,
     search_orders,
     set_product_active,
     set_product_stock,
+    update_contact,
     update_payment_status,
     update_product_price,
     update_order_status,
@@ -475,6 +482,157 @@ async def admin_product_patch(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "product": _product_dict(product)})
 
 
+def _contact_dict(c: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": int(c["id"]),
+        "name": c.get("name") or "",
+        "phone": c.get("phone") or "",
+        "note": c.get("note") or "",
+        "telegram_user_id": c.get("telegram_user_id"),
+        "created_at": c.get("created_at") or "",
+        "updated_at": c.get("updated_at") or "",
+    }
+
+
+async def admin_broadcast(request: web.Request) -> web.Response:
+    admin_id = _require_admin(request)
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise web.HTTPBadRequest(text="JSON noto'g'ri") from exc
+    text = str(body.get("text") or "").strip()
+    if len(text) < 2:
+        raise web.HTTPBadRequest(text="Matn juda qisqa")
+    if len(text) > 3500:
+        raise web.HTTPBadRequest(text="Matn juda uzun (3500 belgidan oshmasin)")
+    from bot.webapp import get_bot
+
+    bot = get_bot()
+    if bot is None:
+        raise web.HTTPServiceUnavailable(text="Bot ulanmagan — keyinroq urinib ko'ring")
+    users = get_all_user_ids()
+    ok = 0
+    fail = 0
+    message = f"📣 {SHOP_NAME}\n\n{text}"
+    for uid in users:
+        try:
+            await bot.send_message(uid, message)
+            ok += 1
+        except Exception:
+            fail += 1
+    logger.info("Admin %s broadcast ok=%s fail=%s", admin_id, ok, fail)
+    return web.json_response(
+        {"ok": True, "sent": ok, "failed": fail, "total": len(users)}
+    )
+
+
+async def admin_products_export(request: web.Request) -> web.Response:
+    _require_admin(request)
+    csv_text = export_products_csv()
+    return web.Response(
+        text=csv_text,
+        content_type="text/csv",
+        headers={
+            "Content-Disposition": 'attachment; filename="products.csv"',
+        },
+    )
+
+
+async def admin_products_import(request: web.Request) -> web.Response:
+    admin_id = _require_admin(request)
+    ctype = (request.headers.get("Content-Type") or "").lower()
+    if "multipart/form-data" in ctype:
+        reader = await request.multipart()
+        field = await reader.next()
+        if field is None:
+            raise web.HTTPBadRequest(text="Fayl topilmadi")
+        data = await field.read(decode=False)
+        text = data.decode("utf-8", errors="ignore")
+    else:
+        try:
+            body = await request.json()
+            text = str(body.get("csv") or body.get("text") or "")
+        except Exception as exc:
+            raw = await request.text()
+            if not raw.strip():
+                raise web.HTTPBadRequest(text="CSV yuboring") from exc
+            text = raw
+    if not text.strip():
+        raise web.HTTPBadRequest(text="CSV bo'sh")
+    count = import_products_csv(text)
+    logger.info("Admin %s imported %s product rows", admin_id, count)
+    return web.json_response({"ok": True, "imported": count})
+
+
+async def admin_contacts_list(request: web.Request) -> web.Response:
+    _require_admin(request)
+    contacts = [_contact_dict(c) for c in list_contacts()]
+    return web.json_response({"ok": True, "contacts": contacts})
+
+
+async def admin_contacts_create(request: web.Request) -> web.Response:
+    admin_id = _require_admin(request)
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise web.HTTPBadRequest(text="JSON noto'g'ri") from exc
+    name = str(body.get("name") or "").strip()
+    if not name:
+        raise web.HTTPBadRequest(text="Ism kerak")
+    phone = str(body.get("phone") or "").strip()
+    note = str(body.get("note") or "").strip()
+    cid = create_contact(name=name, phone=phone or None, note=note)
+    contact = get_contact(cid)
+    logger.info("Admin %s created contact #%s", admin_id, cid)
+    payload = {
+        "id": cid,
+        "name": contact["name"] if contact else name,
+        "phone": (contact["phone"] if contact else phone) or "",
+        "note": (contact["note"] if contact else note) or "",
+        "telegram_user_id": contact["telegram_user_id"] if contact else None,
+        "created_at": contact["created_at"] if contact else "",
+        "updated_at": contact["updated_at"] if contact else "",
+    }
+    return web.json_response({"ok": True, "contact": payload})
+
+
+async def admin_contacts_update(request: web.Request) -> web.Response:
+    admin_id = _require_admin(request)
+    try:
+        contact_id = int(request.match_info["contact_id"])
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text="contact_id noto'g'ri") from exc
+    contact = get_contact(contact_id)
+    if not contact:
+        raise web.HTTPNotFound(text="Kontakt topilmadi")
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise web.HTTPBadRequest(text="JSON noto'g'ri") from exc
+    update_contact(
+        contact_id,
+        name=str(body["name"]).strip() if "name" in body else None,
+        phone=str(body["phone"]).strip() if "phone" in body else None,
+        note=str(body["note"]).strip() if "note" in body else None,
+    )
+    contact = get_contact(contact_id)
+    logger.info("Admin %s updated contact #%s", admin_id, contact_id)
+    return web.json_response(
+        {
+            "ok": True,
+            "contact": {
+                "id": int(contact["id"]),
+                "name": contact["name"] or "",
+                "phone": contact["phone"] or "",
+                "note": contact["note"] or "",
+                "telegram_user_id": contact["telegram_user_id"],
+                "created_at": contact["created_at"] or "",
+                "updated_at": contact["updated_at"] or "",
+            },
+        }
+    )
+
+
 def register_admin_routes(app: web.Application) -> None:
     app.router.add_get("/api/admin/me", admin_me)
     app.router.add_get("/api/admin/stats", admin_stats)
@@ -489,4 +647,10 @@ def register_admin_routes(app: web.Application) -> None:
     app.router.add_get("/api/admin/warehouse/movements", admin_warehouse_movements)
     app.router.add_post("/api/admin/warehouse/stock", admin_warehouse_stock)
     app.router.add_get("/api/admin/products", admin_products)
+    app.router.add_get("/api/admin/products/export", admin_products_export)
+    app.router.add_post("/api/admin/products/import", admin_products_import)
     app.router.add_patch("/api/admin/products/{product_id}", admin_product_patch)
+    app.router.add_post("/api/admin/broadcast", admin_broadcast)
+    app.router.add_get("/api/admin/contacts", admin_contacts_list)
+    app.router.add_post("/api/admin/contacts", admin_contacts_create)
+    app.router.add_patch("/api/admin/contacts/{contact_id}", admin_contacts_update)

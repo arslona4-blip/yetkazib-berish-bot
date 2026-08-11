@@ -480,3 +480,20 @@ select {
   color: var(--text);
   padding: 8px 10px;
 }
+
+.textarea {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  padding: 12px;
+  resize: vertical;
+  font: inherit;
+}
+
+.file-btn {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}

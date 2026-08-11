@@ -8,6 +8,8 @@ import {
 } from './api'
 import type {
   Category,
+  Contact,
+  MorePanel,
   Movement,
   Order,
   OrderItem,
@@ -77,6 +79,17 @@ export default function App() {
   })
   const [pinForm, setPinForm] = useState({ adminId: '', pin: '' })
   const [priceEdit, setPriceEdit] = useState<Record<number, string>>({})
+  const [morePanel, setMorePanel] = useState<MorePanel>('broadcast')
+  const [broadcastText, setBroadcastText] = useState('')
+  const [broadcastResult, setBroadcastResult] = useState('')
+  const [csvText, setCsvText] = useState('')
+  const [csvInfo, setCsvInfo] = useState('')
+  const [contacts, setContacts] = useState<Contact[]>([])
+  const [contactForm, setContactForm] = useState({
+    name: '',
+    phone: '',
+    note: '',
+  })
 
   const tgInit = window.Telegram?.WebApp?.initData || ''
 
@@ -317,6 +330,96 @@ export default function App() {
       setCatalog(cat.products)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Narx xato')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function loadContacts() {
+    if (!auth) return
+    try {
+      const res = await api.contacts(auth)
+      setContacts(res.contacts)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Kontaktlar xato')
+    }
+  }
+
+  useEffect(() => {
+    if (auth && tab === 'more' && morePanel === 'contacts') {
+      void loadContacts()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth, tab, morePanel])
+
+  async function sendBroadcast() {
+    if (!auth || !broadcastText.trim()) return
+    if (!window.confirm('Barcha foydalanuvchilarga yuborilsinmi?')) return
+    setBusy(true)
+    setBroadcastResult('')
+    try {
+      const res = await api.broadcast(auth, broadcastText.trim())
+      setBroadcastResult(
+        `Yuborildi: ${res.sent}/${res.total} (xato: ${res.failed})`,
+      )
+      setBroadcastText('')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Broadcast xato')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function downloadCsv() {
+    if (!auth) return
+    setBusy(true)
+    try {
+      const text = await api.exportCsv(auth)
+      setCsvText(text)
+      setCsvInfo(`Eksport: ${text.split('\n').length - 1} qator`)
+      const blob = new Blob([text], { type: 'text/csv;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'products.csv'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Export xato')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function uploadCsv() {
+    if (!auth || !csvText.trim()) return
+    setBusy(true)
+    try {
+      const res = await api.importCsv(auth, csvText)
+      setCsvInfo(`Import: ${res.imported} qator`)
+      const cat = await api.products(auth)
+      setCatalog(cat.products)
+      await refreshAll(auth, true)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Import xato')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function addContact() {
+    if (!auth || !contactForm.name.trim()) return
+    setBusy(true)
+    try {
+      await api.createContact(auth, {
+        name: contactForm.name.trim(),
+        phone: contactForm.phone.trim(),
+        note: contactForm.note.trim(),
+      })
+      setContactForm({ name: '', phone: '', note: '' })
+      await loadContacts()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Kontakt xato')
     } finally {
       setBusy(false)
     }
@@ -798,30 +901,186 @@ export default function App() {
         </section>
       ) : null}
 
-      {tab === 'moves' ? (
+      {tab === 'more' ? (
         <section className="section">
-          <h2>Harakatlar</h2>
-          <div className="list">
-            {moves.length === 0 ? (
-              <div className="empty">Harakat yo‘q</div>
-            ) : (
-              moves.map((m) => (
-                <div key={m.id} className="item">
-                  <div className="row-between">
-                    <h3>{m.product_name}</h3>
-                    <span className="badge">
-                      {REASON[m.reason] || m.reason}
-                    </span>
-                  </div>
-                  <p className="mono">
-                    {m.delta > 0 ? `+${m.delta}` : m.delta} → {m.stock_after}
-                    {m.note ? ` · ${m.note}` : ''}
-                  </p>
-                  <p>{m.created_at}</p>
-                </div>
-              ))
-            )}
+          <h2>Ko‘proq</h2>
+          <div className="tabs-inline">
+            {(
+              [
+                ['broadcast', 'Broadcast'],
+                ['contacts', 'Kontaktlar'],
+                ['csv', 'CSV'],
+                ['moves', 'Jurnal'],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                className={`chip${morePanel === id ? ' active' : ''}`}
+                onClick={() => setMorePanel(id)}
+              >
+                {label}
+              </button>
+            ))}
           </div>
+
+          {morePanel === 'broadcast' ? (
+            <div className="card" style={{ marginTop: 12 }}>
+              <div className="field">
+                <label>Barcha mijozlarga xabar</label>
+                <textarea
+                  className="textarea"
+                  rows={5}
+                  value={broadcastText}
+                  onChange={(e) => setBroadcastText(e.target.value)}
+                  placeholder="Aksiya, yangilik yoki e’lon matni..."
+                />
+              </div>
+              {broadcastResult ? (
+                <p className="muted-sm">{broadcastResult}</p>
+              ) : null}
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => void sendBroadcast()}
+              >
+                Yuborish
+              </button>
+            </div>
+          ) : null}
+
+          {morePanel === 'contacts' ? (
+            <>
+              <div className="card" style={{ marginTop: 12 }}>
+                <div className="field">
+                  <label>Ism</label>
+                  <input
+                    value={contactForm.name}
+                    onChange={(e) =>
+                      setContactForm((s) => ({ ...s, name: e.target.value }))
+                    }
+                    placeholder="Mijoz ismi"
+                  />
+                </div>
+                <div className="field">
+                  <label>Telefon</label>
+                  <input
+                    value={contactForm.phone}
+                    onChange={(e) =>
+                      setContactForm((s) => ({ ...s, phone: e.target.value }))
+                    }
+                    placeholder="+998..."
+                  />
+                </div>
+                <div className="field">
+                  <label>Izoh</label>
+                  <input
+                    value={contactForm.note}
+                    onChange={(e) =>
+                      setContactForm((s) => ({ ...s, note: e.target.value }))
+                    }
+                    placeholder="ixtiyoriy"
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => void addContact()}
+                >
+                  Qo‘shish
+                </button>
+              </div>
+              <div className="list" style={{ marginTop: 12 }}>
+                {contacts.length === 0 ? (
+                  <div className="empty">Kontakt yo‘q</div>
+                ) : (
+                  contacts.map((c) => (
+                    <div key={c.id} className="item">
+                      <h3>{c.name}</h3>
+                      <p>
+                        {c.phone || 'Telefon yo‘q'}
+                        {c.note ? ` · ${c.note}` : ''}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          ) : null}
+
+          {morePanel === 'csv' ? (
+            <div className="card" style={{ marginTop: 12 }}>
+              <div className="actions" style={{ marginTop: 0 }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => void downloadCsv()}
+                >
+                  CSV yuklab olish
+                </button>
+                <label className="btn btn-ghost file-btn">
+                  Fayl tanlash
+                  <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    hidden
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (!file) return
+                      const reader = new FileReader()
+                      reader.onload = () => {
+                        setCsvText(String(reader.result || ''))
+                        setCsvInfo(`Tanlandi: ${file.name}`)
+                      }
+                      reader.readAsText(file)
+                    }}
+                  />
+                </label>
+              </div>
+              <div className="field" style={{ marginTop: 12 }}>
+                <label>CSV matn</label>
+                <textarea
+                  className="textarea"
+                  rows={8}
+                  value={csvText}
+                  onChange={(e) => setCsvText(e.target.value)}
+                  placeholder="id,name,price,..."
+                />
+              </div>
+              {csvInfo ? <p className="muted-sm">{csvInfo}</p> : null}
+              <button
+                type="button"
+                className="btn btn-warn"
+                onClick={() => void uploadCsv()}
+              >
+                Import qilish
+              </button>
+            </div>
+          ) : null}
+
+          {morePanel === 'moves' ? (
+            <div className="list" style={{ marginTop: 12 }}>
+              {moves.length === 0 ? (
+                <div className="empty">Harakat yo‘q</div>
+              ) : (
+                moves.map((m) => (
+                  <div key={m.id} className="item">
+                    <div className="row-between">
+                      <h3>{m.product_name}</h3>
+                      <span className="badge">
+                        {REASON[m.reason] || m.reason}
+                      </span>
+                    </div>
+                    <p className="mono">
+                      {m.delta > 0 ? `+${m.delta}` : m.delta} → {m.stock_after}
+                      {m.note ? ` · ${m.note}` : ''}
+                    </p>
+                    <p>{m.created_at}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          ) : null}
         </section>
       ) : null}
 
@@ -881,8 +1140,8 @@ export default function App() {
               ['orders', '📦', 'Buyurtma'],
               ['payments', '💳', 'To‘lov'],
               ['warehouse', '🏭', 'Ombor'],
-              ['moves', '📜', 'Jurnal'],
               ['products', '🛍', 'Tovar'],
+              ['more', '⋯', 'Ko‘proq'],
             ] as const
           ).map(([id, ico, label]) => (
             <button
