@@ -93,6 +93,7 @@ from bot.keyboards import (
     admin_category_products_header_keyboard,
     admin_category_products_list_keyboard,
     admin_menu_keyboard,
+    admin_orders_keyboard,
     admin_delete_order_confirm_keyboard,
     admin_order_keyboard,
     admin_payment_keyboard,
@@ -1413,6 +1414,25 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     )
 
 
+async def admin_orders_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Asosiy menyu: 📦 Buyurtmalar — admin buyurtmalar paneli."""
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("Bu bo'lim faqat adminlar uchun.")
+        return
+
+    stats = get_stats()
+    await update.message.reply_text(
+        f"📦 <b>Buyurtmalar</b>\n"
+        f"{format_now_html()}\n\n"
+        f"🆕 Yangi: <b>{stats['new_orders']}</b>\n"
+        f"🚚 Faol: <b>{stats['active_orders']}</b>\n"
+        f"✅ Yetkazilgan: <b>{stats['delivered_orders']}</b>\n\n"
+        "Bo‘limni tanlang:",
+        reply_markup=admin_orders_keyboard(),
+        parse_mode="HTML",
+    )
+
+
 async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
@@ -1427,6 +1447,20 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await query.edit_message_text(
             f"🛠 <b>Admin panel</b>\n{format_now_html()}",
             reply_markup=admin_menu_keyboard(),
+            parse_mode="HTML",
+        )
+        return
+
+    if action == "orders":
+        stats = get_stats()
+        await query.edit_message_text(
+            f"📦 <b>Buyurtmalar</b>\n"
+            f"{format_now_html()}\n\n"
+            f"🆕 Yangi: <b>{stats['new_orders']}</b>\n"
+            f"🚚 Faol: <b>{stats['active_orders']}</b>\n"
+            f"✅ Yetkazilgan: <b>{stats['delivered_orders']}</b>\n\n"
+            "Bo‘limni tanlang:",
+            reply_markup=admin_orders_keyboard(),
             parse_mode="HTML",
         )
         return
@@ -1473,11 +1507,16 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     if action == "new":
         orders = get_orders_by_status("new")
+        title = "🆕 Yangi buyurtmalar"
     elif action == "active":
         orders = [
             *get_orders_by_status("accepted"),
             *get_orders_by_status("in_delivery"),
         ]
+        title = "🚚 Faol buyurtmalar"
+    elif action == "delivered":
+        orders = get_orders_by_status("delivered")
+        title = "📦 Yetkazilganlar"
     else:
         await query.edit_message_text(
             "🛠 Admin panel",
@@ -1487,13 +1526,16 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     if not orders:
         await query.edit_message_text(
-            "Buyurtmalar topilmadi.",
-            reply_markup=admin_menu_keyboard(),
+            f"{title}\n\nBuyurtmalar topilmadi.",
+            reply_markup=admin_orders_keyboard(),
         )
         return
 
-    await query.edit_message_text(f"Topildi: {len(orders)} ta buyurtma")
-    for order in orders[:5]:
+    await query.edit_message_text(
+        f"{title}\nTopildi: {len(orders)} ta (oxirgi {min(len(orders), 8)} ta)",
+        reply_markup=admin_orders_keyboard(),
+    )
+    for order in orders[:8]:
         await query.message.reply_text(
             format_order(order),
             reply_markup=admin_order_keyboard(order["id"]),
