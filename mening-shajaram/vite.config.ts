@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  base: '/shajara/',
   plugins: [
     react(),
     VitePWA({
@@ -17,7 +18,8 @@ export default defineConfig({
         display: 'standalone',
         orientation: 'portrait',
         lang: 'uz',
-        start_url: '/',
+        start_url: '/shajara/',
+        scope: '/shajara/',
         icons: [
           {
             src: 'pwa-192.png',

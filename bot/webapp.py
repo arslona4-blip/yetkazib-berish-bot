@@ -61,6 +61,7 @@ logger = logging.getLogger(__name__)
 
 _bot = None
 MINIAPP_DIR = BASE_DIR / "miniapp"
+SHAJARA_DIR = BASE_DIR / "shajara"
 PHOTOS_DIR = Path(DATABASE_PATH).resolve().parent / "photos"
 
 
@@ -678,6 +679,13 @@ async def serve_index(_request: web.Request) -> web.FileResponse:
     return web.FileResponse(index)
 
 
+async def serve_shajara_index(_request: web.Request) -> web.FileResponse:
+    index = SHAJARA_DIR / "index.html"
+    if not index.is_file():
+        raise web.HTTPNotFound(text="Mening Shajaram topilmadi")
+    return web.FileResponse(index)
+
+
 def create_app() -> web.Application:
     app = web.Application(middlewares=[cors_middleware])
     app.router.add_get("/health", api_health)
@@ -690,6 +698,13 @@ def create_app() -> web.Application:
     app.router.add_get("/api/photo/{product_id}", api_photo)
     app.router.add_post("/api/order", api_order)
     app.router.add_route("OPTIONS", "/api/{tail:.*}", lambda r: web.Response(status=204))
+
+    if SHAJARA_DIR.is_dir():
+        app.router.add_get("/shajara", serve_shajara_index)
+        app.router.add_get("/shajara/", serve_shajara_index)
+        app.router.add_static("/shajara/", SHAJARA_DIR, show_index=False)
+    else:
+        logger.warning("shajara papkasi topilmadi: %s", SHAJARA_DIR)
 
     if MINIAPP_DIR.is_dir():
         app.router.add_get("/", serve_index)
