@@ -60,6 +60,7 @@ def main_menu_keyboard(is_admin: bool = False, is_courier: bool = False) -> Repl
         rows.append(["⋯ Ko'proq"])
     staff_row = []
     if is_admin:
+        staff_row.append("📦 Buyurtmalar")
         staff_row.append("🛠 Admin panel")
     if is_courier:
         staff_row.append("🚴 Kuryer panel")
@@ -472,6 +473,26 @@ def admin_payment_keyboard(order_id: int) -> InlineKeyboardMarkup:
     )
 
 
+def admin_orders_keyboard() -> InlineKeyboardMarkup:
+    """Admin: buyurtmalar paneli (yangi / faol)."""
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("🆕 Yangi buyurtmalar", callback_data="admin:new")],
+            [
+                InlineKeyboardButton(
+                    "🚚 Faol buyurtmalar", callback_data="admin:active"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "📦 Yetkazilganlar", callback_data="admin:delivered"
+                )
+            ],
+            [InlineKeyboardButton("⬅️ Admin panel", callback_data="admin:menu")],
+        ]
+    )
+
+
 def admin_menu_keyboard() -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     shop = shop_inline_button("🛒 Do'kon")
@@ -482,6 +503,7 @@ def admin_menu_keyboard() -> InlineKeyboardMarkup:
         rows.append([shop])
     rows.extend(
         [
+            [InlineKeyboardButton("📦 Buyurtmalar", callback_data="admin:orders")],
             [InlineKeyboardButton("🆕 Yangi buyurtmalar", callback_data="admin:new")],
             [
                 InlineKeyboardButton(

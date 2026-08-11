@@ -40,6 +40,7 @@ from bot.handlers import (
     admin_awaiting_text,
     admin_callback,
     admin_delete_order_callback,
+    admin_orders_panel,
     admin_panel,
     admin_product_callback,
     admin_status_callback,
@@ -135,6 +136,7 @@ def main() -> None:
     app.add_handler(MessageHandler(filters.Regex("^📋 Mening buyurtmalarim$"), my_orders))
     app.add_handler(MessageHandler(filters.Regex("^ℹ️ Yordam$"), help_command))
     app.add_handler(MessageHandler(filters.Regex("^📞 Aloqa$"), contact_info))
+    app.add_handler(MessageHandler(filters.Regex("^📦 Buyurtmalar$"), admin_orders_panel))
     app.add_handler(MessageHandler(filters.Regex("^🛠 Admin panel$"), admin_panel))
     app.add_handler(MessageHandler(filters.Regex("^🚴 Kuryer panel$"), courier_panel))
     app.add_handler(MessageHandler(filters.Regex(r"^(🌐 Til|🌐 Язык)$"), ask_language))
