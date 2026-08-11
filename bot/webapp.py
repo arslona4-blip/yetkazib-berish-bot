@@ -64,6 +64,7 @@ logger = logging.getLogger(__name__)
 _bot = None
 MINIAPP_DIR = BASE_DIR / "miniapp"
 SHAJARA_DIR = BASE_DIR / "shajara"
+ADMINAPP_DIR = BASE_DIR / "admin"
 PHOTOS_DIR = Path(DATABASE_PATH).resolve().parent / "photos"
 
 
@@ -740,7 +741,16 @@ async def serve_shajara_index(_request: web.Request) -> web.FileResponse:
     return web.FileResponse(index)
 
 
+async def serve_admin_index(_request: web.Request) -> web.FileResponse:
+    index = ADMINAPP_DIR / "index.html"
+    if not index.is_file():
+        raise web.HTTPNotFound(text="Admin ilova topilmadi")
+    return web.FileResponse(index)
+
+
 def create_app() -> web.Application:
+    from bot.admin_api import register_admin_routes
+
     app = web.Application(middlewares=[cors_middleware])
     app.router.add_get("/health", api_health)
     app.router.add_get("/api/config", api_config)
@@ -753,6 +763,7 @@ def create_app() -> web.Application:
     app.router.add_post("/api/order", api_order)
     app.router.add_post("/api/shajara/share", api_shajara_share_create)
     app.router.add_get("/api/shajara/share/{code}", api_shajara_share_get)
+    register_admin_routes(app)
     app.router.add_route("OPTIONS", "/api/{tail:.*}", lambda r: web.Response(status=204))
 
     if SHAJARA_DIR.is_dir():
@@ -761,6 +772,13 @@ def create_app() -> web.Application:
         app.router.add_static("/shajara/", SHAJARA_DIR, show_index=False)
     else:
         logger.warning("shajara papkasi topilmadi: %s", SHAJARA_DIR)
+
+    if ADMINAPP_DIR.is_dir() and (ADMINAPP_DIR / "index.html").is_file():
+        app.router.add_get("/admin", serve_admin_index)
+        app.router.add_get("/admin/", serve_admin_index)
+        app.router.add_static("/admin/", ADMINAPP_DIR, show_index=False)
+    else:
+        logger.warning("admin papkasi topilmadi: %s", ADMINAPP_DIR)
 
     if MINIAPP_DIR.is_dir():
         app.router.add_get("/", serve_index)
