@@ -70,6 +70,7 @@ from bot.handlers import (
     webapp_scan_data,
 )
 from bot.jobs import setup_jobs
+from bot.warehouse import build_warehouse_conversations, warehouse_callback
 from bot.webapp import set_bot, start_webapp_server
 
 
@@ -181,6 +182,8 @@ def main() -> None:
         app.add_handler(conv)
     for conv in build_contact_conversations():
         app.add_handler(conv)
+    for conv in build_warehouse_conversations():
+        app.add_handler(conv)
 
     app.add_handler(MessageHandler(filters.Regex("^🛍 Katalog$"), show_catalog))
     app.add_handler(MessageHandler(filters.Regex("^🛒 Savatcha$"), show_cart_message))
@@ -223,6 +226,12 @@ def main() -> None:
         CallbackQueryHandler(
             contact_callback,
             pattern=r"^contact:(home|list|debtors|view:\d+|hist:\d+|debt:\d+|pay:\d+)$",
+        )
+    )
+    app.add_handler(
+        CallbackQueryHandler(
+            warehouse_callback,
+            pattern=r"^wh:(home|in|out|inv|moves|report|in_cat:\d+|out_cat:\d+|inv_cat:\d+)$",
         )
     )
     app.add_handler(CallbackQueryHandler(admin_callback, pattern=r"^admin:"))

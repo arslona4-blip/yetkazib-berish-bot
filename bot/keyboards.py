@@ -516,6 +516,7 @@ def admin_menu_keyboard() -> InlineKeyboardMarkup:
 
 
 def admin_stock_keyboard(*, low_only: bool = False) -> InlineKeyboardMarkup:
+    """Orqaga / filtr — asosiy menyu warehouse_home_keyboard da."""
     rows = [
         [
             InlineKeyboardButton(
@@ -525,11 +526,11 @@ def admin_stock_keyboard(*, low_only: bool = False) -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                "📋 Hammasi" if low_only else "⚠️ Kam qoldiq",
-                callback_data="admin:stock" if low_only else "admin:stock_low",
+                "📁 Toifalar" if low_only else "⚠️ Kam qoldiq",
+                callback_data="admin:stock_cats" if low_only else "admin:stock_low",
             )
         ],
-        [InlineKeyboardButton("⬅️ Admin panel", callback_data="admin:menu")],
+        [InlineKeyboardButton("⬅️ Ombor paneli", callback_data="admin:stock")],
     ]
     return InlineKeyboardMarkup(rows)
 
@@ -567,12 +568,12 @@ def admin_stock_categories_keyboard(
     rows.append(
         [
             InlineKeyboardButton(
-                "📋 Toifalar" if low_only else "⚠️ Kam qoldiq",
-                callback_data="admin:stock" if low_only else "admin:stock_low",
+                "📁 Toifalar" if low_only else "⚠️ Kam qoldiq",
+                callback_data="admin:stock_cats" if low_only else "admin:stock_low",
             )
         ]
     )
-    rows.append([InlineKeyboardButton("⬅️ Admin panel", callback_data="admin:menu")])
+    rows.append([InlineKeyboardButton("⬅️ Ombor paneli", callback_data="admin:stock")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -644,8 +645,8 @@ def admin_stock_list_keyboard(
     rows.append(
         [
             InlineKeyboardButton(
-                "📋 Toifalar" if low_only else "⚠️ Kam qoldiq",
-                callback_data="admin:stock" if low_only else "admin:stock_low",
+                "📁 Toifalar" if low_only else "⚠️ Kam qoldiq",
+                callback_data="admin:stock_cats" if low_only else "admin:stock_low",
             )
         ]
     )
