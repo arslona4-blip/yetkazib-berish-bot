@@ -973,16 +973,44 @@ def get_last_delivery_address(user_id: int) -> str | None:
     return addr or None
 
 
-def get_orders_by_status(status: str, limit: int = 20) -> list[sqlite3.Row]:
+def get_orders_by_status(
+    status: str,
+    limit: int = 20,
+    *,
+    oldest_first: bool = False,
+) -> list[sqlite3.Row]:
+    """Navbat uchun oldest_first=True (eski → yangi), tarix uchun False."""
+    order_sql = "ASC" if oldest_first else "DESC"
     with get_connection() as conn:
         rows = conn.execute(
-            """
+            f"""
             SELECT * FROM orders
             WHERE status = ?
-            ORDER BY id DESC
+            ORDER BY id {order_sql}
             LIMIT ?
             """,
             (status, limit),
+        ).fetchall()
+    return list(rows)
+
+
+def get_queue_orders(
+    statuses: list[str],
+    limit: int = 30,
+) -> list[sqlite3.Row]:
+    """Bir nechta statusdagi buyurtmalar — navbat tartibida (id ASC)."""
+    if not statuses:
+        return []
+    placeholders = ",".join("?" for _ in statuses)
+    with get_connection() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT * FROM orders
+            WHERE status IN ({placeholders})
+            ORDER BY id ASC
+            LIMIT ?
+            """,
+            (*statuses, limit),
         ).fetchall()
     return list(rows)
 
@@ -1408,10 +1436,8 @@ def import_products_csv(text: str) -> int:
 
 
 def get_courier_orders() -> list[sqlite3.Row]:
-    return [
-        *get_orders_by_status("accepted"),
-        *get_orders_by_status("in_delivery"),
-    ]
+    """Kuryer navbati: eski buyurtma birinchi."""
+    return get_queue_orders(["accepted", "in_delivery"], limit=30)
 
 
 # --- Contacts & debts ---

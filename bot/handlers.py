@@ -64,6 +64,7 @@ from bot.database import (
     get_favorites,
     get_order,
     get_orders_by_status,
+    get_queue_orders,
     get_product,
     get_product_by_barcode,
     get_product_by_id,
@@ -1427,6 +1428,7 @@ async def admin_orders_panel(update: Update, context: ContextTypes.DEFAULT_TYPE)
         f"🆕 Yangi: <b>{stats['new_orders']}</b>\n"
         f"🚚 Faol: <b>{stats['active_orders']}</b>\n"
         f"✅ Yetkazilgan: <b>{stats['delivered_orders']}</b>\n\n"
+        "Navbat: eski buyurtma birinchi ✅\n"
         "Bo‘limni tanlang:",
         reply_markup=admin_orders_keyboard(),
         parse_mode="HTML",
@@ -1506,17 +1508,17 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     if action == "new":
-        orders = get_orders_by_status("new")
+        orders = get_queue_orders(["new"], limit=30)
         title = "🆕 Yangi buyurtmalar"
+        queue_mode = True
     elif action == "active":
-        orders = [
-            *get_orders_by_status("accepted"),
-            *get_orders_by_status("in_delivery"),
-        ]
+        orders = get_queue_orders(["accepted", "in_delivery"], limit=30)
         title = "🚚 Faol buyurtmalar"
+        queue_mode = True
     elif action == "delivered":
-        orders = get_orders_by_status("delivered")
+        orders = get_orders_by_status("delivered", limit=20)
         title = "📦 Yetkazilganlar"
+        queue_mode = False
     else:
         await query.edit_message_text(
             "🛠 Admin panel",
@@ -1531,13 +1533,22 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
         return
 
+    show_n = min(len(orders), 10)
+    order_hint = (
+        "Navbat tartibida (eski → yangi)"
+        if queue_mode
+        else "Oxirgilari birinchi"
+    )
     await query.edit_message_text(
-        f"{title}\nTopildi: {len(orders)} ta (oxirgi {min(len(orders), 8)} ta)",
+        f"{title}\n"
+        f"{order_hint}\n"
+        f"Jami: {len(orders)} ta — ko‘rsatilmoqda {show_n} ta",
         reply_markup=admin_orders_keyboard(),
     )
-    for order in orders[:8]:
+    for i, order in enumerate(orders[:show_n], start=1):
+        prefix = f"🔢 Navbat №{i}/{len(orders)}\n" if queue_mode else ""
         await query.message.reply_text(
-            format_order(order),
+            f"{prefix}{format_order(order)}",
             reply_markup=admin_order_keyboard(order["id"]),
         )
 
