@@ -24,4 +24,13 @@ export type TreeData = {
   updatedAt: string
 }
 
-export type Screen = 'welcome' | 'onboarding' | 'tree' | 'people' | 'person' | 'about'
+export type Screen =
+  | 'welcome'
+  | 'onboarding'
+  | 'tree'
+  | 'people'
+  | 'person'
+  | 'about'
+  | 'share'
+  | 'join'
+

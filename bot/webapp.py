@@ -45,11 +45,13 @@ from bot.database import (
     get_product,
     get_product_by_barcode,
     get_products,
+    get_shajara_share,
     get_user,
     get_variant,
     get_variants,
     product_display_price,
     save_order_items_direct,
+    save_shajara_share,
     set_user_phone,
     spend_bonus,
     update_payment_status,
@@ -672,6 +674,55 @@ async def api_order(request: web.Request) -> web.Response:
     )
 
 
+async def api_shajara_share_create(request: web.Request) -> web.Response:
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise web.HTTPBadRequest(text="JSON noto'g'ri") from exc
+    tree = body.get("tree")
+    if not isinstance(tree, dict) or tree.get("version") != 1:
+        raise web.HTTPBadRequest(text="tree noto'g'ri")
+    people = tree.get("people")
+    if not isinstance(people, list) or len(people) > 200:
+        raise web.HTTPBadRequest(text="people limiti: 200")
+    # Rasmlarni serverga yozmaslik — hajm
+    cleaned_people = []
+    for p in people:
+        if not isinstance(p, dict):
+            continue
+        item = dict(p)
+        item["photoDataUrl"] = ""
+        cleaned_people.append(item)
+    tree = {**tree, "people": cleaned_people}
+    code = body.get("code")
+    code_str = str(code).strip().upper() if code else None
+    try:
+        saved = save_shajara_share(json.dumps(tree, ensure_ascii=False), code_str)
+    except Exception as exc:
+        logger.warning("shajara share: %s", exc)
+        raise web.HTTPBadRequest(text="Saqlash xato") from exc
+    base = str(request.url.origin())
+    return web.json_response(
+        {
+            "ok": True,
+            "code": saved,
+            "url": f"{base}/shajara/?code={saved}",
+        }
+    )
+
+
+async def api_shajara_share_get(request: web.Request) -> web.Response:
+    code = request.match_info.get("code", "")
+    payload = get_shajara_share(code)
+    if not payload:
+        raise web.HTTPNotFound(text="Kod topilmadi")
+    try:
+        tree = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        raise web.HTTPBadGateway(text="Ma'lumot buzilgan") from exc
+    return web.json_response({"ok": True, "code": code.strip().upper(), "tree": tree})
+
+
 async def serve_index(_request: web.Request) -> web.FileResponse:
     index = MINIAPP_DIR / "index.html"
     if not index.is_file():
@@ -697,6 +748,8 @@ def create_app() -> web.Application:
     app.router.add_get("/api/barcode/{code}", api_barcode)
     app.router.add_get("/api/photo/{product_id}", api_photo)
     app.router.add_post("/api/order", api_order)
+    app.router.add_post("/api/shajara/share", api_shajara_share_create)
+    app.router.add_get("/api/shajara/share/{code}", api_shajara_share_get)
     app.router.add_route("OPTIONS", "/api/{tail:.*}", lambda r: web.Response(status=204))
 
     if SHAJARA_DIR.is_dir():
