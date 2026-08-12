@@ -282,10 +282,8 @@ export default function App() {
     minute: '2-digit',
   })
 
-  const greet =
-    lang === 'ru'
-      ? `Здравствуйте, ${profile.className}`
-      : `Assalomu alaykum, ${profile.className}`
+  const greet = lang === 'ru' ? 'Здравствуйте' : 'Assalomu alaykum'
+  const heroMeta = [clock, weather ? `${weather.temp}°` : ''].filter(Boolean).join(' · ')
 
   return (
     <div className="app">
@@ -307,10 +305,7 @@ export default function App() {
               </div>
             </div>
             <p className="greet">{greet}</p>
-            <p className="hero-sub">
-              {profile.schoolName} · {clock}
-              {weather ? ` · ${weather.temp}°` : ''}
-            </p>
+            <p className="hero-sub">{heroMeta}</p>
 
             <div className="feature-rail">
               {featured.map((s) => (
@@ -453,7 +448,7 @@ export default function App() {
             <div>
               <h1>{weekMode ? dict.week : dict.todayLesson}</h1>
               <p>
-                {profile.className} · {stats.filled}/{stats.total}
+                {[profile.className, `${stats.filled}/${stats.total}`].filter(Boolean).join(' · ')}
               </p>
             </div>
             <div className="seg">
@@ -602,10 +597,12 @@ export default function App() {
       {tab === 'profile' && (
         <section className="page">
           <div className="profile-hero">
-            <div className="avatar">{profile.className.slice(0, 2)}</div>
+            <div className="avatar">
+              {(profile.className || 'J').slice(0, 2).toUpperCase()}
+            </div>
             <div>
-              <h1>{profile.className}</h1>
-              <p>{profile.schoolName}</p>
+              <h1>{profile.className || (lang === 'ru' ? 'Класс' : 'Sinf')}</h1>
+              <p>{profile.schoolName || (lang === 'ru' ? 'Школа' : 'Maktab')}</p>
             </div>
           </div>
           <div className="profile-grid">
@@ -1129,7 +1126,7 @@ export default function App() {
 
           {sheet === 'widget' && (
             <div className="widget-xl">
-              <strong>{profile.className}</strong>
+              <strong>{profile.className || dict.brand}</strong>
               <p>
                 {upcoming
                   ? `${upcoming.period.n}. ${upcoming.subject} · ${upcoming.period.start}`

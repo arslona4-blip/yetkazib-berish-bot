@@ -29,8 +29,8 @@ function migrateLegacy(): AppSettings | null {
       }
     }
     const p = createProfile({
-      className: old.className || '9-A',
-      schoolName: old.schoolName || 'Maktab',
+      className: old.className || '',
+      schoolName: old.schoolName || '',
       cells,
     })
     const s = defaultSettings()
@@ -42,20 +42,40 @@ function migrateLegacy(): AppSettings | null {
   }
 }
 
+const PLACEHOLDER_CLASS = new Set(['9', '9-A', '7-A', '5-A', 'Yangi'])
+const PLACEHOLDER_SCHOOL = new Set([
+  '24 maktab',
+  'Maktab',
+  'Ixtisoslashtirilgan maktab',
+  '№12-maktab',
+])
+
+function scrubPlaceholders(s: AppSettings): AppSettings {
+  return {
+    ...s,
+    profiles: s.profiles.map((p) => ({
+      ...p,
+      className: PLACEHOLDER_CLASS.has(p.className.trim()) ? '' : p.className,
+      schoolName: PLACEHOLDER_SCHOOL.has(p.schoolName.trim()) ? '' : p.schoolName,
+    })),
+  }
+}
+
 export function loadSettings(): AppSettings {
   try {
     const raw = localStorage.getItem(KEY)
     if (!raw) {
       const migrated = migrateLegacy()
       if (migrated) {
-        saveSettings(migrated)
-        return migrated
+        const cleaned = scrubPlaceholders(migrated)
+        saveSettings(cleaned)
+        return cleaned
       }
       return defaultSettings()
     }
     const parsed = JSON.parse(raw) as AppSettings
     if (!parsed.profiles?.length) return defaultSettings()
-    return parsed
+    return scrubPlaceholders(parsed)
   } catch {
     return defaultSettings()
   }
