@@ -107,10 +107,119 @@ export const api = {
       auth,
       { method: 'POST', body: JSON.stringify({ action }) },
     ),
+  markDebt: (auth: AuthState | null, orderId: number, contactId?: number) =>
+    req<{
+      ok: boolean
+      order: import('./types').Order
+      contact_id: number
+      balance: number
+    }>(`/api/admin/orders/${orderId}/debt`, auth, {
+      method: 'POST',
+      body: JSON.stringify(contactId ? { contact_id: contactId } : {}),
+    }),
   deleteOrder: (auth: AuthState | null, orderId: number) =>
     req<{ ok: boolean; deleted: number }>(`/api/admin/orders/${orderId}`, auth, {
       method: 'DELETE',
     }),
+  posSale: (
+    auth: AuthState | null,
+    body: {
+      items: { product_id: number; quantity: number }[]
+      payment: 'cash' | 'card' | 'debt'
+      customer_name?: string
+      phone?: string
+      note?: string
+      promo_code?: string
+      contact_id?: number
+    },
+  ) =>
+    req<{
+      ok: boolean
+      order: import('./types').Order
+      total: number
+      discount: number
+      subtotal: number
+      payment: string
+      contact_id: number | null
+      debt_balance: number | null
+    }>('/api/admin/pos/sale', auth, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  debts: (auth: AuthState | null) =>
+    req<{
+      ok: boolean
+      totals: { debts: number; payments: number; open: number }
+      debtors: import('./types').Contact[]
+    }>('/api/admin/debts', auth),
+  debtLedger: (auth: AuthState | null, contactId: number) =>
+    req<{
+      ok: boolean
+      contact: import('./types').Contact
+      balance: number
+      entries: import('./types').DebtEntry[]
+    }>(`/api/admin/debts/${contactId}`, auth),
+  addDebt: (
+    auth: AuthState | null,
+    body: {
+      contact_id: number
+      amount: number
+      kind: 'debt' | 'payment'
+      note?: string
+    },
+  ) =>
+    req<{ ok: boolean; balance: number; id: number }>('/api/admin/debts', auth, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  promos: (auth: AuthState | null) =>
+    req<{ ok: boolean; promos: import('./types').Promo[] }>(
+      '/api/admin/promos',
+      auth,
+    ),
+  upsertPromo: (
+    auth: AuthState | null,
+    body: {
+      code: string
+      discount_percent?: number
+      discount_amount?: number
+      min_order?: number
+      is_active?: boolean
+    },
+  ) =>
+    req<{ ok: boolean; promo: import('./types').Promo }>(
+      '/api/admin/promos',
+      auth,
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
+  patchPromo: (
+    auth: AuthState | null,
+    code: string,
+    body: Partial<import('./types').Promo>,
+  ) =>
+    req<{ ok: boolean; promo: import('./types').Promo }>(
+      `/api/admin/promos/${encodeURIComponent(code)}`,
+      auth,
+      { method: 'PATCH', body: JSON.stringify(body) },
+    ),
+  reports: (auth: AuthState | null, from: string, to: string) =>
+    req<{
+      ok: boolean
+      report: import('./types').RangeReport
+      debts: { debts: number; payments: number; open: number }
+      warehouse: import('./types').StatsPayload['warehouse']
+    }>(`/api/admin/reports?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, auth),
+  categories: (auth: AuthState | null) =>
+    req<{ ok: boolean; categories: import('./types').CatalogCategory[] }>(
+      '/api/admin/categories',
+      auth,
+    ),
+  createCategory: (auth: AuthState | null, name: string) =>
+    req<{ ok: boolean; id: number; name: string }>(
+      '/api/admin/categories',
+      auth,
+      { method: 'POST', body: JSON.stringify({ name }) },
+    ),
   whCategories: (auth: AuthState | null, lowOnly?: boolean) => {
     const q = new URLSearchParams()
     if (lowOnly) q.set('low_only', '1')
@@ -153,10 +262,39 @@ export const api = {
       '/api/admin/products',
       auth,
     ),
+  createProduct: (
+    auth: AuthState | null,
+    body: {
+      name: string
+      price: number
+      category_id?: number
+      barcode?: string
+      description?: string
+      stock?: number
+    },
+  ) =>
+    req<{ ok: boolean; product: import('./types').Product }>(
+      '/api/admin/products',
+      auth,
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
+  productByBarcode: (auth: AuthState | null, code: string) =>
+    req<{ ok: boolean; product: import('./types').Product }>(
+      `/api/admin/products/barcode/${encodeURIComponent(code)}`,
+      auth,
+    ),
   patchProduct: (
     auth: AuthState | null,
     productId: number,
-    body: { price?: number; is_active?: boolean },
+    body: {
+      price?: number
+      is_active?: boolean
+      name?: string
+      barcode?: string
+      category_id?: number | null
+      description?: string
+      stock?: number
+    },
   ) =>
     req<{ ok: boolean; product: import('./types').Product }>(
       `/api/admin/products/${productId}`,
@@ -181,11 +319,13 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ csv }),
     }),
-  contacts: (auth: AuthState | null) =>
-    req<{ ok: boolean; contacts: import('./types').Contact[] }>(
-      '/api/admin/contacts',
+  contacts: (auth: AuthState | null, debtors?: boolean) => {
+    const q = debtors ? '?debtors=1' : ''
+    return req<{ ok: boolean; contacts: import('./types').Contact[] }>(
+      `/api/admin/contacts${q}`,
       auth,
-    ),
+    )
+  },
   createContact: (
     auth: AuthState | null,
     body: { name: string; phone?: string; note?: string },

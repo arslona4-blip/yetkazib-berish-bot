@@ -7,13 +7,18 @@ import {
   type AuthState,
 } from './api'
 import type {
+  CartLine,
+  CatalogCategory,
   Category,
   Contact,
+  DebtEntry,
   MorePanel,
   Movement,
   Order,
   OrderItem,
   Product,
+  Promo,
+  RangeReport,
   StatsPayload,
   Tab,
 } from './types'
@@ -95,11 +100,78 @@ export default function App() {
     phone: '',
     note: '',
   })
+  const [cart, setCart] = useState<CartLine[]>([])
+  const [kassaSearch, setKassaSearch] = useState('')
+  const [kassaBarcode, setKassaBarcode] = useState('')
+  const [kassaPay, setKassaPay] = useState<'cash' | 'card' | 'debt'>('cash')
+  const [kassaCustomer, setKassaCustomer] = useState('')
+  const [kassaPhone, setKassaPhone] = useState('')
+  const [kassaPromo, setKassaPromo] = useState('')
+  const [kassaContactId, setKassaContactId] = useState(0)
+  const [kassaMsg, setKassaMsg] = useState('')
+  const [debtors, setDebtors] = useState<Contact[]>([])
+  const [debtTotals, setDebtTotals] = useState({
+    debts: 0,
+    payments: 0,
+    open: 0,
+  })
+  const [debtContactId, setDebtContactId] = useState<number | null>(null)
+  const [debtEntries, setDebtEntries] = useState<DebtEntry[]>([])
+  const [debtBalance, setDebtBalance] = useState(0)
+  const [debtForm, setDebtForm] = useState({
+    amount: '',
+    kind: 'payment' as 'debt' | 'payment',
+    note: '',
+  })
+  const [promos, setPromos] = useState<Promo[]>([])
+  const [promoForm, setPromoForm] = useState({
+    code: '',
+    discount_percent: '10',
+    discount_amount: '0',
+    min_order: '0',
+  })
+  const [reportFrom, setReportFrom] = useState(() =>
+    new Date().toISOString().slice(0, 10),
+  )
+  const [reportTo, setReportTo] = useState(() =>
+    new Date().toISOString().slice(0, 10),
+  )
+  const [report, setReport] = useState<RangeReport | null>(null)
+  const [catalogCats, setCatalogCats] = useState<CatalogCategory[]>([])
+  const [productForm, setProductForm] = useState({
+    name: '',
+    price: '',
+    stock: '0',
+    barcode: '',
+    category_id: '',
+    description: '',
+  })
+  const [newCatName, setNewCatName] = useState('')
+  const [showProductForm, setShowProductForm] = useState(false)
   const [tgInit, setTgInit] = useState('')
   const [tgReady, setTgReady] = useState(false)
   const [showPin, setShowPin] = useState(false)
   const [booting, setBooting] = useState(true)
   const [menuOpen, setMenuOpen] = useState(false)
+
+  const cartTotal = useMemo(
+    () => cart.reduce((s, l) => s + l.price * l.quantity, 0),
+    [cart],
+  )
+
+  const kassaFiltered = useMemo(() => {
+    const q = kassaSearch.trim().toLowerCase()
+    const list = catalog.filter((p) => p.is_active && p.stock > 0)
+    if (!q) return list.slice(0, 40)
+    return list
+      .filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          (p.barcode || '').includes(q) ||
+          String(p.id) === q,
+      )
+      .slice(0, 40)
+  }, [catalog, kassaSearch])
 
   const initials = useMemo(() => {
     const raw = (shop || 'AD').trim()
@@ -488,6 +560,287 @@ export default function App() {
     }
   }
 
+  function addToCart(p: Product, qty = 1) {
+    setCart((prev) => {
+      const i = prev.findIndex((l) => l.product_id === p.id)
+      if (i >= 0) {
+        const next = [...prev]
+        const line = next[i]
+        const q = Math.min(p.stock, line.quantity + qty)
+        next[i] = { ...line, quantity: q, stock: p.stock, price: p.price }
+        return next
+      }
+      return [
+        ...prev,
+        {
+          product_id: p.id,
+          name: p.name,
+          price: p.price,
+          quantity: Math.min(qty, p.stock),
+          stock: p.stock,
+        },
+      ]
+    })
+    setKassaMsg('')
+  }
+
+  function setCartQty(productId: number, quantity: number) {
+    setCart((prev) =>
+      prev
+        .map((l) =>
+          l.product_id === productId
+            ? { ...l, quantity: Math.max(0, Math.min(l.stock, quantity)) }
+            : l,
+        )
+        .filter((l) => l.quantity > 0),
+    )
+  }
+
+  async function scanBarcode() {
+    if (!auth || !kassaBarcode.trim()) return
+    setBusy(true)
+    try {
+      const res = await api.productByBarcode(auth, kassaBarcode.trim())
+      addToCart(res.product, 1)
+      setKassaBarcode('')
+      setKassaMsg(`${res.product.name} qo‘shildi`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Barkod topilmadi')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function checkoutPos() {
+    if (!auth || cart.length === 0) return
+    if (kassaPay === 'debt' && !kassaCustomer.trim() && !kassaContactId) {
+      setError('Qarz uchun mijoz ismi yoki kontakt tanlang')
+      return
+    }
+    setBusy(true)
+    setKassaMsg('')
+    try {
+      const res = await api.posSale(auth, {
+        items: cart.map((l) => ({
+          product_id: l.product_id,
+          quantity: l.quantity,
+        })),
+        payment: kassaPay,
+        customer_name: kassaCustomer.trim() || undefined,
+        phone: kassaPhone.trim() || undefined,
+        promo_code: kassaPromo.trim() || undefined,
+        contact_id: kassaContactId || undefined,
+      })
+      setCart([])
+      setKassaPromo('')
+      setKassaMsg(
+        `Chek #${res.order.id} · ${money(res.total)} · ${
+          res.payment === 'cash'
+            ? 'Naqd'
+            : res.payment === 'card'
+              ? 'Karta'
+              : `Qarz (qoldiq ${money(res.debt_balance || 0)})`
+        }`,
+      )
+      await refreshAll(auth, true)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Sotuv xato')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function loadDebts() {
+    if (!auth) return
+    try {
+      const res = await api.debts(auth)
+      setDebtors(res.debtors)
+      setDebtTotals(res.totals)
+      const c = await api.contacts(auth)
+      setContacts(c.contacts)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Qarz xato')
+    }
+  }
+
+  async function openDebtLedger(contactId: number) {
+    if (!auth) return
+    setBusy(true)
+    try {
+      const res = await api.debtLedger(auth, contactId)
+      setDebtContactId(contactId)
+      setDebtEntries(res.entries)
+      setDebtBalance(res.balance)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Jurnal xato')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function submitDebtEntry() {
+    if (!auth || !debtContactId) return
+    const amount = Number(debtForm.amount)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError('Summa noto‘g‘ri')
+      return
+    }
+    setBusy(true)
+    try {
+      const res = await api.addDebt(auth, {
+        contact_id: debtContactId,
+        amount,
+        kind: debtForm.kind,
+        note: debtForm.note.trim() || undefined,
+      })
+      setDebtForm({ amount: '', kind: 'payment', note: '' })
+      setDebtBalance(res.balance)
+      await openDebtLedger(debtContactId)
+      await loadDebts()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Qarz yozuvi xato')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function loadPromos() {
+    if (!auth) return
+    try {
+      const res = await api.promos(auth)
+      setPromos(res.promos)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Promo xato')
+    }
+  }
+
+  async function savePromo() {
+    if (!auth || !promoForm.code.trim()) return
+    setBusy(true)
+    try {
+      await api.upsertPromo(auth, {
+        code: promoForm.code.trim(),
+        discount_percent: Number(promoForm.discount_percent) || 0,
+        discount_amount: Number(promoForm.discount_amount) || 0,
+        min_order: Number(promoForm.min_order) || 0,
+        is_active: true,
+      })
+      setPromoForm({
+        code: '',
+        discount_percent: '10',
+        discount_amount: '0',
+        min_order: '0',
+      })
+      await loadPromos()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Promo saqlash xato')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function loadReport() {
+    if (!auth) return
+    setBusy(true)
+    try {
+      const res = await api.reports(auth, reportFrom, reportTo)
+      setReport(res.report)
+      setDebtTotals(res.debts)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Hisobot xato')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function loadCatalogCats() {
+    if (!auth) return
+    try {
+      const res = await api.categories(auth)
+      setCatalogCats(res.categories)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function createProduct() {
+    if (!auth || !productForm.name.trim()) return
+    const price = Number(productForm.price)
+    if (!Number.isFinite(price) || price < 0) {
+      setError('Narx noto‘g‘ri')
+      return
+    }
+    setBusy(true)
+    try {
+      await api.createProduct(auth, {
+        name: productForm.name.trim(),
+        price,
+        stock: Number(productForm.stock) || 0,
+        barcode: productForm.barcode.trim() || undefined,
+        description: productForm.description.trim() || undefined,
+        category_id: productForm.category_id
+          ? Number(productForm.category_id)
+          : undefined,
+      })
+      setProductForm({
+        name: '',
+        price: '',
+        stock: '0',
+        barcode: '',
+        category_id: '',
+        description: '',
+      })
+      setShowProductForm(false)
+      const cat = await api.products(auth)
+      setCatalog(cat.products)
+      await refreshAll(auth, true)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Mahsulot yaratish xato')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function addCategory() {
+    if (!auth || !newCatName.trim()) return
+    setBusy(true)
+    try {
+      await api.createCategory(auth, newCatName.trim())
+      setNewCatName('')
+      await loadCatalogCats()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Toifa xato')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function markOrderDebt(orderId: number) {
+    if (!auth) return
+    if (!window.confirm(`#${orderId} qarzga yozilsinmi?`)) return
+    setBusy(true)
+    try {
+      await api.markDebt(auth, orderId)
+      await refreshAll(auth, true)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Qarz xato')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!auth) return
+    if (tab === 'debts') void loadDebts()
+    if (tab === 'promos') void loadPromos()
+    if (tab === 'reports') void loadReport()
+    if (tab === 'products' || tab === 'kassa') {
+      void loadCatalogCats()
+      void loadContacts()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth, tab])
+
   function renderOrderCard(o: Order, showPay = false) {
     const open = openOrderId === o.id
     return (
@@ -581,6 +934,15 @@ export default function App() {
             >
               O‘chirish
             </button>
+            {o.payment_status !== 'debt' && o.payment_status !== 'paid' ? (
+              <button
+                type="button"
+                className="btn btn-warn"
+                onClick={() => void markOrderDebt(o.id)}
+              >
+                Qarzga
+              </button>
+            ) : null}
           </div>
         )}
       </article>
@@ -824,6 +1186,14 @@ export default function App() {
             <button
               type="button"
               className="pos-mod"
+              onClick={() => setTab('kassa')}
+            >
+              <span className="pos-mod-ico blue">🖥</span>
+              <strong>Kassa</strong>
+            </button>
+            <button
+              type="button"
+              className="pos-mod"
               onClick={() => setTab('orders')}
             >
               {stats.stats.new_orders > 0 ? (
@@ -858,6 +1228,30 @@ export default function App() {
             >
               <span className="pos-mod-ico lav">🏷</span>
               <strong>Tovarlar</strong>
+            </button>
+            <button
+              type="button"
+              className="pos-mod"
+              onClick={() => setTab('debts')}
+            >
+              <span className="pos-mod-ico red">📒</span>
+              <strong>Qarz</strong>
+            </button>
+            <button
+              type="button"
+              className="pos-mod"
+              onClick={() => setTab('reports')}
+            >
+              <span className="pos-mod-ico green">📊</span>
+              <strong>Hisobot</strong>
+            </button>
+            <button
+              type="button"
+              className="pos-mod"
+              onClick={() => setTab('promos')}
+            >
+              <span className="pos-mod-ico amber">🏷</span>
+              <strong>Promo</strong>
             </button>
             <button
               type="button"
@@ -931,6 +1325,500 @@ export default function App() {
             </div>
           </section>
         </>
+      ) : null}
+
+      {tab === 'kassa' ? (
+        <section className="section">
+          <div className="page-h">
+            <div>
+              <h1>Kassa</h1>
+              <p>Do‘kon sotuvi · naqd / karta / qarz</p>
+            </div>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => setCart([])}
+            >
+              Tozalash
+            </button>
+          </div>
+
+          <div className="field">
+            <label>Barkod / shtrix-kod</label>
+            <div className="actions" style={{ marginTop: 0 }}>
+              <input
+                value={kassaBarcode}
+                onChange={(e) => setKassaBarcode(e.target.value)}
+                placeholder="Kodni skanerlang yoki yozing"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void scanBarcode()
+                }}
+              />
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => void scanBarcode()}
+              >
+                Qo‘shish
+              </button>
+            </div>
+          </div>
+
+          <div className="field">
+            <label>Mahsulot qidirish</label>
+            <input
+              value={kassaSearch}
+              onChange={(e) => setKassaSearch(e.target.value)}
+              placeholder="Nom yoki ID..."
+            />
+          </div>
+
+          <div className="list kassa-products">
+            {kassaFiltered.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className="item kassa-pick"
+                onClick={() => addToCart(p)}
+              >
+                <div className="row-between">
+                  <h3>{p.name}</h3>
+                  <span className="mono">{money(p.price)}</span>
+                </div>
+                <p>
+                  Omborda {p.stock}
+                  {p.barcode ? ` · ${p.barcode}` : ''}
+                </p>
+              </button>
+            ))}
+            {kassaFiltered.length === 0 ? (
+              <div className="empty">Mahsulot topilmadi</div>
+            ) : null}
+          </div>
+
+          <div className="pos-sec" style={{ marginTop: 16 }}>
+            <h2>Savatcha</h2>
+            <span className="pos-link">{money(cartTotal)}</span>
+          </div>
+          <div className="list">
+            {cart.length === 0 ? (
+              <div className="empty">Savatcha bo‘sh</div>
+            ) : (
+              cart.map((l) => (
+                <div key={l.product_id} className="item">
+                  <div className="row-between">
+                    <h3>{l.name}</h3>
+                    <span className="mono">{money(l.price * l.quantity)}</span>
+                  </div>
+                  <div className="actions">
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => setCartQty(l.product_id, l.quantity - 1)}
+                    >
+                      −
+                    </button>
+                    <span className="mono">{l.quantity}</span>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => setCartQty(l.product_id, l.quantity + 1)}
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="card" style={{ marginTop: 12 }}>
+            <div className="tabs-inline">
+              {(
+                [
+                  ['cash', 'Naqd'],
+                  ['card', 'Karta'],
+                  ['debt', 'Qarz'],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={`chip${kassaPay === id ? ' active' : ''}`}
+                  onClick={() => setKassaPay(id)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="field">
+              <label>Promo kod</label>
+              <input
+                value={kassaPromo}
+                onChange={(e) => setKassaPromo(e.target.value)}
+                placeholder="BARAKA10"
+              />
+            </div>
+            {kassaPay === 'debt' ? (
+              <>
+                <div className="field">
+                  <label>Mijoz (kontakt)</label>
+                  <select
+                    value={kassaContactId || ''}
+                    onChange={(e) =>
+                      setKassaContactId(Number(e.target.value) || 0)
+                    }
+                  >
+                    <option value="">Yangi mijoz…</option>
+                    {contacts.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                        {c.balance ? ` (${money(c.balance)})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Ism</label>
+                  <input
+                    value={kassaCustomer}
+                    onChange={(e) => setKassaCustomer(e.target.value)}
+                    placeholder="Mijoz ismi"
+                  />
+                </div>
+                <div className="field">
+                  <label>Telefon</label>
+                  <input
+                    value={kassaPhone}
+                    onChange={(e) => setKassaPhone(e.target.value)}
+                    placeholder="+998..."
+                  />
+                </div>
+              </>
+            ) : null}
+            {kassaMsg ? <p className="muted-sm ok-text">{kassaMsg}</p> : null}
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ width: '100%' }}
+              disabled={busy || cart.length === 0}
+              onClick={() => void checkoutPos()}
+            >
+              Sotish · {money(cartTotal)}
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {tab === 'debts' ? (
+        <section className="section">
+          <div className="page-h">
+            <div>
+              <h1>Qarzdorlar</h1>
+              <p>Qarz berish va undirish</p>
+            </div>
+          </div>
+          <div className="grid">
+            <div className="card">
+              <div className="label">Ochiq qarz</div>
+              <div className="value accent">{money(debtTotals.open)}</div>
+            </div>
+            <div className="card">
+              <div className="label">Jami berilgan</div>
+              <div className="value">{money(debtTotals.debts)}</div>
+            </div>
+          </div>
+
+          {debtContactId ? (
+            <div className="card" style={{ marginTop: 12 }}>
+              <div className="row-between">
+                <h3>Jurnal · balans {money(debtBalance)}</h3>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => {
+                    setDebtContactId(null)
+                    setDebtEntries([])
+                  }}
+                >
+                  Orqaga
+                </button>
+              </div>
+              <div className="field">
+                <label>Amaliyot</label>
+                <select
+                  value={debtForm.kind}
+                  onChange={(e) =>
+                    setDebtForm((s) => ({
+                      ...s,
+                      kind: e.target.value as 'debt' | 'payment',
+                    }))
+                  }
+                >
+                  <option value="payment">To‘lov (undirish)</option>
+                  <option value="debt">Qo‘shimcha qarz</option>
+                </select>
+              </div>
+              <div className="field">
+                <label>Summa</label>
+                <input
+                  value={debtForm.amount}
+                  onChange={(e) =>
+                    setDebtForm((s) => ({ ...s, amount: e.target.value }))
+                  }
+                  inputMode="numeric"
+                  placeholder="100000"
+                />
+              </div>
+              <div className="field">
+                <label>Izoh</label>
+                <input
+                  value={debtForm.note}
+                  onChange={(e) =>
+                    setDebtForm((s) => ({ ...s, note: e.target.value }))
+                  }
+                />
+              </div>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => void submitDebtEntry()}
+              >
+                Saqlash
+              </button>
+              <div className="list" style={{ marginTop: 12 }}>
+                {debtEntries.map((e) => (
+                  <div key={e.id} className="item">
+                    <div className="row-between">
+                      <h3>{e.kind === 'debt' ? 'Qarz' : 'To‘lov'}</h3>
+                      <span
+                        className={`mono ${e.kind === 'debt' ? 'danger-text' : 'ok-text'}`}
+                      >
+                        {e.kind === 'debt' ? '+' : '−'}
+                        {money(e.amount)}
+                      </span>
+                    </div>
+                    <p>
+                      {e.created_at}
+                      {e.note ? ` · ${e.note}` : ''}
+                      {e.order_id ? ` · #${e.order_id}` : ''}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="list" style={{ marginTop: 12 }}>
+              {debtors.length === 0 ? (
+                <div className="empty">Qarzdor yo‘q</div>
+              ) : (
+                debtors.map((d) => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    className="item kassa-pick"
+                    onClick={() => void openDebtLedger(d.id)}
+                  >
+                    <div className="row-between">
+                      <h3>{d.name}</h3>
+                      <span className="mono danger-text">
+                        {money(d.balance || 0)}
+                      </span>
+                    </div>
+                    <p>{d.phone || 'Telefon yo‘q'}</p>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {tab === 'reports' ? (
+        <section className="section">
+          <div className="page-h">
+            <div>
+              <h1>Hisobot</h1>
+              <p>Savdo, P&L taxminiy, ABC</p>
+            </div>
+          </div>
+          <div className="actions" style={{ marginTop: 0 }}>
+            <div className="field" style={{ flex: 1, margin: 0 }}>
+              <label>Dan</label>
+              <input
+                type="date"
+                value={reportFrom}
+                onChange={(e) => setReportFrom(e.target.value)}
+              />
+            </div>
+            <div className="field" style={{ flex: 1, margin: 0 }}>
+              <label>Gacha</label>
+              <input
+                type="date"
+                value={reportTo}
+                onChange={(e) => setReportTo(e.target.value)}
+              />
+            </div>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => void loadReport()}
+            >
+              Yuklash
+            </button>
+          </div>
+          {report ? (
+            <>
+              <div className="grid" style={{ marginTop: 12 }}>
+                <div className="card">
+                  <div className="label">Savdo</div>
+                  <div className="value accent">{money(report.orders_sum)}</div>
+                  <p className="muted-sm">{report.orders_count} buyurtma</p>
+                </div>
+                <div className="card">
+                  <div className="label">To‘langan</div>
+                  <div className="value">{money(report.paid_sum)}</div>
+                </div>
+                <div className="card">
+                  <div className="label">Qarz savdo</div>
+                  <div className="value">{money(report.debt_sum)}</div>
+                </div>
+                <div className="card">
+                  <div className="label">P&L (taxminiy)</div>
+                  <div className="value">{money(report.profit_approx)}</div>
+                </div>
+              </div>
+              <div className="pos-sec">
+                <h2>ABC tahlil</h2>
+              </div>
+              <div className="list">
+                {report.abc.length === 0 ? (
+                  <div className="empty">Ma’lumot yo‘q</div>
+                ) : (
+                  report.abc.map((r) => (
+                    <div key={r.product_name} className="item">
+                      <div className="row-between">
+                        <h3>
+                          <span className="badge">{r.grade}</span> {r.product_name}
+                        </h3>
+                        <span className="mono">{money(r.revenue)}</span>
+                      </div>
+                      <p>{r.qty} dona</p>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="pos-sec">
+                <h2>Kunlik</h2>
+              </div>
+              <div className="list">
+                {report.by_day.map((d) => (
+                  <div key={d.date} className="item">
+                    <div className="row-between">
+                      <h3>{d.date}</h3>
+                      <span className="mono">{money(d.revenue)}</span>
+                    </div>
+                    <p>{d.orders_count} buyurtma</p>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : null}
+        </section>
+      ) : null}
+
+      {tab === 'promos' ? (
+        <section className="section">
+          <div className="page-h">
+            <div>
+              <h1>Promo kodlar</h1>
+              <p>Chegirma va aksiya</p>
+            </div>
+          </div>
+          <div className="card">
+            <div className="field">
+              <label>Kod</label>
+              <input
+                value={promoForm.code}
+                onChange={(e) =>
+                  setPromoForm((s) => ({ ...s, code: e.target.value }))
+                }
+                placeholder="BARAKA10"
+              />
+            </div>
+            <div className="field">
+              <label>Foiz (%)</label>
+              <input
+                value={promoForm.discount_percent}
+                onChange={(e) =>
+                  setPromoForm((s) => ({
+                    ...s,
+                    discount_percent: e.target.value,
+                  }))
+                }
+                inputMode="numeric"
+              />
+            </div>
+            <div className="field">
+              <label>Summa chegirma</label>
+              <input
+                value={promoForm.discount_amount}
+                onChange={(e) =>
+                  setPromoForm((s) => ({
+                    ...s,
+                    discount_amount: e.target.value,
+                  }))
+                }
+                inputMode="numeric"
+              />
+            </div>
+            <div className="field">
+              <label>Minimal buyurtma</label>
+              <input
+                value={promoForm.min_order}
+                onChange={(e) =>
+                  setPromoForm((s) => ({ ...s, min_order: e.target.value }))
+                }
+                inputMode="numeric"
+              />
+            </div>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => void savePromo()}
+            >
+              Saqlash
+            </button>
+          </div>
+          <div className="list" style={{ marginTop: 12 }}>
+            {promos.map((p) => (
+              <div key={p.code} className="item">
+                <div className="row-between">
+                  <h3>{p.code}</h3>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => {
+                      if (!auth) return
+                      void api
+                        .patchPromo(auth, p.code, { is_active: !p.is_active })
+                        .then(() => loadPromos())
+                    }}
+                  >
+                    {p.is_active ? 'O‘chirish' : 'Yoqish'}
+                  </button>
+                </div>
+                <p>
+                  {p.discount_percent
+                    ? `−${p.discount_percent}%`
+                    : `−${money(p.discount_amount)}`}
+                  {p.min_order ? ` · min ${money(p.min_order)}` : ''}
+                  {!p.is_active ? ' · nofaol' : ''}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
       ) : null}
 
       {tab === 'orders' ? (
@@ -1344,9 +2232,112 @@ export default function App() {
           <div className="page-h">
             <div>
               <h1>Mahsulotlar</h1>
-              <p>Narx va faollik</p>
+              <p>Yaratish, narx va faollik</p>
             </div>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => setShowProductForm((v) => !v)}
+            >
+              {showProductForm ? 'Yopish' : '+ Yangi'}
+            </button>
           </div>
+
+          {showProductForm ? (
+            <div className="card" style={{ marginBottom: 12 }}>
+              <div className="field">
+                <label>Nom</label>
+                <input
+                  value={productForm.name}
+                  onChange={(e) =>
+                    setProductForm((s) => ({ ...s, name: e.target.value }))
+                  }
+                  placeholder="Mahsulot nomi"
+                />
+              </div>
+              <div className="field">
+                <label>Narx</label>
+                <input
+                  value={productForm.price}
+                  onChange={(e) =>
+                    setProductForm((s) => ({ ...s, price: e.target.value }))
+                  }
+                  inputMode="numeric"
+                />
+              </div>
+              <div className="field">
+                <label>Boshlang‘ich qoldiq</label>
+                <input
+                  value={productForm.stock}
+                  onChange={(e) =>
+                    setProductForm((s) => ({ ...s, stock: e.target.value }))
+                  }
+                  inputMode="numeric"
+                />
+              </div>
+              <div className="field">
+                <label>Barkod</label>
+                <input
+                  value={productForm.barcode}
+                  onChange={(e) =>
+                    setProductForm((s) => ({ ...s, barcode: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="field">
+                <label>Toifa</label>
+                <select
+                  value={productForm.category_id}
+                  onChange={(e) =>
+                    setProductForm((s) => ({
+                      ...s,
+                      category_id: e.target.value,
+                    }))
+                  }
+                >
+                  <option value="">Tanlanmagan</option>
+                  {catalogCats.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="actions" style={{ marginTop: 0 }}>
+                <input
+                  value={newCatName}
+                  onChange={(e) => setNewCatName(e.target.value)}
+                  placeholder="Yangi toifa"
+                />
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => void addCategory()}
+                >
+                  Toifa +
+                </button>
+              </div>
+              <div className="field">
+                <label>Izoh</label>
+                <input
+                  value={productForm.description}
+                  onChange={(e) =>
+                    setProductForm((s) => ({
+                      ...s,
+                      description: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => void createProduct()}
+              >
+                Saqlash
+              </button>
+            </div>
+          ) : null}
           <div className="list">
             {catalog.map((p) => (
               <div key={p.id} className="item">
@@ -1407,10 +2398,14 @@ export default function App() {
               {(
                 [
                   ['dash', '🏠', 'Asosiy'],
+                  ['kassa', '🖥', 'Kassa'],
                   ['orders', '📦', 'Buyurtma'],
                   ['payments', '💳', 'To‘lov'],
                   ['warehouse', '🏭', 'Ombor'],
                   ['products', '🛍', 'Tovar'],
+                  ['debts', '📒', 'Qarz'],
+                  ['reports', '📊', 'Hisobot'],
+                  ['promos', '🏷', 'Promo'],
                   ['more', '⋯', 'Ko‘proq'],
                 ] as const
               ).map(([id, ico, label]) => (
@@ -1471,31 +2466,26 @@ export default function App() {
           <div className="nav-center-wrap">
             <button
               type="button"
-              className="nav-center"
-              aria-label="Menyu"
-              onClick={() => setMenuOpen(true)}
+              className={`nav-center${tab === 'kassa' ? ' active' : ''}`}
+              aria-label="Kassa"
+              onClick={() => setTab('kassa')}
             >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-                <rect x="3" y="3" width="8" height="8" rx="2" />
-                <rect x="13" y="3" width="8" height="8" rx="2" />
-                <rect x="3" y="13" width="8" height="8" rx="2" />
-                <rect x="13" y="13" width="8" height="8" rx="2" />
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="4" width="18" height="14" rx="2" />
+                <path d="M7 18v2M17 18v2M8 10h8M8 13h5" />
               </svg>
             </button>
           </div>
           <button
             type="button"
-            className={`nav-btn${tab === 'payments' ? ' active' : ''}`}
-            onClick={() => setTab('payments')}
+            className={`nav-btn${tab === 'debts' ? ' active' : ''}`}
+            onClick={() => setTab('debts')}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="6" width="18" height="12" rx="2" />
-              <path d="M3 10h18" />
+              <path d="M6 4h12v16H6z" />
+              <path d="M9 8h6M9 12h6M9 16h4" />
             </svg>
-            To‘lov
-            {stats && stats.payments_waiting > 0 ? (
-              <span className="nav-dot">{stats.payments_waiting}</span>
-            ) : null}
+            Qarz
           </button>
           <button
             type="button"

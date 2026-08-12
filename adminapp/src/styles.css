@@ -976,3 +976,44 @@ textarea {
   align-items: center;
   cursor: pointer;
 }
+
+.kassa-pick {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  border: none;
+  background: var(--surface);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.kassa-pick:active {
+  transform: scale(0.98);
+}
+
+.kassa-products {
+  max-height: 220px;
+  overflow: auto;
+}
+
+.ok-text {
+  color: var(--ok);
+}
+
+.danger-text {
+  color: var(--danger);
+}
+
+.nav-center.active {
+  background: var(--primary-dark);
+  box-shadow: 0 8px 20px rgba(31, 111, 224, 0.45);
+}
+
+select {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  padding: 12px;
+  font: inherit;
+}
