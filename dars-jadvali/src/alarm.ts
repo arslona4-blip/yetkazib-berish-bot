@@ -1,57 +1,34 @@
 import {
-  DEFAULT_PERIODS,
   cellKey,
+  parseClock,
   todayDayId,
-  type DayId,
+  type AlarmSettings,
   type Period,
-} from './schedule'
-
-export type AlarmSettings = {
-  enabled: boolean
-  minutesBefore: number
-  sound: boolean
-  vibrate: boolean
-}
-
-export const DEFAULT_ALARM: AlarmSettings = {
-  enabled: true,
-  minutesBefore: 5,
-  sound: true,
-  vibrate: true,
-}
+  type Profile,
+} from './model'
 
 export type AlarmEvent = {
   id: string
   period: Period
   subject: string
   kind: 'before' | 'start'
-  at: Date
+  message: string
 }
 
-function parseTodayTime(hhmm: string, now = new Date()): Date {
-  const [h, m] = hhmm.split(':').map(Number)
-  const d = new Date(now)
-  d.setHours(h, m, 0, 0)
-  return d
-}
-
-export function nextLessonsToday(
-  subjects: Record<string, string>,
-  day: DayId | null,
-  now = new Date(),
-): { period: Period; subject: string; start: Date }[] {
-  if (!day) return []
+export function nextLessonsToday(profile: Profile, now = new Date()) {
+  const day = todayDayId(now)
+  if (!day) return [] as { period: Period; subject: string; start: Date }[]
   const out: { period: Period; subject: string; start: Date }[] = []
-  for (const p of DEFAULT_PERIODS) {
-    const subject = (subjects[cellKey(day, p.n)] || '').trim()
+  for (const p of profile.periods) {
+    const subject = (profile.cells[cellKey(day, p.n)]?.subject || '').trim()
     if (!subject) continue
-    out.push({ period: p, subject, start: parseTodayTime(p.start, now) })
+    out.push({ period: p, subject, start: parseClock(p.start, now) })
   }
   return out
 }
 
 export function findDueAlarm(
-  subjects: Record<string, string>,
+  profile: Profile,
   settings: AlarmSettings,
   fired: Set<string>,
   now = new Date(),
@@ -59,43 +36,56 @@ export function findDueAlarm(
   if (!settings.enabled) return null
   const day = todayDayId(now)
   if (!day) return null
+  const lead = settings.minutesBefore + (profile.commuteMinutes > 0 ? 0 : 0)
+  // commute shifts "before" earlier
+  const beforeExtra = profile.commuteMinutes || 0
+  const windowMs = 25_000
 
-  const windowMs = 25_000 // ~check window
-  for (const p of DEFAULT_PERIODS) {
-    const subject = (subjects[cellKey(day, p.n)] || '').trim()
+  for (const p of profile.periods) {
+    const subject = (profile.cells[cellKey(day, p.n)]?.subject || '').trim()
     if (!subject) continue
-    const start = parseTodayTime(p.start, now)
-
-    const beforeAt = new Date(start.getTime() - settings.minutesBefore * 60_000)
-    const beforeId = `${day}-${p.n}-before-${settings.minutesBefore}`
+    const start = parseClock(p.start, now)
+    const beforeAt = new Date(
+      start.getTime() - (settings.minutesBefore + beforeExtra) * 60_000,
+    )
+    const beforeId = `${day}-${p.n}-before`
     if (
       !fired.has(beforeId) &&
       now.getTime() >= beforeAt.getTime() &&
       now.getTime() < beforeAt.getTime() + windowMs
     ) {
-      return { id: beforeId, period: p, subject, kind: 'before', at: beforeAt }
+      return {
+        id: beforeId,
+        period: p,
+        subject,
+        kind: 'before',
+        message: profile.alarmMessage || `${lead} daqiqadan keyin dars`,
+      }
     }
-
     const startId = `${day}-${p.n}-start`
     if (
       !fired.has(startId) &&
       now.getTime() >= start.getTime() &&
       now.getTime() < start.getTime() + windowMs
     ) {
-      return { id: startId, period: p, subject, kind: 'start', at: start }
+      return {
+        id: startId,
+        period: p,
+        subject,
+        kind: 'start',
+        message: profile.alarmMessage || 'Dars boshlandi!',
+      }
     }
   }
   return null
 }
 
 let audioCtx: AudioContext | null = null
-
-function ctx(): AudioContext {
+function ctx() {
   if (!audioCtx) audioCtx = new AudioContext()
   return audioCtx
 }
 
-/** Budilnik ohangi — qisqa signal */
 export async function playAlarmSound(times = 4) {
   const ac = ctx()
   if (ac.state === 'suspended') await ac.resume()
@@ -118,9 +108,7 @@ export async function playAlarmSound(times = 4) {
 }
 
 export function vibrateAlarm() {
-  if (typeof navigator !== 'undefined' && navigator.vibrate) {
-    navigator.vibrate([220, 120, 220, 120, 400])
-  }
+  navigator.vibrate?.([220, 120, 220, 120, 400])
 }
 
 export async function ensureNotifyPermission(): Promise<NotificationPermission> {
@@ -136,7 +124,6 @@ export function showSystemNotification(title: string, body: string) {
     const n = new Notification(title, {
       body,
       icon: '/jadval/pwa-192.png',
-      badge: '/jadval/pwa-192.png',
       tag: 'dars-budilnik',
     })
     n.onclick = () => {
@@ -156,4 +143,23 @@ export function formatCountdown(ms: number): string {
   const s = total % 60
   if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
   return `${m}:${String(s).padStart(2, '0')}`
+}
+
+const FIRED_KEY = 'maktab-jadval-fired-v2'
+export function loadFired(): Set<string> {
+  try {
+    const raw = localStorage.getItem(FIRED_KEY)
+    if (!raw) return new Set()
+    const parsed = JSON.parse(raw) as { day: string; ids: string[] }
+    if (parsed.day !== new Date().toDateString()) return new Set()
+    return new Set(parsed.ids || [])
+  } catch {
+    return new Set()
+  }
+}
+export function saveFired(ids: Set<string>) {
+  localStorage.setItem(
+    FIRED_KEY,
+    JSON.stringify({ day: new Date().toDateString(), ids: [...ids] }),
+  )
 }
