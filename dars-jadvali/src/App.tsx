@@ -4,6 +4,8 @@ import {
   DEFAULT_PERIODS,
   SUBJECT_SUGGESTIONS,
   cellKey,
+  currentPeriod,
+  parseClock,
   todayDayId,
   type DayId,
 } from './schedule'
@@ -39,9 +41,11 @@ export default function App() {
   const [perm, setPerm] = useState<NotificationPermission>(() =>
     typeof Notification !== 'undefined' ? Notification.permission : 'denied',
   )
+  const [alarmOpen, setAlarmOpen] = useState(false)
 
   const today = todayDayId(now)
   const dayMeta = DAYS.find((d) => d.id === day)!
+  const livePeriod = today === day ? currentPeriod(now) : null
 
   useEffect(() => {
     saveSchedule(state)
@@ -82,7 +86,19 @@ export default function App() {
     return list.find((x) => x.start.getTime() > now.getTime() - 30_000) ?? null
   }, [state.subjects, today, now])
 
-  const filledToday = useMemo(() => {
+  const weekFilled = useMemo(() => {
+    let n = 0
+    let total = 0
+    for (const d of DAYS) {
+      for (const p of DEFAULT_PERIODS) {
+        total++
+        if (state.subjects[cellKey(d.id, p.n)]?.trim()) n++
+      }
+    }
+    return { n, total, pct: total ? Math.round((n / total) * 100) : 0 }
+  }, [state.subjects])
+
+  const filledDay = useMemo(() => {
     return DEFAULT_PERIODS.filter((p) => state.subjects[cellKey(day, p.n)]?.trim()).length
   }, [state.subjects, day])
 
@@ -102,6 +118,7 @@ export default function App() {
   }
 
   function clearDay() {
+    if (!window.confirm(`${dayMeta.full} fanlarini tozalaysizmi?`)) return
     setState((s) => {
       const subjects = { ...s.subjects }
       for (const p of DEFAULT_PERIODS) {
@@ -118,12 +135,8 @@ export default function App() {
     try {
       await playAlarmSound(1)
     } catch {
-      /* user gesture may be required once */
+      /* ignore */
     }
-  }
-
-  function dismissAlarm() {
-    setActiveAlarm(null)
   }
 
   async function testAlarm() {
@@ -141,168 +154,227 @@ export default function App() {
     })
   }
 
+  const clock = now.toLocaleTimeString('uz-UZ', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
   return (
     <div className="app">
+      <div className="bg-grid" aria-hidden="true" />
+
       <header className="hero">
-        <p className="eyebrow">O‘quvchilar uchun</p>
-        <h1 className="brand">
-          Dars <span>jadvali</span>
-        </h1>
+        <div className="hero-top">
+          <p className="brand">Jadval</p>
+          <time className="live-clock" dateTime={now.toISOString()}>
+            {clock}
+          </time>
+        </div>
         <p className="tagline">
-          Fanlaringizni yozing — budilnik darsdan oldin eslatib turadi.
+          Ixtisoslashtirilgan maktab — 9 dars, budilnik va shaxsiy fanlar.
         </p>
 
-        <div className="id-row">
+        <div className="identity">
           <label className="field">
             <span>Sinf</span>
             <input
               value={state.className}
               onChange={(e) => setState((s) => ({ ...s, className: e.target.value }))}
-              placeholder="7-A"
+              placeholder="9-A"
               maxLength={12}
             />
           </label>
-          <label className="field">
+          <label className="field grow">
             <span>Maktab</span>
             <input
               value={state.schoolName}
               onChange={(e) => setState((s) => ({ ...s, schoolName: e.target.value }))}
-              placeholder="№12-maktab"
-              maxLength={40}
+              placeholder="Ixtisoslashtirilgan maktab"
+              maxLength={48}
             />
           </label>
+        </div>
+
+        <div className="hero-cta">
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => {
+              if (today) setDay(today)
+              document.getElementById('timetable')?.scrollIntoView({ behavior: 'smooth' })
+            }}
+          >
+            Bugungi dars
+          </button>
+          <button
+            type="button"
+            className={`btn btn-ghost ${alarm.enabled ? 'active' : ''}`}
+            onClick={() => setAlarmOpen((v) => !v)}
+          >
+            Budilnik {alarm.enabled ? '· yoqiq' : ''}
+          </button>
         </div>
       </header>
 
-      <section className={`alarm-card ${alarm.enabled ? 'on' : ''}`}>
-        <div className="alarm-top">
-          <div>
-            <h2>Budilnik</h2>
-            <p>
-              {alarm.enabled
-                ? `Darsdan ${alarm.minutesBefore} daqiqa oldin + boshlanishida`
-                : 'O‘chiq — yoqing, darsni o‘tkazib yubormang'}
-            </p>
+      {upcoming && (
+        <section className="status" aria-live="polite">
+          <div className="status-label">
+            {upcoming.start.getTime() <= now.getTime() &&
+            parseClock(upcoming.period.end, now).getTime() > now.getTime()
+              ? 'Hozirgi dars'
+              : 'Keyingi dars'}
           </div>
-          <button
-            type="button"
-            className={`toggle ${alarm.enabled ? 'on' : ''}`}
-            aria-pressed={alarm.enabled}
-            onClick={() => {
-              if (!alarm.enabled) void enableBudilnik()
-              else setAlarm((a) => ({ ...a, enabled: false }))
-            }}
-          >
-            {alarm.enabled ? 'YOQIQ' : 'O‘CHIQ'}
-          </button>
-        </div>
-
-        {upcoming && alarm.enabled && (
-          <div className="next-box">
-            <span>Keyingi dars</span>
-            <strong>
-              {upcoming.period.n}. {upcoming.subject}
-            </strong>
-            <em>
-              {upcoming.start.getTime() > now.getTime()
-                ? formatCountdown(upcoming.start.getTime() - now.getTime())
-                : 'Hozir'}{' '}
-              · {upcoming.period.start}
-            </em>
+          <div className="status-main">
+            <span className="status-num">{upcoming.period.n}</span>
+            <div>
+              <strong>{upcoming.subject}</strong>
+              <p>
+                {upcoming.period.start}–{upcoming.period.end}
+                {upcoming.start.getTime() > now.getTime()
+                  ? ` · ${formatCountdown(upcoming.start.getTime() - now.getTime())}`
+                  : ''}
+              </p>
+            </div>
           </div>
-        )}
+          <div className="status-meter" aria-hidden="true">
+            <span style={{ width: `${weekFilled.pct}%` }} />
+          </div>
+          <p className="status-meta">
+            Hafta to‘ldirilgan: {weekFilled.n}/{weekFilled.total}
+          </p>
+        </section>
+      )}
 
-        <div className="alarm-opts">
-          <label>
-            Oldindan
-            <select
-              value={alarm.minutesBefore}
-              onChange={(e) =>
-                setAlarm((a) => ({ ...a, minutesBefore: Number(e.target.value) }))
-              }
-            >
-              <option value={3}>3 daqiqa</option>
-              <option value={5}>5 daqiqa</option>
-              <option value={10}>10 daqiqa</option>
-              <option value={15}>15 daqiqa</option>
-            </select>
-          </label>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={alarm.sound}
-              onChange={(e) => setAlarm((a) => ({ ...a, sound: e.target.checked }))}
-            />
-            Ovoz
-          </label>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={alarm.vibrate}
-              onChange={(e) => setAlarm((a) => ({ ...a, vibrate: e.target.checked }))}
-            />
-            Tebranish
-          </label>
-        </div>
-
-        <div className="alarm-actions">
-          <button type="button" className="btn btn-ghost" onClick={() => void testAlarm()}>
-            Sinab ko‘rish
-          </button>
-          {perm !== 'granted' && (
+      {alarmOpen && (
+        <section className={`alarm-panel ${alarm.enabled ? 'on' : ''}`}>
+          <div className="alarm-top">
+            <div>
+              <h2>Budilnik</h2>
+              <p>
+                {alarm.enabled
+                  ? `Darsdan ${alarm.minutesBefore} daqiqa oldin va boshlanishida`
+                  : 'Yoqing — darsni o‘tkazib yubormaysiz'}
+              </p>
+            </div>
             <button
               type="button"
-              className="btn btn-primary"
-              onClick={() => void enableBudilnik()}
+              className={`switch ${alarm.enabled ? 'on' : ''}`}
+              aria-pressed={alarm.enabled}
+              onClick={() => {
+                if (!alarm.enabled) void enableBudilnik()
+                else setAlarm((a) => ({ ...a, enabled: false }))
+              }}
             >
-              Bildirishnoma ruxsati
+              <i />
             </button>
-          )}
-        </div>
-        <p className="alarm-hint">
-          Ishlashi uchun ilovani ochiq qoldiring yoki telefoningizga o‘rnating. Fon rejimida
-          ba’zi telefonlarda cheklov bo‘lishi mumkin.
-        </p>
-      </section>
+          </div>
+
+          <div className="alarm-grid">
+            <label className="opt">
+              <span>Oldindan</span>
+              <select
+                value={alarm.minutesBefore}
+                onChange={(e) =>
+                  setAlarm((a) => ({ ...a, minutesBefore: Number(e.target.value) }))
+                }
+              >
+                <option value={3}>3 daqiqa</option>
+                <option value={5}>5 daqiqa</option>
+                <option value={10}>10 daqiqa</option>
+                <option value={15}>15 daqiqa</option>
+              </select>
+            </label>
+            <label className="opt check">
+              <input
+                type="checkbox"
+                checked={alarm.sound}
+                onChange={(e) => setAlarm((a) => ({ ...a, sound: e.target.checked }))}
+              />
+              Ovoz
+            </label>
+            <label className="opt check">
+              <input
+                type="checkbox"
+                checked={alarm.vibrate}
+                onChange={(e) => setAlarm((a) => ({ ...a, vibrate: e.target.checked }))}
+              />
+              Tebranish
+            </label>
+          </div>
+
+          <div className="alarm-actions">
+            <button type="button" className="btn btn-ghost" onClick={() => void testAlarm()}>
+              Sinab ko‘rish
+            </button>
+            {perm !== 'granted' && (
+              <button type="button" className="btn btn-primary" onClick={() => void enableBudilnik()}>
+                Ruxsat berish
+              </button>
+            )}
+          </div>
+          <p className="hint">
+            Ishonchli eslatma uchun ilovani ochiq qoldiring yoki telefoningizga o‘rnating.
+          </p>
+        </section>
+      )}
 
       <nav className="days" aria-label="Hafta kunlari">
         {DAYS.map((d) => (
           <button
             key={d.id}
             type="button"
-            className={`day-btn ${day === d.id ? 'on' : ''} ${today === d.id ? 'today' : ''}`}
+            className={`day ${day === d.id ? 'on' : ''} ${today === d.id ? 'today' : ''}`}
             onClick={() => setDay(d.id)}
           >
-            {d.short}
+            <span>{d.short}</span>
+            {today === d.id && <i className="dot" />}
           </button>
         ))}
       </nav>
 
-      <section className="panel">
-        <div className="panel-head">
+      <section className="timetable" id="timetable">
+        <div className="tt-head">
           <div>
             <h2>{dayMeta.full}</h2>
             <p>
-              {state.className || 'Sinf'} · {filledToday}/{DEFAULT_PERIODS.length} dars
+              {state.className || 'Sinf'} · {filledDay}/9
               {today === day ? ' · Bugun' : ''}
             </p>
           </div>
-          <button type="button" className="text-btn" onClick={clearDay}>
-            Kunni tozalash
+          <button type="button" className="linkish" onClick={clearDay}>
+            Tozalash
           </button>
         </div>
 
-        <ol className="periods">
-          {DEFAULT_PERIODS.map((p) => {
+        <ol className="timeline">
+          {DEFAULT_PERIODS.map((p, idx) => {
             const key = cellKey(day, p.n)
             const subject = state.subjects[key] || ''
             const isEdit = editing === key
+            const isLive = livePeriod?.n === p.n
+            const isPast =
+              today === day && parseClock(p.end, now).getTime() < now.getTime() && !isLive
             return (
-              <li key={key} className={`period ${subject ? '' : 'empty'} ${isEdit ? 'edit' : ''}`}>
-                <div className="p-num">{p.n}</div>
-                <div className="p-body">
+              <li
+                key={key}
+                className={[
+                  'slot',
+                  subject ? 'filled' : 'empty',
+                  isEdit ? 'editing' : '',
+                  isLive ? 'live' : '',
+                  isPast ? 'past' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                style={{ animationDelay: `${0.04 + idx * 0.035}s` }}
+              >
+                <div className="rail">
+                  <span className="n">{p.n}</span>
+                  {idx < DEFAULT_PERIODS.length - 1 && <span className="line" />}
+                </div>
+                <div className="slot-body">
                   {isEdit ? (
-                    <div className="edit-box">
+                    <div className="editor">
                       <input
                         autoFocus
                         list="subject-list"
@@ -314,7 +386,7 @@ export default function App() {
                           if (e.key === 'Escape') setEditing(null)
                         }}
                       />
-                      <div className="edit-actions">
+                      <div className="editor-actions">
                         <button type="button" className="btn btn-primary" onClick={commitEdit}>
                           Saqlash
                         </button>
@@ -328,10 +400,13 @@ export default function App() {
                       </div>
                     </div>
                   ) : (
-                    <button type="button" className="subject-btn" onClick={() => openEdit(key)}>
-                      <strong>{subject || 'Fan qo‘shish'}</strong>
-                      <span>
-                        {p.start} – {p.end}
+                    <button type="button" className="slot-btn" onClick={() => openEdit(key)}>
+                      <div className="slot-title">
+                        <strong>{subject || 'Fan qo‘shish'}</strong>
+                        {isLive && <em className="live-tag">Hozir</em>}
+                      </div>
+                      <span className="slot-time">
+                        {p.start} — {p.end}
                       </span>
                     </button>
                   )}
@@ -348,23 +423,22 @@ export default function App() {
         ))}
       </datalist>
 
-      <p className="foot">
-        Budilnik faqat fan yozilgan darslar uchun ishlaydi. Bo‘sh katakni bosib fan qo‘shing.
-      </p>
+      <footer className="foot">
+        Fan yozilgan darslar uchun budilnik ishlaydi. Katakni bosib tahrirlang.
+      </footer>
 
       {activeAlarm && (
-        <div className="alarm-overlay" role="alertdialog" aria-modal="true">
-          <div className="alarm-modal">
-            <p className="pulse-label">
+        <div className="overlay" role="alertdialog" aria-modal="true">
+          <div className="modal">
+            <p className="modal-kicker">
               {activeAlarm.kind === 'before' ? 'Eslatma' : 'Qo‘ng‘iroq'}
             </p>
             <h2>
               {activeAlarm.period.n}-dars
-              <br />
-              {activeAlarm.subject}
+              <span>{activeAlarm.subject}</span>
             </h2>
-            <p className="alarm-time">{activeAlarm.period.start}</p>
-            <button type="button" className="btn btn-primary big" onClick={dismissAlarm}>
+            <p className="modal-time">{activeAlarm.period.start}</p>
+            <button type="button" className="btn btn-primary big" onClick={() => setActiveAlarm(null)}>
               O‘chirish
             </button>
           </div>

@@ -67,6 +67,24 @@ export function cellKey(day: DayId, period: number): CellKey {
   return `${day}-${period}`
 }
 
+export function parseClock(hhmm: string, now = new Date()): Date {
+  const [h, m] = hhmm.split(':').map(Number)
+  const d = new Date(now)
+  d.setHours(h, m, 0, 0)
+  return d
+}
+
+/** Hozirgi dars (boshlanish–tugash oralig‘ida) */
+export function currentPeriod(now = new Date()): Period | null {
+  const t = now.getTime()
+  for (const p of DEFAULT_PERIODS) {
+    const a = parseClock(p.start, now).getTime()
+    const b = parseClock(p.end, now).getTime()
+    if (t >= a && t < b) return p
+  }
+  return null
+}
+
 export function emptySubjects(): Record<string, string> {
   const out: Record<string, string> = {}
   for (const day of DAYS) {
