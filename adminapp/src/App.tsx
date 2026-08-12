@@ -491,25 +491,31 @@ export default function App() {
   function renderOrderCard(o: Order, showPay = false) {
     const open = openOrderId === o.id
     return (
-      <article key={o.id} className="item">
+      <article key={o.id} className="tx">
         <button
           type="button"
-          className="item-head"
+          className="tx-head"
           onClick={() => void toggleDetail(o.id)}
         >
-          <div className="row-between">
-            <h3>
-              #{o.id} · {money(o.price)}
-            </h3>
-            <span className="badge">{o.status_label}</span>
+          <div className="tx-left">
+            <span className="tx-ico">📦</span>
+            <div>
+              <h3 className="tx-title">#{o.id}</h3>
+              <p className="tx-sub">
+                {o.phone || '—'} · {o.delivery_address || 'Manzil yo‘q'}
+                {o.delivery_slot ? ` · ${o.delivery_slot}` : ''}
+              </p>
+              <div className="meta" style={{ marginTop: 6 }}>
+                <span className="badge">{o.status_label}</span>
+                <span className="badge warn">{o.payment_label}</span>
+              </div>
+            </div>
           </div>
-          <p>
-            {o.phone || '—'} · {o.delivery_address || 'Manzil yo‘q'}
-            {o.delivery_slot ? ` · ${o.delivery_slot}` : ''}
-          </p>
-          <div className="meta">
-            <span className="badge warn">{o.payment_label}</span>
-            <span className="muted-sm">{o.created_at}</span>
+          <div className="tx-right">
+            <div className="tx-amount">{money(o.price)}</div>
+            <div className="muted-sm" style={{ marginTop: 4 }}>
+              {o.created_at}
+            </div>
           </div>
         </button>
 
@@ -537,7 +543,7 @@ export default function App() {
           <div className="actions">
             <button
               type="button"
-              className="btn btn-primary"
+              className="btn btn-ok"
               onClick={() => void changePayment(o.id, 'confirm')}
             >
               Tasdiqlash
@@ -713,22 +719,24 @@ export default function App() {
 
   return (
     <div className={`app${busy ? ' busy' : ''}`}>
-      <header className="uz-top">
+      <header className="zf-top">
         <button
           type="button"
-          className="uz-profile"
+          className="zf-profile"
           onClick={() => setMenuOpen(true)}
         >
-          <span className="uz-avatar">{initials}</span>
-          <div className="uz-profile-name">
-            {shop.toUpperCase()}
-            <span>›</span>
+          <span className="zf-avatar">{initials}</span>
+          <div className="zf-profile-meta">
+            <div className="zf-profile-name">{shop}</div>
+            <div className="zf-profile-sub">
+              Admin · {lastSync ? `yangilandi ${lastSync}` : 'online'}
+            </div>
           </div>
         </button>
-        <div className="uz-top-actions">
+        <div className="zf-top-actions">
           <button
             type="button"
-            className="uz-icon-btn"
+            className="zf-icon-btn"
             title="Yangilash"
             onClick={() => void refreshAll()}
           >
@@ -736,14 +744,14 @@ export default function App() {
           </button>
           <button
             type="button"
-            className="uz-icon-btn"
+            className="zf-icon-btn"
             title="Bildirishnomalar"
             onClick={() => {
               setOrderStatus('new')
               setTab('orders')
             }}
           >
-            🔔
+            ⌂
             {stats && stats.stats.new_orders > 0 ? (
               <span className="dot" />
             ) : null}
@@ -755,197 +763,263 @@ export default function App() {
 
       {tab === 'dash' && stats ? (
         <>
-          <div className="uz-banners">
+          <section className="zf-hero">
+            <p className="zf-hero-label">Bugungi savdo</p>
+            <p className="zf-hero-value">{money(stats.daily.revenue)}</p>
+            <div className="zf-hero-meta">
+              <button
+                type="button"
+                className="zf-pill accent"
+                onClick={() => {
+                  setOrderStatus('new')
+                  setTab('orders')
+                }}
+              >
+                {stats.stats.new_orders} yangi
+              </button>
+              <button
+                type="button"
+                className="zf-pill"
+                onClick={() => setTab('payments')}
+              >
+                {stats.payments_waiting} to‘lov
+              </button>
+              <button
+                type="button"
+                className="zf-pill"
+                onClick={() => setTab('warehouse')}
+              >
+                {stats.daily.orders_count} buyurtma
+              </button>
+            </div>
+          </section>
+
+          <div className="zf-accounts">
             <button
               type="button"
-              className="uz-banner b1"
+              className="zf-account hot"
               onClick={() => {
                 setOrderStatus('new')
                 setTab('orders')
               }}
             >
-              <strong>{stats.stats.new_orders} ta yangi buyurtma</strong>
-              <span>Darhol ko‘rib chiqing</span>
+              <span className="lab">Yangi buyurtma</span>
+              <span className="num">{stats.stats.new_orders}</span>
+              <span className="hint">Ko‘rib chiqish</span>
             </button>
             <button
               type="button"
-              className="uz-banner b2"
+              className="zf-account warn"
               onClick={() => setTab('payments')}
             >
-              <strong>{stats.payments_waiting} ta to‘lov kutmoqda</strong>
-              <span>Kartani tasdiqlang</span>
+              <span className="lab">Karta kutmoqda</span>
+              <span className="num">{stats.payments_waiting}</span>
+              <span className="hint">{money(stats.daily.waiting_sum)}</span>
             </button>
             <button
               type="button"
-              className="uz-banner b3"
-              onClick={() => {
-                setLowOnly(true)
-                setTab('warehouse')
-              }}
-            >
-              <strong>{stats.warehouse.low_stock} ta kam qoldiq</strong>
-              <span>Omborni to‘ldiring</span>
-            </button>
-          </div>
-
-          <div className="uz-balance">
-            <div>
-              <p className="uz-balance-label">Bugungi savdo</p>
-              <p className="uz-balance-value">{money(stats.daily.revenue)}</p>
-              <p className="muted-sm">
-                {stats.daily.orders_count} buyurtma
-                {lastSync ? ` · ${lastSync}` : ''}
-              </p>
-            </div>
-            <button
-              type="button"
-              className="uz-help"
-              onClick={() => {
-                setMorePanel('broadcast')
-                setTab('more')
-              }}
-            >
-              Yordam ?
-            </button>
-          </div>
-
-          <div className="uz-quick">
-            <button
-              type="button"
+              className="zf-account ok"
               onClick={() => {
                 setOrderStatus('active')
                 setTab('orders')
               }}
             >
-              <span className="uz-quick-ico blue">📦</span>
-              <span>Buyurtmalar</span>
-            </button>
-            <button type="button" onClick={() => setTab('payments')}>
-              <span className="uz-quick-ico red">💳</span>
-              <span>To‘lovlar</span>
-            </button>
-            <button type="button" onClick={() => setTab('warehouse')}>
-              <span className="uz-quick-ico green">🏭</span>
-              <span>Ombor</span>
-            </button>
-          </div>
-
-          <div className="uz-features">
-            <button
-              type="button"
-              className="uz-feat light"
-              onClick={() => setTab('products')}
-            >
-              <strong>Tovarlar va narxlar</strong>
-              <em>{stats.warehouse.products} mahsulot</em>
-              <div className="uz-stack">
-                <span className="uz-mini-card c1" />
-                <span className="uz-mini-card c2" />
-                <span className="uz-mini-card c3" />
-              </div>
+              <span className="lab">Faol</span>
+              <span className="num">{stats.stats.active_orders}</span>
+              <span className="hint">Yo‘ldagi buyurtmalar</span>
             </button>
             <button
               type="button"
-              className="uz-feat hot"
+              className="zf-account"
               onClick={() => {
-                setMorePanel('broadcast')
-                setTab('more')
+                setLowOnly(true)
+                setTab('warehouse')
               }}
             >
-              <strong>Xabar yuborish</strong>
-              <em>Barcha mijozlarga</em>
-              <span className="uz-feat-ico" aria-hidden>
-                📣
+              <span className="lab">Kam qoldiq</span>
+              <span className="num">{stats.warehouse.low_stock}</span>
+              <span className="hint">
+                {stats.warehouse.units.toLocaleString()} dona
               </span>
             </button>
           </div>
 
-          <div className="uz-serv-head">
-            <h2>Barcha xizmatlar bir joyda</h2>
-            <button type="button" className="uz-link" onClick={() => setMenuOpen(true)}>
-              ›
-            </button>
-          </div>
-          <div className="uz-services">
+          <div className="zf-actions">
             <button
               type="button"
-              className="uz-svc"
+              className="zf-act"
+              onClick={() => setTab('orders')}
+            >
+              <span className="zf-act-ico">📦</span>
+              <span>Buyurtma</span>
+            </button>
+            <button
+              type="button"
+              className="zf-act"
+              onClick={() => setTab('payments')}
+            >
+              <span className="zf-act-ico">💳</span>
+              <span>To‘lov</span>
+            </button>
+            <button
+              type="button"
+              className="zf-act"
+              onClick={() => setTab('warehouse')}
+            >
+              <span className="zf-act-ico">🏭</span>
+              <span>Ombor</span>
+            </button>
+            <button
+              type="button"
+              className="zf-act"
+              onClick={() => setTab('products')}
+            >
+              <span className="zf-act-ico">🏷</span>
+              <span>Tovar</span>
+            </button>
+          </div>
+
+          <div className="zf-sec-h">
+            <h2>Xizmatlar</h2>
+            <button
+              type="button"
+              className="zf-link"
+              onClick={() => setMenuOpen(true)}
+            >
+              Barchasi
+            </button>
+          </div>
+          <div className="zf-services">
+            <button
+              type="button"
+              className="zf-svc"
               onClick={() => {
                 setOrderStatus('new')
                 setTab('orders')
               }}
             >
               {stats.stats.new_orders > 0 ? (
-                <span className="uz-badge hot">HOT</span>
+                <span className="zf-dot-badge">{stats.stats.new_orders}</span>
               ) : null}
-              <span className="uz-svc-ico red">🆕</span>
-              <strong>Yangi buyurtmalar</strong>
+              <span className="zf-svc-ico red">🆕</span>
+              <strong>Yangi</strong>
             </button>
             <button
               type="button"
-              className="uz-svc"
+              className="zf-svc"
               onClick={() => setTab('payments')}
             >
               {stats.payments_waiting > 0 ? (
-                <span className="uz-badge warn">!</span>
+                <span className="zf-dot-badge">{stats.payments_waiting}</span>
               ) : null}
-              <span className="uz-svc-ico blue">💳</span>
-              <strong>Karta to‘lovlari</strong>
+              <span className="zf-svc-ico blue">💳</span>
+              <strong>Karta</strong>
             </button>
             <button
               type="button"
-              className="uz-svc"
+              className="zf-svc"
               onClick={() => setTab('warehouse')}
             >
-              <span className="uz-svc-ico green">📦</span>
-              <strong>Ombor kirim</strong>
+              <span className="zf-svc-ico green">📥</span>
+              <strong>Kirim</strong>
             </button>
             <button
               type="button"
-              className="uz-svc"
+              className="zf-svc"
               onClick={() => setTab('products')}
             >
-              <span className="uz-svc-ico amber">🏷</span>
-              <strong>Narxlarni yangilash</strong>
+              <span className="zf-svc-ico amber">💰</span>
+              <strong>Narx</strong>
             </button>
             <button
               type="button"
-              className="uz-svc"
+              className="zf-svc"
+              onClick={() => {
+                setMorePanel('broadcast')
+                setTab('more')
+              }}
+            >
+              <span className="zf-svc-ico blue">📣</span>
+              <strong>Xabar</strong>
+            </button>
+            <button
+              type="button"
+              className="zf-svc"
               onClick={() => {
                 setMorePanel('contacts')
                 setTab('more')
               }}
             >
-              <span className="uz-badge new">NEW</span>
-              <span className="uz-svc-ico violet">👤</span>
-              <strong>Kontaktlar</strong>
+              <span className="zf-svc-ico green">👤</span>
+              <strong>Kontakt</strong>
             </button>
             <button
               type="button"
-              className="uz-svc"
+              className="zf-svc"
               onClick={() => {
                 setMorePanel('csv')
                 setTab('more')
               }}
             >
-              <span className="uz-svc-ico blue">📄</span>
-              <strong>CSV import</strong>
+              <span className="zf-svc-ico amber">📄</span>
+              <strong>CSV</strong>
+            </button>
+            <button
+              type="button"
+              className="zf-svc"
+              onClick={() => {
+                setMorePanel('moves')
+                setTab('more')
+              }}
+            >
+              <span className="zf-svc-ico red">📋</span>
+              <strong>Jurnal</strong>
             </button>
           </div>
 
           {stats.daily.top?.length ? (
-            <section className="section" style={{ marginTop: 16 }}>
-              <h2>Bugungi top</h2>
+            <section className="section">
+              <div className="zf-sec-h">
+                <h2>Bugungi operatsiyalar</h2>
+              </div>
               <div className="list">
                 {stats.daily.top.map((t) => (
-                  <div key={t.product_name} className="item row-between">
-                    <h3>{t.product_name}</h3>
-                    <span className="mono">{t.qty} dona</span>
+                  <div key={t.product_name} className="tx">
+                    <div className="tx-head" style={{ cursor: 'default' }}>
+                      <div className="tx-left">
+                        <span className="tx-ico">🛒</span>
+                        <div>
+                          <h3 className="tx-title">{t.product_name}</h3>
+                          <p className="tx-sub">Top mahsulot</p>
+                        </div>
+                      </div>
+                      <div className="tx-right">
+                        <div className="tx-amount plus">+{t.qty}</div>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
             </section>
           ) : null}
+
+          <section className="section" style={{ marginTop: 14 }}>
+            <div className="grid">
+              <div className="card">
+                <div className="label">To‘langan</div>
+                <div className="value accent">{money(stats.daily.paid_sum)}</div>
+              </div>
+              <div className="card">
+                <div className="label">Ombor birlik</div>
+                <div className="value">
+                  {stats.warehouse.units.toLocaleString()}
+                </div>
+                <p className="muted-sm">
+                  +{stats.warehouse.today_in} / −{stats.warehouse.today_out}
+                </p>
+              </div>
+            </div>
+          </section>
         </>
       ) : null}
 
@@ -1422,14 +1496,14 @@ export default function App() {
             <div className="menu-grid">
               {(
                 [
-                  ['dash', '🏠', 'Asosiy', 'blue'],
-                  ['orders', '📦', 'Buyurtma', 'red'],
-                  ['payments', '💳', 'To‘lov', 'amber'],
-                  ['warehouse', '🏭', 'Ombor', 'green'],
-                  ['products', '🛍', 'Tovar', 'violet'],
-                  ['more', '⋯', 'Ko‘proq', 'blue'],
+                  ['dash', '🏠', 'Asosiy'],
+                  ['orders', '📦', 'Buyurtma'],
+                  ['payments', '💳', 'To‘lov'],
+                  ['warehouse', '🏭', 'Ombor'],
+                  ['products', '🛍', 'Tovar'],
+                  ['more', '⋯', 'Ko‘proq'],
                 ] as const
-              ).map(([id, ico, label, tone]) => (
+              ).map(([id, ico, label]) => (
                 <button
                   key={id}
                   type="button"
@@ -1439,7 +1513,7 @@ export default function App() {
                     setMenuOpen(false)
                   }}
                 >
-                  <span className={`mi uz-svc-ico ${tone}`}>{ico}</span>
+                  <span className="mi">{ico}</span>
                   <span>{label}</span>
                 </button>
               ))}
@@ -1453,7 +1527,7 @@ export default function App() {
                   setMenuOpen(false)
                 }}
               >
-                <span className="mi uz-svc-ico red">⎋</span>
+                <span className="mi">⎋</span>
                 <span>Chiqish</span>
               </button>
             </div>
