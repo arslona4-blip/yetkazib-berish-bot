@@ -18,16 +18,25 @@ from bot.config import (
 )
 from bot.database import (
     add_bonus,
+    add_debt_entry,
     adjust_product_stock,
+    calc_promo_discount,
     consume_admin_login_code,
     create_admin_session,
+    create_category,
     create_contact,
+    create_order,
+    create_product,
+    debt_totals,
+    decrease_stock_for_order_items,
     delete_order,
     export_products_csv,
     format_order,
     get_admin_id_by_session,
     get_all_user_ids,
+    get_categories,
     get_contact,
+    get_contact_balance,
     get_daily_report,
     get_inventory_categories,
     get_inventory_products,
@@ -35,22 +44,32 @@ from bot.database import (
     get_order_items,
     get_orders_by_payment,
     get_orders_by_status,
+    get_product_by_barcode,
     get_product_by_id,
     get_products,
+    get_promo_any,
     get_queue_orders,
+    get_range_report,
     get_stats,
     get_stock_movements,
     get_warehouse_summary,
     import_products_csv,
     list_contacts,
+    list_debt_ledger,
+    list_promos,
+    mark_order_as_debt,
     revoke_admin_session,
+    save_order_items_direct,
     search_orders,
     set_product_active,
     set_product_stock,
+    set_promo_active,
     update_contact,
     update_payment_status,
+    update_product_fields,
     update_product_price,
     update_order_status,
+    upsert_promo,
 )
 
 logger = logging.getLogger(__name__)
@@ -193,6 +212,12 @@ def _product_dict(row) -> dict[str, Any]:
             else "Toifasiz"
         ),
         "is_active": bool(row["is_active"]),
+        "barcode": (row["barcode"] if "barcode" in keys and row["barcode"] else "")
+        or "",
+        "description": (
+            row["description"] if "description" in keys and row["description"] else ""
+        )
+        or "",
     }
 
 
@@ -214,6 +239,29 @@ def _daily_payload(report: dict[str, Any]) -> dict[str, Any]:
         "waiting_count": report.get("waiting_count", 0),
         "waiting_sum": report.get("waiting_sum", 0),
         "top": top,
+    }
+
+
+def _promo_dict(row) -> dict[str, Any]:
+    return {
+        "code": row["code"],
+        "discount_percent": int(row["discount_percent"] or 0),
+        "discount_amount": int(row["discount_amount"] or 0),
+        "min_order": int(row["min_order"] or 0),
+        "is_active": bool(row["is_active"]),
+    }
+
+
+def _debt_entry_dict(row) -> dict[str, Any]:
+    return {
+        "id": int(row["id"]),
+        "contact_id": int(row["contact_id"]),
+        "kind": row["kind"],
+        "amount": int(row["amount"] or 0),
+        "order_id": int(row["order_id"]) if row["order_id"] else None,
+        "note": row["note"] or "",
+        "created_by": int(row["created_by"]) if row["created_by"] else None,
+        "created_at": row["created_at"] or "",
     }
 
 
@@ -528,19 +576,452 @@ async def admin_product_patch(request: web.Request) -> web.Response:
         body = await request.json()
     except Exception as exc:
         raise web.HTTPBadRequest(text="JSON noto'g'ri") from exc
-    if "price" in body:
-        try:
+    try:
+        kwargs: dict[str, Any] = {}
+        if "name" in body:
+            kwargs["name"] = str(body["name"]).strip()
+        if "price" in body:
             price = int(body["price"])
-        except (TypeError, ValueError) as exc:
-            raise web.HTTPBadRequest(text="price noto'g'ri") from exc
-        if price < 0:
-            raise web.HTTPBadRequest(text="price musbat bo'lsin")
-        update_product_price(product_id, price)
-    if "is_active" in body:
-        set_product_active(product_id, bool(body["is_active"]))
+            if price < 0:
+                raise web.HTTPBadRequest(text="price musbat bo'lsin")
+            kwargs["price"] = price
+            update_product_price(product_id, price)
+        if "description" in body:
+            kwargs["description"] = str(body["description"] or "")
+        if "category_id" in body:
+            kwargs["category_id"] = body["category_id"]
+        if "barcode" in body:
+            kwargs["barcode"] = body["barcode"]
+        # price already updated above if present; avoid double via fields helper
+        fields = {k: v for k, v in kwargs.items() if k != "price"}
+        if fields:
+            update_product_fields(product_id, **fields)
+        if "is_active" in body:
+            set_product_active(product_id, bool(body["is_active"]))
+        if "stock" in body:
+            set_product_stock(
+                product_id,
+                int(body["stock"]),
+                reason="inventory",
+                note="Admin panel",
+                admin_id=admin_id,
+            )
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text=str(exc)) from exc
+    except web.HTTPBadRequest:
+        raise
+    except (TypeError, ValueError) as exc:
+        raise web.HTTPBadRequest(text=str(exc)) from exc
     product = get_product_by_id(product_id)
     logger.info("Admin %s patched product #%s", admin_id, product_id)
     return web.json_response({"ok": True, "product": _product_dict(product)})
+
+
+async def admin_product_create(request: web.Request) -> web.Response:
+    admin_id = _require_admin(request)
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise web.HTTPBadRequest(text="JSON noto'g'ri") from exc
+    name = str(body.get("name") or "").strip()
+    if not name:
+        raise web.HTTPBadRequest(text="Nom kerak")
+    try:
+        price = int(body.get("price") or 0)
+    except (TypeError, ValueError) as exc:
+        raise web.HTTPBadRequest(text="price noto'g'ri") from exc
+    if price < 0:
+        raise web.HTTPBadRequest(text="price musbat bo'lsin")
+    cat_raw = body.get("category_id")
+    category_id = None
+    if cat_raw not in (None, "", 0, "0"):
+        try:
+            category_id = int(cat_raw)
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(text="category_id noto'g'ri") from exc
+    barcode = str(body.get("barcode") or "").strip() or None
+    description = str(body.get("description") or "").strip()
+    if barcode:
+        existing = get_product_by_barcode(barcode)
+        if existing:
+            raise web.HTTPBadRequest(
+                text=f"Barkod band: #{existing['id']} {existing['name']}"
+            )
+    pid = create_product(
+        name=name,
+        price=price,
+        description=description,
+        category_id=category_id,
+        barcode=barcode,
+    )
+    stock_raw = body.get("stock")
+    if stock_raw is not None and str(stock_raw).strip() != "":
+        try:
+            stock = int(stock_raw)
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(text="stock noto'g'ri") from exc
+        set_product_stock(
+            pid, stock, reason="in", note="Yangi mahsulot", admin_id=admin_id
+        )
+    product = get_product_by_id(pid)
+    logger.info("Admin %s created product #%s", admin_id, pid)
+    return web.json_response({"ok": True, "product": _product_dict(product)})
+
+
+async def admin_product_by_barcode(request: web.Request) -> web.Response:
+    _require_admin(request)
+    code = (request.match_info.get("code") or "").strip()
+    if not code:
+        raise web.HTTPBadRequest(text="Barkod kerak")
+    product = get_product_by_barcode(code)
+    if not product:
+        raise web.HTTPNotFound(text="Mahsulot topilmadi")
+    return web.json_response({"ok": True, "product": _product_dict(product)})
+
+
+async def admin_categories_list(request: web.Request) -> web.Response:
+    _require_admin(request)
+    cats = get_categories(active_only=False)
+    return web.json_response(
+        {
+            "ok": True,
+            "categories": [
+                {
+                    "id": int(c["id"]),
+                    "name": c["name"],
+                    "is_active": bool(c["is_active"]),
+                }
+                for c in cats
+            ],
+        }
+    )
+
+
+async def admin_categories_create(request: web.Request) -> web.Response:
+    admin_id = _require_admin(request)
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise web.HTTPBadRequest(text="JSON noto'g'ri") from exc
+    name = str(body.get("name") or "").strip()
+    if not name:
+        raise web.HTTPBadRequest(text="Nom kerak")
+    cid = create_category(name)
+    logger.info("Admin %s created category #%s", admin_id, cid)
+    return web.json_response({"ok": True, "id": cid, "name": name})
+
+
+async def admin_pos_sale(request: web.Request) -> web.Response:
+    """Zifra kassa: do'kondagi sotuv (naqd / karta / qarz)."""
+    admin_id = _require_admin(request)
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise web.HTTPBadRequest(text="JSON noto'g'ri") from exc
+    raw_items = body.get("items") or []
+    if not isinstance(raw_items, list) or not raw_items:
+        raise web.HTTPBadRequest(text="items kerak")
+    payment = str(body.get("payment") or "cash").strip().lower()
+    if payment not in {"cash", "card", "debt"}:
+        raise web.HTTPBadRequest(text="payment: cash|card|debt")
+    phone = str(body.get("phone") or "").strip() or "—"
+    customer = str(body.get("customer_name") or "").strip() or "Kassa mijoz"
+    note = str(body.get("note") or "").strip()
+    promo_code = str(body.get("promo_code") or "").strip()
+    contact_id = body.get("contact_id")
+    cid: int | None = None
+    if contact_id not in (None, "", 0, "0"):
+        try:
+            cid = int(contact_id)
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(text="contact_id noto'g'ri") from exc
+        if not get_contact(cid):
+            raise web.HTTPNotFound(text="Kontakt topilmadi")
+
+    lines: list[dict[str, Any]] = []
+    subtotal = 0
+    for it in raw_items:
+        try:
+            pid = int(it.get("product_id"))
+            qty = int(it.get("quantity") or 1)
+        except (TypeError, ValueError, AttributeError) as exc:
+            raise web.HTTPBadRequest(text="items format noto'g'ri") from exc
+        if qty <= 0:
+            raise web.HTTPBadRequest(text="quantity > 0 bo'lsin")
+        product = get_product_by_id(pid)
+        if not product or not product["is_active"]:
+            raise web.HTTPBadRequest(text=f"Mahsulot #{pid} topilmadi")
+        stock = int(product["stock"] or 0) if "stock" in product.keys() else 0
+        if stock < qty:
+            raise web.HTTPBadRequest(
+                text=f"{product['name']}: omborda faqat {stock} dona"
+            )
+        price = int(product["price"] or 0)
+        lines.append(
+            {
+                "product_id": pid,
+                "name": product["name"],
+                "price": price,
+                "quantity": qty,
+            }
+        )
+        subtotal += price * qty
+
+    discount = 0
+    promo_used = ""
+    if promo_code:
+        discount, msg = calc_promo_discount(promo_code, subtotal)
+        if msg != "OK":
+            raise web.HTTPBadRequest(text=msg)
+        promo_used = promo_code.upper()
+    total = max(0, subtotal - discount)
+
+    desc_parts = [f"Kassa sotuvi · {customer}"]
+    if note:
+        desc_parts.append(note)
+    order_id = create_order(
+        user_id=admin_id,
+        pickup_address="Do'kon / Kassa",
+        delivery_address="O'zi olib ketdi",
+        description=" · ".join(desc_parts),
+        phone=phone,
+        price=total,
+        promo_code=promo_used,
+        discount=discount,
+        subtotal=subtotal,
+    )
+    save_order_items_direct(order_id, lines)
+    decrease_stock_for_order_items(order_id, lines)
+    update_order_status(order_id, "delivered")
+
+    debt_balance = None
+    if payment == "debt":
+        if cid is None:
+            # Avtomatik kontakt
+            cid = create_contact(
+                name=customer,
+                phone=None if phone == "—" else phone,
+                note="Kassa qarz",
+            )
+        mark_order_as_debt(order_id, created_by=admin_id, contact_id=cid)
+        debt_balance = get_contact_balance(cid)
+    elif payment == "card":
+        update_payment_status(order_id, "paid")
+    else:
+        update_payment_status(order_id, "cash")
+
+    order = get_order(order_id)
+    logger.info(
+        "Admin %s POS sale #%s payment=%s total=%s",
+        admin_id,
+        order_id,
+        payment,
+        total,
+    )
+    return web.json_response(
+        {
+            "ok": True,
+            "order": _order_dict(order),
+            "items": [_item_dict(i) for i in get_order_items(order_id)],
+            "subtotal": subtotal,
+            "discount": discount,
+            "total": total,
+            "payment": payment,
+            "contact_id": cid,
+            "debt_balance": debt_balance,
+        }
+    )
+
+
+async def admin_debts_totals(request: web.Request) -> web.Response:
+    _require_admin(request)
+    return web.json_response({"ok": True, **debt_totals()})
+
+
+async def admin_debts_list(request: web.Request) -> web.Response:
+    _require_admin(request)
+    debtors = list_contacts(debtors_only=True)
+    return web.json_response(
+        {
+            "ok": True,
+            "totals": debt_totals(),
+            "debtors": [_contact_dict(c) for c in debtors],
+        }
+    )
+
+
+async def admin_debt_ledger(request: web.Request) -> web.Response:
+    _require_admin(request)
+    try:
+        contact_id = int(request.match_info["contact_id"])
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text="contact_id noto'g'ri") from exc
+    contact = get_contact(contact_id)
+    if not contact:
+        raise web.HTTPNotFound(text="Kontakt topilmadi")
+    entries = list_debt_ledger(contact_id, limit=100)
+    bal = get_contact_balance(contact_id)
+    return web.json_response(
+        {
+            "ok": True,
+            "contact": {
+                "id": int(contact["id"]),
+                "name": contact["name"] or "",
+                "phone": contact["phone"] or "",
+                "note": contact["note"] or "",
+                "balance": bal,
+            },
+            "balance": bal,
+            "entries": [_debt_entry_dict(e) for e in entries],
+        }
+    )
+
+
+async def admin_debt_add(request: web.Request) -> web.Response:
+    admin_id = _require_admin(request)
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise web.HTTPBadRequest(text="JSON noto'g'ri") from exc
+    try:
+        contact_id = int(body.get("contact_id"))
+        amount = int(body.get("amount"))
+    except (TypeError, ValueError) as exc:
+        raise web.HTTPBadRequest(text="contact_id/amount noto'g'ri") from exc
+    kind = str(body.get("kind") or "debt").strip().lower()
+    note = str(body.get("note") or "").strip()
+    if not get_contact(contact_id):
+        raise web.HTTPNotFound(text="Kontakt topilmadi")
+    try:
+        entry_id = add_debt_entry(
+            contact_id,
+            amount,
+            kind=kind,
+            note=note,
+            created_by=admin_id,
+        )
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text=str(exc)) from exc
+    bal = get_contact_balance(contact_id)
+    logger.info(
+        "Admin %s debt %s contact=%s amount=%s",
+        admin_id,
+        kind,
+        contact_id,
+        amount,
+    )
+    return web.json_response(
+        {"ok": True, "id": entry_id, "balance": bal, "kind": kind, "amount": amount}
+    )
+
+
+async def admin_order_debt(request: web.Request) -> web.Response:
+    admin_id = _require_admin(request)
+    try:
+        order_id = int(request.match_info["order_id"])
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text="order_id noto'g'ri") from exc
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    contact_id = body.get("contact_id") if isinstance(body, dict) else None
+    cid = int(contact_id) if contact_id not in (None, "", 0, "0") else None
+    try:
+        resolved_cid, balance = mark_order_as_debt(
+            order_id, created_by=admin_id, contact_id=cid
+        )
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text=str(exc)) from exc
+    order = get_order(order_id)
+    return web.json_response(
+        {
+            "ok": True,
+            "order": _order_dict(order),
+            "contact_id": resolved_cid,
+            "balance": balance,
+        }
+    )
+
+
+async def admin_promos_list(request: web.Request) -> web.Response:
+    _require_admin(request)
+    return web.json_response(
+        {"ok": True, "promos": [_promo_dict(p) for p in list_promos()]}
+    )
+
+
+async def admin_promos_upsert(request: web.Request) -> web.Response:
+    admin_id = _require_admin(request)
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise web.HTTPBadRequest(text="JSON noto'g'ri") from exc
+    code = str(body.get("code") or "").strip()
+    try:
+        code_out = upsert_promo(
+            code,
+            discount_percent=int(body.get("discount_percent") or 0),
+            discount_amount=int(body.get("discount_amount") or 0),
+            min_order=int(body.get("min_order") or 0),
+            is_active=bool(body.get("is_active", True)),
+        )
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text=str(exc)) from exc
+    promo = get_promo_any(code_out)
+    logger.info("Admin %s upsert promo %s", admin_id, code_out)
+    return web.json_response({"ok": True, "promo": _promo_dict(promo)})
+
+
+async def admin_promos_patch(request: web.Request) -> web.Response:
+    admin_id = _require_admin(request)
+    code = (request.match_info.get("code") or "").strip()
+    promo = get_promo_any(code)
+    if not promo:
+        raise web.HTTPNotFound(text="Promo topilmadi")
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise web.HTTPBadRequest(text="JSON noto'g'ri") from exc
+    if "is_active" in body and len(body) == 1:
+        set_promo_active(code, bool(body["is_active"]))
+    else:
+        upsert_promo(
+            code,
+            discount_percent=int(
+                body.get("discount_percent", promo["discount_percent"]) or 0
+            ),
+            discount_amount=int(
+                body.get("discount_amount", promo["discount_amount"]) or 0
+            ),
+            min_order=int(body.get("min_order", promo["min_order"]) or 0),
+            is_active=bool(body.get("is_active", promo["is_active"])),
+        )
+    promo = get_promo_any(code)
+    logger.info("Admin %s patched promo %s", admin_id, code)
+    return web.json_response({"ok": True, "promo": _promo_dict(promo)})
+
+
+async def admin_reports(request: web.Request) -> web.Response:
+    _require_admin(request)
+    from bot.timeutil import now_tashkent
+
+    today = now_tashkent().strftime("%Y-%m-%d")
+    date_from = (request.rel_url.query.get("from") or today).strip()
+    date_to = (request.rel_url.query.get("to") or today).strip()
+    try:
+        report = get_range_report(date_from, date_to)
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text=str(exc)) from exc
+    debts = debt_totals()
+    return web.json_response(
+        {
+            "ok": True,
+            "report": report,
+            "debts": debts,
+            "warehouse": get_warehouse_summary(),
+        }
+    )
 
 
 def _contact_dict(c: dict[str, Any]) -> dict[str, Any]:
@@ -550,6 +1031,7 @@ def _contact_dict(c: dict[str, Any]) -> dict[str, Any]:
         "phone": c.get("phone") or "",
         "note": c.get("note") or "",
         "telegram_user_id": c.get("telegram_user_id"),
+        "balance": int(c.get("balance") or 0),
         "created_at": c.get("created_at") or "",
         "updated_at": c.get("updated_at") or "",
     }
@@ -627,7 +1109,8 @@ async def admin_products_import(request: web.Request) -> web.Response:
 
 async def admin_contacts_list(request: web.Request) -> web.Response:
     _require_admin(request)
-    contacts = [_contact_dict(c) for c in list_contacts()]
+    debtors_only = request.rel_url.query.get("debtors") == "1"
+    contacts = [_contact_dict(c) for c in list_contacts(debtors_only=debtors_only)]
     return web.json_response({"ok": True, "contacts": contacts})
 
 
@@ -651,6 +1134,7 @@ async def admin_contacts_create(request: web.Request) -> web.Response:
         "phone": (contact["phone"] if contact else phone) or "",
         "note": (contact["note"] if contact else note) or "",
         "telegram_user_id": contact["telegram_user_id"] if contact else None,
+        "balance": get_contact_balance(cid),
         "created_at": contact["created_at"] if contact else "",
         "updated_at": contact["updated_at"] if contact else "",
     }
@@ -687,6 +1171,7 @@ async def admin_contacts_update(request: web.Request) -> web.Response:
                 "phone": contact["phone"] or "",
                 "note": contact["note"] or "",
                 "telegram_user_id": contact["telegram_user_id"],
+                "balance": get_contact_balance(contact_id),
                 "created_at": contact["created_at"] or "",
                 "updated_at": contact["updated_at"] or "",
             },
@@ -703,15 +1188,29 @@ def register_admin_routes(app: web.Application) -> None:
     app.router.add_get("/api/admin/orders/{order_id}", admin_order_detail)
     app.router.add_post("/api/admin/orders/{order_id}/status", admin_order_status)
     app.router.add_post("/api/admin/orders/{order_id}/payment", admin_order_payment)
+    app.router.add_post("/api/admin/orders/{order_id}/debt", admin_order_debt)
     app.router.add_delete("/api/admin/orders/{order_id}", admin_order_delete)
+    app.router.add_post("/api/admin/pos/sale", admin_pos_sale)
+    app.router.add_get("/api/admin/debts", admin_debts_list)
+    app.router.add_get("/api/admin/debts/totals", admin_debts_totals)
+    app.router.add_get("/api/admin/debts/{contact_id}", admin_debt_ledger)
+    app.router.add_post("/api/admin/debts", admin_debt_add)
+    app.router.add_get("/api/admin/promos", admin_promos_list)
+    app.router.add_post("/api/admin/promos", admin_promos_upsert)
+    app.router.add_patch("/api/admin/promos/{code}", admin_promos_patch)
+    app.router.add_get("/api/admin/reports", admin_reports)
+    app.router.add_get("/api/admin/categories", admin_categories_list)
+    app.router.add_post("/api/admin/categories", admin_categories_create)
     app.router.add_get("/api/admin/warehouse/summary", admin_warehouse_summary)
     app.router.add_get("/api/admin/warehouse/categories", admin_warehouse_categories)
     app.router.add_get("/api/admin/warehouse/products", admin_warehouse_products)
     app.router.add_get("/api/admin/warehouse/movements", admin_warehouse_movements)
     app.router.add_post("/api/admin/warehouse/stock", admin_warehouse_stock)
     app.router.add_get("/api/admin/products", admin_products)
+    app.router.add_post("/api/admin/products", admin_product_create)
     app.router.add_get("/api/admin/products/export", admin_products_export)
     app.router.add_post("/api/admin/products/import", admin_products_import)
+    app.router.add_get("/api/admin/products/barcode/{code}", admin_product_by_barcode)
     app.router.add_patch("/api/admin/products/{product_id}", admin_product_patch)
     app.router.add_post("/api/admin/broadcast", admin_broadcast)
     app.router.add_get("/api/admin/contacts", admin_contacts_list)

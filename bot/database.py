@@ -1295,6 +1295,93 @@ def get_promo(code: str) -> sqlite3.Row | None:
     return row
 
 
+def get_promo_any(code: str) -> sqlite3.Row | None:
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT * FROM promo_codes
+            WHERE UPPER(code) = UPPER(?)
+            """,
+            (code.strip(),),
+        ).fetchone()
+    return row
+
+
+def list_promos(active_only: bool = False) -> list[sqlite3.Row]:
+    with get_connection() as conn:
+        if active_only:
+            rows = conn.execute(
+                """
+                SELECT * FROM promo_codes
+                WHERE is_active = 1
+                ORDER BY code COLLATE NOCASE
+                """
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM promo_codes ORDER BY code COLLATE NOCASE"
+            ).fetchall()
+    return list(rows)
+
+
+def upsert_promo(
+    code: str,
+    *,
+    discount_percent: int = 0,
+    discount_amount: int = 0,
+    min_order: int = 0,
+    is_active: bool = True,
+) -> str:
+    code_norm = (code or "").strip().upper()
+    if not code_norm:
+        raise ValueError("Promo kod kerak")
+    with get_connection() as conn:
+        existing = conn.execute(
+            "SELECT code FROM promo_codes WHERE UPPER(code) = ?",
+            (code_norm,),
+        ).fetchone()
+        if existing:
+            conn.execute(
+                """
+                UPDATE promo_codes
+                SET discount_percent = ?, discount_amount = ?,
+                    min_order = ?, is_active = ?
+                WHERE UPPER(code) = ?
+                """,
+                (
+                    int(discount_percent or 0),
+                    int(discount_amount or 0),
+                    int(min_order or 0),
+                    1 if is_active else 0,
+                    code_norm,
+                ),
+            )
+            return str(existing["code"])
+        conn.execute(
+            """
+            INSERT INTO promo_codes
+                (code, discount_percent, discount_amount, min_order, is_active)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                code_norm,
+                int(discount_percent or 0),
+                int(discount_amount or 0),
+                int(min_order or 0),
+                1 if is_active else 0,
+            ),
+        )
+    return code_norm
+
+
+def set_promo_active(code: str, is_active: bool) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE promo_codes SET is_active = ? WHERE UPPER(code) = UPPER(?)",
+            (1 if is_active else 0, code.strip()),
+        )
+
+
 def calc_promo_discount(code: str, subtotal: int) -> tuple[int, str]:
     promo = get_promo(code)
     if not promo:
@@ -1304,6 +1391,181 @@ def calc_promo_discount(code: str, subtotal: int) -> tuple[int, str]:
     if promo["discount_percent"]:
         return int(subtotal * promo["discount_percent"] / 100), "OK"
     return int(promo["discount_amount"]), "OK"
+
+
+def update_product_fields(
+    product_id: int,
+    *,
+    name: str | None = None,
+    price: int | None = None,
+    description: str | None = None,
+    category_id: int | None | object = ...,
+    barcode: str | None | object = ...,
+) -> None:
+    """Mahsulot maydonlarini yangilaydi. category_id/barcode uchun ... = o'zgartirmaslik."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT id FROM products WHERE id = ?", (product_id,)
+        ).fetchone()
+        if not row:
+            raise ValueError("Mahsulot topilmadi")
+        if name is not None:
+            conn.execute(
+                "UPDATE products SET name = ? WHERE id = ?",
+                (name.strip(), product_id),
+            )
+        if price is not None:
+            conn.execute(
+                "UPDATE products SET price = ? WHERE id = ?",
+                (int(price), product_id),
+            )
+        if description is not None:
+            conn.execute(
+                "UPDATE products SET description = ? WHERE id = ?",
+                (description, product_id),
+            )
+        if category_id is not ...:
+            cid = None if category_id in (None, 0, "") else int(category_id)  # type: ignore[arg-type]
+            conn.execute(
+                "UPDATE products SET category_id = ? WHERE id = ?",
+                (cid, product_id),
+            )
+        if barcode is not ...:
+            code = (str(barcode).strip() if barcode is not None else "") or None
+            if code in {"0", "-", "none", "yo'q", "yoq"}:
+                code = None
+            if code:
+                other = conn.execute(
+                    "SELECT id, name FROM products WHERE barcode = ? AND id != ?",
+                    (code, product_id),
+                ).fetchone()
+                if other:
+                    raise ValueError(
+                        f"Kod boshqa mahsulotda: #{other['id']} {other['name']}"
+                    )
+            conn.execute(
+                "UPDATE products SET barcode = ? WHERE id = ?",
+                (code, product_id),
+            )
+
+
+def get_range_report(date_from: str, date_to: str) -> dict[str, Any]:
+    """Sana oralig'i bo'yicha savdo hisoboti (YYYY-MM-DD)."""
+    d0 = (date_from or "").strip()[:10]
+    d1 = (date_to or "").strip()[:10]
+    if not d0 or not d1:
+        raise ValueError("date_from va date_to kerak (YYYY-MM-DD)")
+    with get_connection() as conn:
+        orders = conn.execute(
+            """
+            SELECT COUNT(*) AS cnt, COALESCE(SUM(price), 0) AS total
+            FROM orders
+            WHERE date(created_at) BETWEEN date(?) AND date(?)
+              AND status != 'cancelled'
+            """,
+            (d0, d1),
+        ).fetchone()
+        paid = conn.execute(
+            """
+            SELECT COUNT(*) AS cnt, COALESCE(SUM(price), 0) AS total
+            FROM orders
+            WHERE date(created_at) BETWEEN date(?) AND date(?)
+              AND payment_status IN ('paid', 'cash')
+            """,
+            (d0, d1),
+        ).fetchone()
+        debt = conn.execute(
+            """
+            SELECT COUNT(*) AS cnt, COALESCE(SUM(price), 0) AS total
+            FROM orders
+            WHERE date(created_at) BETWEEN date(?) AND date(?)
+              AND payment_status = 'debt'
+              AND status != 'cancelled'
+            """,
+            (d0, d1),
+        ).fetchone()
+        cancelled = conn.execute(
+            """
+            SELECT COUNT(*) AS cnt, COALESCE(SUM(price), 0) AS total
+            FROM orders
+            WHERE date(created_at) BETWEEN date(?) AND date(?)
+              AND status = 'cancelled'
+            """,
+            (d0, d1),
+        ).fetchone()
+        by_day = conn.execute(
+            """
+            SELECT date(created_at) AS d,
+                   COUNT(*) AS cnt,
+                   COALESCE(SUM(price), 0) AS total
+            FROM orders
+            WHERE date(created_at) BETWEEN date(?) AND date(?)
+              AND status != 'cancelled'
+            GROUP BY date(created_at)
+            ORDER BY d
+            """,
+            (d0, d1),
+        ).fetchall()
+        top = conn.execute(
+            """
+            SELECT oi.product_name,
+                   SUM(oi.quantity) AS qty,
+                   SUM(oi.quantity * oi.price) AS revenue
+            FROM order_items oi
+            JOIN orders o ON o.id = oi.order_id
+            WHERE date(o.created_at) BETWEEN date(?) AND date(?)
+              AND o.status != 'cancelled'
+            GROUP BY oi.product_name
+            ORDER BY revenue DESC
+            LIMIT 20
+            """,
+            (d0, d1),
+        ).fetchall()
+        # ABC: A = top 80% revenue, B = next 15%, C = rest
+        abc_rows = []
+        total_rev = sum(int(r["revenue"] or 0) for r in top)
+        cum = 0
+        for r in top:
+            rev = int(r["revenue"] or 0)
+            cum += rev
+            share = (cum / total_rev * 100) if total_rev else 0
+            if share <= 80:
+                grade = "A"
+            elif share <= 95:
+                grade = "B"
+            else:
+                grade = "C"
+            abc_rows.append(
+                {
+                    "product_name": r["product_name"],
+                    "qty": int(r["qty"] or 0),
+                    "revenue": rev,
+                    "grade": grade,
+                }
+            )
+    return {
+        "date_from": d0,
+        "date_to": d1,
+        "orders_count": int(orders["cnt"] or 0),
+        "orders_sum": int(orders["total"] or 0),
+        "paid_count": int(paid["cnt"] or 0),
+        "paid_sum": int(paid["total"] or 0),
+        "debt_count": int(debt["cnt"] or 0),
+        "debt_sum": int(debt["total"] or 0),
+        "cancelled_count": int(cancelled["cnt"] or 0),
+        "cancelled_sum": int(cancelled["total"] or 0),
+        "profit_approx": int(paid["total"] or 0),  # COGS yo'q — to'langan savdo
+        "by_day": [
+            {
+                "date": r["d"],
+                "orders_count": int(r["cnt"] or 0),
+                "revenue": int(r["total"] or 0),
+            }
+            for r in by_day
+        ],
+        "top": abc_rows,
+        "abc": abc_rows,
+    }
 
 
 def get_bonus(user_id: int) -> int:

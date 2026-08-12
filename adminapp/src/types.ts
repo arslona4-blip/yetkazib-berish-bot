@@ -1,9 +1,13 @@
 export type Tab =
   | 'dash'
+  | 'kassa'
   | 'orders'
   | 'payments'
   | 'warehouse'
   | 'products'
+  | 'debts'
+  | 'reports'
+  | 'promos'
   | 'more'
 
 export type MorePanel = 'moves' | 'broadcast' | 'csv' | 'contacts'
@@ -41,6 +45,8 @@ export type Product = {
   category_id: number
   category_name: string
   is_active: boolean
+  barcode?: string
+  description?: string
 }
 
 export type Category = {
@@ -49,6 +55,12 @@ export type Category = {
   product_count: number
   low_count: number
   stock_sum: number
+}
+
+export type CatalogCategory = {
+  id: number
+  name: string
+  is_active: boolean
 }
 
 export type Movement = {
@@ -70,8 +82,63 @@ export type Contact = {
   phone: string
   note: string
   telegram_user_id: number | null
+  balance?: number
   created_at: string
   updated_at: string
+}
+
+export type Promo = {
+  code: string
+  discount_percent: number
+  discount_amount: number
+  min_order: number
+  is_active: boolean
+}
+
+export type DebtEntry = {
+  id: number
+  contact_id: number
+  kind: string
+  amount: number
+  order_id: number | null
+  note: string
+  created_by: number | null
+  created_at: string
+}
+
+export type CartLine = {
+  product_id: number
+  name: string
+  price: number
+  quantity: number
+  stock: number
+}
+
+export type RangeReport = {
+  date_from: string
+  date_to: string
+  orders_count: number
+  orders_sum: number
+  paid_count: number
+  paid_sum: number
+  debt_count: number
+  debt_sum: number
+  cancelled_count: number
+  cancelled_sum: number
+  profit_approx: number
+  by_day: { date: string; orders_count: number; revenue: number }[]
+  top: {
+    product_name: string
+    qty: number
+    revenue: number
+    grade: string
+  }[]
+  abc: {
+    product_name: string
+    qty: number
+    revenue: number
+    grade: string
+  }[]
 }
 
 export type StatsPayload = {
