@@ -90,13 +90,38 @@ export function activeProfile(s: AppSettings): Profile {
 }
 
 export function downloadJson(filename: string, data: unknown) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+  downloadBlob(filename, new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }))
+}
+
+export function downloadBlob(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = filename
+  a.download = filename || 'download'
+  a.rel = 'noopener'
+  a.style.display = 'none'
+  document.body.appendChild(a)
   a.click()
-  URL.revokeObjectURL(url)
+  a.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1500)
+}
+
+export async function shareOrDownload(
+  filename: string,
+  blob: Blob,
+  title: string,
+): Promise<'shared' | 'downloaded'> {
+  const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' })
+  try {
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ title, files: [file] })
+      return 'shared'
+    }
+  } catch {
+    /* fall through to download */
+  }
+  downloadBlob(filename, blob)
+  return 'downloaded'
 }
 
 export function readJsonFile(file: File): Promise<unknown> {
