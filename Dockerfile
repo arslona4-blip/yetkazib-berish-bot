@@ -10,6 +10,7 @@ COPY miniapp ./miniapp
 COPY shajara ./shajara
 COPY admin ./admin
 COPY arduino ./arduino
+COPY jadval ./jadval
 
 RUN mkdir -p /data
 
