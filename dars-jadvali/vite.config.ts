@@ -8,11 +8,11 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg'],
+      includeAssets: ['favicon.png', 'brand-dars-jadvali.png', 'brand-dars-jadvali.webp'],
       manifest: {
-        name: 'Jadval',
+        name: 'Dars Jadvali',
         short_name: 'Jadval',
-        description: 'Professional maktab dars jadvali — 9 dars, budilnik',
+        description: 'Maktab dars jadvali — zamonaviy o‘quvchi ilovasi',
         theme_color: '#0b4f8a',
         background_color: '#eef2f7',
         display: 'standalone',
