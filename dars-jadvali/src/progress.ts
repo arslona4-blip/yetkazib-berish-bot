@@ -1,16 +1,23 @@
-const KEY = 'dars-jadvali-done-v1'
+import { defaultState, type ScheduleState } from './schedule'
 
-export function loadDone(): Set<string> {
+const KEY = 'maktab-dars-jadvali-v1'
+
+export function loadSchedule(): ScheduleState {
   try {
     const raw = localStorage.getItem(KEY)
-    if (!raw) return new Set()
-    const arr = JSON.parse(raw) as string[]
-    return new Set(Array.isArray(arr) ? arr : [])
+    if (!raw) return defaultState()
+    const parsed = JSON.parse(raw) as Partial<ScheduleState>
+    const base = defaultState()
+    return {
+      className: typeof parsed.className === 'string' ? parsed.className : base.className,
+      schoolName: typeof parsed.schoolName === 'string' ? parsed.schoolName : base.schoolName,
+      subjects: { ...base.subjects, ...(parsed.subjects || {}) },
+    }
   } catch {
-    return new Set()
+    return defaultState()
   }
 }
 
-export function saveDone(ids: Set<string>) {
-  localStorage.setItem(KEY, JSON.stringify([...ids]))
+export function saveSchedule(state: ScheduleState) {
+  localStorage.setItem(KEY, JSON.stringify(state))
 }
