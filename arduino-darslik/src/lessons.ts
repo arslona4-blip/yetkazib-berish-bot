@@ -66,7 +66,7 @@ export const LESSONS: Lesson[] = [
       'Maket plata (breadboard)',
       'LED lar (2–8 dona)',
       '220Ω rezistorlar',
-      'Erkak-erkak simlar',
+      'Ulanuvchi simlar',
     ],
     wiring: [
       'LED anod (uzun oyoq) → rezistor → Arduino pin',
@@ -283,7 +283,7 @@ void loop() {
       'Vaqt ketma-ketligi (qizil → sariq → yashil)',
       'Funksiya yozish (setLights)',
     ],
-    parts: ['Arduino', 'Qizil, sariq, yashil LED', '3×220Ω', 'Maket', 'Simlar'],
+    parts: ['Arduino', 'Qizil, sariq, yashil LED', '3×220Ω', 'Maket', 'Ulanuvchi simlar'],
     wiring: [
       'Qizil → pin 11 (+rezistor)',
       'Sariq → pin 12',
