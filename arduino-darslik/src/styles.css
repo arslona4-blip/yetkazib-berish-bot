@@ -585,3 +585,53 @@ button {
   opacity: 1;
   box-shadow: 0 0 16px currentColor;
 }
+
+.mode-row {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.chip-board {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+}
+
+.pin-label {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--accent2);
+}
+
+.serial-box {
+  width: 100%;
+  min-height: 120px;
+  max-height: 200px;
+  overflow: auto;
+  background: #050a08;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: #b8f0c8;
+  margin-bottom: 10px;
+  white-space: pre-wrap;
+}
+
+.big-num {
+  font-size: 2.4rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.task-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}

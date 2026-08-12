@@ -1,28 +1,24 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import type { SimKind } from './lessons'
 
 type Props = { kind: SimKind }
 
 export function Simulator({ kind }: Props) {
   switch (kind) {
-    case 'install':
-      return <InstallSim />
+    case 'intro':
+      return <IntroSim />
     case 'blink':
-      return <BlinkSim />
-    case 'button':
-      return <ButtonSim />
-    case 'pwm':
-      return <PwmSim />
-    case 'pot':
-      return <PotSim />
-    case 'buzzer':
-      return <BuzzerSim />
-    case 'servo':
-      return <ServoSim />
-    case 'ultrasonic':
-      return <UltrasonicSim />
+      return <IntroSim />
     case 'traffic':
       return <TrafficSim />
+    case 'pwm':
+      return <PwmSim />
+    case 'serial':
+      return <SerialSim />
+    case 'vars':
+      return <VarsSim />
+    case 'ifel':
+      return <IfSim />
     default:
       return null
   }
@@ -49,94 +45,45 @@ function BoardShell({
   )
 }
 
-function InstallSim() {
-  const checks = [
-    'Arduino IDE yuklab olindi (arduino.cc)',
-    'USB kabel bilan plata ulandi',
-    'Tools → Board to‘g‘ri tanlandi',
-    'Tools → Port ko‘rinadi',
-    'Blink Upload → Done uploading',
-  ]
-  const [ok, setOk] = useState<boolean[]>(() => checks.map(() => false))
-  const done = ok.filter(Boolean).length
-
-  return (
-    <BoardShell
-      title="O‘rnatish checklist"
-      caption={`${done}/${checks.length} tayyor — hammasi ✓ bo‘lsa IDE tayyor.`}
-    >
-      <ul className="check-list">
-        {checks.map((c, i) => (
-          <li key={c}>
-            <label>
-              <input
-                type="checkbox"
-                checked={ok[i]}
-                onChange={() =>
-                  setOk((prev) => prev.map((v, j) => (j === i ? !v : v)))
-                }
-              />
-              <span>{c}</span>
-            </label>
-          </li>
-        ))}
-      </ul>
-    </BoardShell>
-  )
-}
-
-function BlinkSim() {
-  const [ms, setMs] = useState(500)
+function IntroSim() {
+  const [mode, setMode] = useState<'one' | 'parallel'>('one')
   const [on, setOn] = useState(false)
-
   useEffect(() => {
-    const id = window.setInterval(() => setOn((v) => !v), Math.max(80, ms))
+    const id = window.setInterval(() => setOn((v) => !v), 1000)
     return () => window.clearInterval(id)
-  }, [ms])
+  }, [])
 
-  return (
-    <BoardShell title="LED Blink" caption={`delay(${ms}) — koddagi kabi miltillaydi.`}>
-      <div className="board">
-        <div className={`led${on ? ' on' : ''}`} />
-        <p className="mono">pin 13 · {on ? 'HIGH' : 'LOW'}</p>
-        <label className="slider-label">
-          delay (ms)
-          <input
-            type="range"
-            min={100}
-            max={1500}
-            step={50}
-            value={ms}
-            onChange={(e) => setMs(Number(e.target.value))}
-          />
-        </label>
-      </div>
-    </BoardShell>
-  )
-}
-
-function ButtonSim() {
-  const [pressed, setPressed] = useState(false)
   return (
     <BoardShell
-      title="Tugma + LED"
-      caption="INPUT_PULLUP: bosilganda LOW → LED yonadi."
+      title="LED + maket"
+      caption="Chap: Arduino pin → rezistor → LED → GND"
     >
-      <div className="board row">
+      <div className="mode-row">
         <button
           type="button"
-          className={`hw-btn${pressed ? ' down' : ''}`}
-          onPointerDown={() => setPressed(true)}
-          onPointerUp={() => setPressed(false)}
-          onPointerLeave={() => setPressed(false)}
+          className={`chip${mode === 'one' ? ' on' : ''}`}
+          onClick={() => setMode('one')}
         >
-          Tugma
+          1 LED
         </button>
-        <div className={`led${pressed ? ' on' : ''}`} />
+        <button
+          type="button"
+          className={`chip${mode === 'parallel' ? ' on' : ''}`}
+          onClick={() => setMode('parallel')}
+        >
+          Parallel 2 LED
+        </button>
       </div>
-      <p className="mono center">
-        BTN={pressed ? 'LOW' : 'HIGH'} · LED={pressed ? 'HIGH' : 'LOW'}
-      </p>
+      <div className="board row">
+        <div className="chip-board">
+          <span className="pin-label">5V</span>
+          <span className="pin-label">GND</span>
+          <span className="pin-label">13</span>
+        </div>
+        <div className={`led${on ? ' on' : ''}`} />
+        {mode === 'parallel' ? <div className={`led${on ? ' on' : ''}`} /> : null}
+      </div>
+      <p className="mono center">{on ? 'HIGH · yonadi' : 'LOW · o‘chadi'}</p>
     </BoardShell>
   )
 }
@@ -144,11 +91,11 @@ function ButtonSim() {
 function PwmSim() {
   const [v, setV] = useState(120)
   return (
-    <BoardShell title="PWM yorqinlik" caption={`analogWrite(9, ${v})`}>
+    <BoardShell title="PWM analogWrite" caption={`qiymat = ${v} (0–255)`}>
       <div className="board">
-        <div className="led on" style={{ opacity: 0.15 + (v / 255) * 0.85 }} />
+        <div className="led on" style={{ opacity: 0.12 + (v / 255) * 0.88 }} />
         <label className="slider-label">
-          0–255
+          PWM
           <input
             type="range"
             min={0}
@@ -162,114 +109,8 @@ function PwmSim() {
   )
 }
 
-function PotSim() {
-  const [raw, setRaw] = useState(512)
-  const pwm = Math.round((raw / 1023) * 255)
-  return (
-    <BoardShell title="Potensiometr A0" caption={`map(${raw},0,1023,0,255) → ${pwm}`}>
-      <div className="board">
-        <div className="led on" style={{ opacity: 0.15 + (pwm / 255) * 0.85 }} />
-        <label className="slider-label">
-          Pot (A0)
-          <input
-            type="range"
-            min={0}
-            max={1023}
-            value={raw}
-            onChange={(e) => setRaw(Number(e.target.value))}
-          />
-        </label>
-        <p className="mono">A0={raw} · PWM={pwm}</p>
-      </div>
-    </BoardShell>
-  )
-}
-
-function BuzzerSim() {
-  const ctxRef = useRef<AudioContext | null>(null)
-
-  function play() {
-    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-    if (!Ctx) return
-    if (!ctxRef.current) ctxRef.current = new Ctx()
-    const ctx = ctxRef.current
-    const notes = [523, 659, 784]
-    let t = ctx.currentTime
-    for (const f of notes) {
-      const o = ctx.createOscillator()
-      const g = ctx.createGain()
-      o.frequency.value = f
-      o.type = 'square'
-      g.gain.value = 0.04
-      o.connect(g)
-      g.connect(ctx.destination)
-      o.start(t)
-      o.stop(t + 0.18)
-      t += 0.25
-    }
-  }
-
-  return (
-    <BoardShell title="Piezo tone()" caption="Brauzerda ohang — haqiqiy piezo pin 8 da.">
-      <div className="board">
-        <button type="button" className="btn primary" onClick={play}>
-          Melodiya chalish
-        </button>
-        <p className="mono">523 → 659 → 784 Hz</p>
-      </div>
-    </BoardShell>
-  )
-}
-
-function ServoSim() {
-  const [angle, setAngle] = useState(90)
-  return (
-    <BoardShell title="Servo 0–180°" caption={`s.write(${angle})`}>
-      <div className="board">
-        <div className="servo">
-          <div className="servo-arm" style={{ transform: `rotate(${angle - 90}deg)` }} />
-        </div>
-        <label className="slider-label">
-          Burchak
-          <input
-            type="range"
-            min={0}
-            max={180}
-            value={angle}
-            onChange={(e) => setAngle(Number(e.target.value))}
-          />
-        </label>
-      </div>
-    </BoardShell>
-  )
-}
-
-function UltrasonicSim() {
-  const [cm, setCm] = useState(30)
-  return (
-    <BoardShell title="HC-SR04" caption={`Masofa ≈ ${cm} cm`}>
-      <div className="board sonar">
-        <div className="sensor" />
-        <div className="beam" style={{ width: `${Math.min(100, cm)}%` }} />
-        <div className="object" style={{ left: `calc(${Math.min(92, cm)}% - 12px)` }} />
-        <label className="slider-label">
-          Obyekt masofasi (cm)
-          <input
-            type="range"
-            min={2}
-            max={100}
-            value={cm}
-            onChange={(e) => setCm(Number(e.target.value))}
-          />
-        </label>
-      </div>
-    </BoardShell>
-  )
-}
-
 function TrafficSim() {
   const [phase, setPhase] = useState(0)
-
   useEffect(() => {
     const times = [3000, 800, 3000, 800]
     const id = window.setTimeout(
@@ -278,7 +119,6 @@ function TrafficSim() {
     )
     return () => window.clearTimeout(id)
   }, [phase])
-
   const lights =
     phase === 0
       ? [1, 0, 0]
@@ -287,14 +127,78 @@ function TrafficSim() {
         : phase === 2
           ? [0, 0, 1]
           : [0, 1, 0]
-
   return (
-    <BoardShell title="Svetofor sikli" caption="Qizil → sariq → yashil → sariq">
+    <BoardShell title="Svetofor" caption="Qizil → qizil+sariq → yashil → sariq">
       <div className="traffic">
         <div className={`t-led red${lights[0] ? ' on' : ''}`} />
         <div className={`t-led yellow${lights[1] ? ' on' : ''}`} />
         <div className={`t-led green${lights[2] ? ' on' : ''}`} />
       </div>
+    </BoardShell>
+  )
+}
+
+function SerialSim() {
+  const [lines, setLines] = useState<string[]>(['Serial Monitor 9600'])
+  function runDemo() {
+    setLines([])
+    const seq = [
+      { t: 0, s: 'Assalomu alaykum.' },
+      { t: 1000, s: 'Mening ismim Nozima.' },
+      { t: 1500, s: "Men texnologiya o'qituvchisiman. Yoshim 30 da." },
+    ]
+    seq.forEach(({ t, s }) => {
+      window.setTimeout(() => {
+        setLines((prev) => [...prev, s])
+      }, t)
+    })
+  }
+  return (
+    <BoardShell title="Serial Monitor" caption="print / println / delay namuna">
+      <div className="serial-box">
+        {lines.map((l, i) => (
+          <div key={`${l}-${i}`}>{l}</div>
+        ))}
+      </div>
+      <button type="button" className="btn primary" onClick={runDemo}>
+        Demo ishga tushirish
+      </button>
+    </BoardShell>
+  )
+}
+
+function VarsSim() {
+  const [c, setC] = useState(0)
+  useEffect(() => {
+    const id = window.setInterval(() => setC((x) => x + 2), 1000)
+    return () => window.clearInterval(id)
+  }, [])
+  return (
+    <BoardShell title="int o‘zgaruvchi" caption="c har soniyada +2 (Serial ga chiqadi)">
+      <div className="board">
+        <div className="big-num mono">{c}</div>
+        <p className="muted">int c = …</p>
+      </div>
+    </BoardShell>
+  )
+}
+
+function IfSim() {
+  const [n, setN] = useState(0)
+  useEffect(() => {
+    const id = window.setInterval(() => setN((x) => (x >= 10 ? 0 : x + 1)), 600)
+    return () => window.clearInterval(id)
+  }, [])
+  const ledOn = n >= 5 && n < 10
+  return (
+    <BoardShell title="if sharti" caption="n==5 → LED yon; n==10 → o‘ch va reset">
+      <div className="board row">
+        <div className="big-num mono">{n}</div>
+        <div className={`led${ledOn ? ' on' : ''}`} />
+      </div>
+      <p className="mono center">
+        {n === 5 ? 'if (n==5) HIGH' : n === 10 || n === 0 ? 'reset' : '…'}
+      </p>
     </BoardShell>
   )
 }
