@@ -1114,11 +1114,25 @@ export default function App() {
           )}
 
           {sheet === 'install' && (
-            <ol className="steps">
-              <li>Brauzer menyusi → Share / Menyu</li>
-              <li>«Add to Home Screen» ni bosing</li>
-              <li>Jadval ilova kabi ochiladi</li>
-            </ol>
+            <div className="form-stack">
+              <img
+                src="/jadval/icon-192-v3.png"
+                alt="Dars Jadvali"
+                width={96}
+                height={96}
+                style={{ margin: '0 auto', borderRadius: 22 }}
+              />
+              <p className="muted" style={{ textAlign: 'center' }}>
+                Eski «Jadval» ikonkasini o‘chirib, qayta o‘rnating — yangi DARS JADVALI
+                ko‘rinadi.
+              </p>
+              <ol className="steps">
+                <li>Bosh ekrandagi eski «Jadval» ni bosib turing → O‘chirish</li>
+                <li>Brauzerda /jadval/ ni oching</li>
+                <li>Menyu → «Bosh ekranga qo‘shish» / Add to Home Screen</li>
+                <li>«Dars Jadvali» ikonkasini tasdiqlang</li>
+              </ol>
+            </div>
           )}
 
           {sheet === 'widget' && (
