@@ -9,10 +9,10 @@ import {
 import './styles.css'
 
 const STARTERS = [
-  'Maktabda tabiatni asrash haqida 5 slayd',
-  'Startap pitch: yetkazib berish boti',
-  'Bolalar uchun ranglar darsi, candy tema',
-  'Qorong‘u minimal: shaxsiy brend',
+  'Tabiatni asrash haqida to‘liq taqdimot',
+  'Marketing asoslari: rasm va sxema bilan',
+  'Sog‘lom turmush — raqamlar va sikl',
+  'IT va dasturlash jarayon sxemasi',
 ]
 
 export default function App() {
@@ -24,7 +24,7 @@ export default function App() {
     {
       id: 'm0',
       role: 'assistant',
-      text: 'Salom! Men Slayd Studio. Lovable kabi yozing — taqdimot chiqadi. Masalan: «Marketing asoslari haqida 5 slayd».',
+      text: 'Salom! Mavzuni yozing — tayyor ma’lumot, rasm, sxema va raqamlar chiqadi. Masalan: «Tabiatni asrash».',
     },
   ])
   const listRef = useRef<HTMLDivElement>(null)
@@ -186,10 +186,10 @@ export default function App() {
                 } as CSSProperties
               }
             >
-              <div className="stage-inner">
+              <div className={`stage-inner${slide.kind === 'image' ? ' image-slide' : ''}`}>
                 {slide.kind === 'title' || slide.kind === 'outro' ? (
                   <>
-                    <p className="eyebrow">Slayd Studio</p>
+                    <p className="eyebrow">Slayd Studio · tayyor paket</p>
                     <h1>{slide.title}</h1>
                     {slide.subtitle ? <p className="sub">{slide.subtitle}</p> : null}
                   </>
@@ -208,6 +208,49 @@ export default function App() {
                   <>
                     <h2>{slide.title}</h2>
                     <blockquote>“{slide.quote}”</blockquote>
+                  </>
+                ) : null}
+                {slide.kind === 'image' ? (
+                  <>
+                    <div className="img-frame">
+                      <img src={slide.imageUrl} alt={slide.title} loading="lazy" />
+                    </div>
+                    <div className="img-meta">
+                      <h2>{slide.title}</h2>
+                      {slide.imageCaption ? <p>{slide.imageCaption}</p> : null}
+                      {slide.subtitle ? <p className="icons">{slide.subtitle}</p> : null}
+                    </div>
+                  </>
+                ) : null}
+                {slide.kind === 'diagram' ? (
+                  <>
+                    <h2>{slide.title}</h2>
+                    <div className={`diagram ${slide.diagram || 'flow'}`}>
+                      {(slide.nodes || []).map((n, i) => (
+                        <div key={`${n.label}-${i}`} className="node">
+                          <span className="ni">{n.icon || '●'}</span>
+                          <strong>{n.label}</strong>
+                          {slide.diagram === 'flow' &&
+                          i < (slide.nodes?.length || 0) - 1 ? (
+                            <span className="arrow">→</span>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : null}
+                {slide.kind === 'facts' ? (
+                  <>
+                    <h2>{slide.title}</h2>
+                    <div className="facts">
+                      {(slide.facts || []).map((f) => (
+                        <div key={f.label} className="fact">
+                          <span>{f.label}</span>
+                          <strong>{f.value}</strong>
+                          {f.note ? <em>{f.note}</em> : null}
+                        </div>
+                      ))}
+                    </div>
                   </>
                 ) : null}
               </div>
