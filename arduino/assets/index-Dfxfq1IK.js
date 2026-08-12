@@ -468,7 +468,28 @@ void loop() {
   n += 2;
   if (n >= 12) n = 0;
   delay(500);
-}`},{n:9,title:`8 + Serial rang nomi`,text:`Qaysi rang yonsa — nomi Monitor da.`,code:`// 8-topshiriq asosida Serial.println("GREEN") va h.k. qo'shing`},{n:10,title:`3 LED maxsus sikl`,text:`n=1..7 holatlar; 8 da n=0. Chetki/o‘rta/ miltillash.`,code:`int n = 0;
+}`},{n:9,title:`8 + Serial rang nomi`,text:`Qaysi rang yonsa — nomi Monitor da.`,code:`int n = 0;
+int green=2, blue=3, white=4, yellow=5, red=6;
+void setup() {
+  Serial.begin(9600);
+  pinMode(green, OUTPUT); pinMode(blue, OUTPUT);
+  pinMode(white, OUTPUT); pinMode(yellow, OUTPUT); pinMode(red, OUTPUT);
+}
+void allOff() {
+  digitalWrite(green, LOW); digitalWrite(blue, LOW);
+  digitalWrite(white, LOW); digitalWrite(yellow, LOW); digitalWrite(red, LOW);
+}
+void loop() {
+  allOff();
+  if (n == 2) { digitalWrite(green, HIGH); Serial.println("YASHIL"); }
+  else if (n == 4) { digitalWrite(blue, HIGH); Serial.println("KO'K"); }
+  else if (n == 6) { digitalWrite(white, HIGH); Serial.println("OQ"); }
+  else if (n == 8) { digitalWrite(yellow, HIGH); Serial.println("SARIQ"); }
+  else if (n == 10) { digitalWrite(red, HIGH); Serial.println("QIZIL"); }
+  n += 2;
+  if (n >= 12) n = 0;
+  delay(500);
+}`},{n:10,title:`3 LED maxsus sikl`,text:`n=1..7 holatlar; 8 da n=0. Chetki/o‘rta/ miltillash.`,code:`int n = 0;
 int L1=2, L2=3, L3=4;
 void setup() {
   pinMode(L1, OUTPUT); pinMode(L2, OUTPUT); pinMode(L3, OUTPUT);
