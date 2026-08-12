@@ -593,7 +593,7 @@ export default function App() {
         <div className="login-box">
           <div className="login-mark" aria-hidden />
           <h1>
-            Admin <span>Panel</span>
+            Admin <span>POS</span>
           </h1>
           <p>Telegram orqali tekshirilmoqda…</p>
         </div>
@@ -607,7 +607,7 @@ export default function App() {
         <div className="login-box">
           <div className="login-mark" aria-hidden />
           <h1>
-            Admin <span>Panel</span>
+            Admin <span>POS</span>
           </h1>
           {tgInit ? (
             <>
@@ -719,24 +719,24 @@ export default function App() {
 
   return (
     <div className={`app${busy ? ' busy' : ''}`}>
-      <header className="zf-top">
+      <header className="pos-top">
         <button
           type="button"
-          className="zf-profile"
+          className="pos-brand"
           onClick={() => setMenuOpen(true)}
         >
-          <span className="zf-avatar">{initials}</span>
-          <div className="zf-profile-meta">
-            <div className="zf-profile-name">{shop}</div>
-            <div className="zf-profile-sub">
-              Admin · {lastSync ? `yangilandi ${lastSync}` : 'online'}
-            </div>
+          <span className="pos-logo">{initials}</span>
+          <div>
+            <strong>{shop}</strong>
+            <span>
+              Zifra POS · {lastSync ? lastSync : 'online'}
+            </span>
           </div>
         </button>
-        <div className="zf-top-actions">
+        <div className="pos-top-actions">
           <button
             type="button"
-            className="zf-icon-btn"
+            className="pos-ico"
             title="Yangilash"
             onClick={() => void refreshAll()}
           >
@@ -744,14 +744,14 @@ export default function App() {
           </button>
           <button
             type="button"
-            className="zf-icon-btn"
-            title="Bildirishnomalar"
+            className="pos-ico"
+            title="Yangi buyurtmalar"
             onClick={() => {
               setOrderStatus('new')
               setTab('orders')
             }}
           >
-            ⌂
+            🔔
             {stats && stats.stats.new_orders > 0 ? (
               <span className="dot" />
             ) : null}
@@ -763,245 +763,158 @@ export default function App() {
 
       {tab === 'dash' && stats ? (
         <>
-          <section className="zf-hero">
-            <p className="zf-hero-label">Bugungi savdo</p>
-            <p className="zf-hero-value">{money(stats.daily.revenue)}</p>
-            <div className="zf-hero-meta">
-              <button
-                type="button"
-                className="zf-pill accent"
-                onClick={() => {
-                  setOrderStatus('new')
-                  setTab('orders')
-                }}
-              >
-                {stats.stats.new_orders} yangi
-              </button>
-              <button
-                type="button"
-                className="zf-pill"
-                onClick={() => setTab('payments')}
-              >
-                {stats.payments_waiting} to‘lov
-              </button>
-              <button
-                type="button"
-                className="zf-pill"
-                onClick={() => setTab('warehouse')}
-              >
-                {stats.daily.orders_count} buyurtma
-              </button>
-            </div>
-          </section>
-
-          <div className="zf-accounts">
+          <div className="pos-kpis">
             <button
               type="button"
-              className="zf-account hot"
+              className="pos-kpi primary"
+              onClick={() => setTab('orders')}
+            >
+              <span className="lab">Bugungi savdo</span>
+              <span className="val">{money(stats.daily.revenue)}</span>
+              <span className="sub">{stats.daily.orders_count} buyurtma</span>
+            </button>
+            <button
+              type="button"
+              className="pos-kpi danger"
               onClick={() => {
                 setOrderStatus('new')
                 setTab('orders')
               }}
             >
-              <span className="lab">Yangi buyurtma</span>
-              <span className="num">{stats.stats.new_orders}</span>
-              <span className="hint">Ko‘rib chiqish</span>
+              <span className="lab">Yangi</span>
+              <span className="val">{stats.stats.new_orders}</span>
+              <span className="sub">Kutilayotgan</span>
             </button>
             <button
               type="button"
-              className="zf-account warn"
+              className="pos-kpi warn"
               onClick={() => setTab('payments')}
             >
-              <span className="lab">Karta kutmoqda</span>
-              <span className="num">{stats.payments_waiting}</span>
-              <span className="hint">{money(stats.daily.waiting_sum)}</span>
+              <span className="lab">To‘lov</span>
+              <span className="val">{stats.payments_waiting}</span>
+              <span className="sub">{money(stats.daily.waiting_sum)}</span>
             </button>
             <button
               type="button"
-              className="zf-account ok"
-              onClick={() => {
-                setOrderStatus('active')
-                setTab('orders')
-              }}
-            >
-              <span className="lab">Faol</span>
-              <span className="num">{stats.stats.active_orders}</span>
-              <span className="hint">Yo‘ldagi buyurtmalar</span>
-            </button>
-            <button
-              type="button"
-              className="zf-account"
+              className="pos-kpi ok"
               onClick={() => {
                 setLowOnly(true)
                 setTab('warehouse')
               }}
             >
               <span className="lab">Kam qoldiq</span>
-              <span className="num">{stats.warehouse.low_stock}</span>
-              <span className="hint">
+              <span className="val">{stats.warehouse.low_stock}</span>
+              <span className="sub">
                 {stats.warehouse.units.toLocaleString()} dona
               </span>
             </button>
           </div>
 
-          <div className="zf-actions">
+          <div className="pos-sec">
+            <h2>Modullar</h2>
             <button
               type="button"
-              className="zf-act"
-              onClick={() => setTab('orders')}
-            >
-              <span className="zf-act-ico">📦</span>
-              <span>Buyurtma</span>
-            </button>
-            <button
-              type="button"
-              className="zf-act"
-              onClick={() => setTab('payments')}
-            >
-              <span className="zf-act-ico">💳</span>
-              <span>To‘lov</span>
-            </button>
-            <button
-              type="button"
-              className="zf-act"
-              onClick={() => setTab('warehouse')}
-            >
-              <span className="zf-act-ico">🏭</span>
-              <span>Ombor</span>
-            </button>
-            <button
-              type="button"
-              className="zf-act"
-              onClick={() => setTab('products')}
-            >
-              <span className="zf-act-ico">🏷</span>
-              <span>Tovar</span>
-            </button>
-          </div>
-
-          <div className="zf-sec-h">
-            <h2>Xizmatlar</h2>
-            <button
-              type="button"
-              className="zf-link"
+              className="pos-link"
               onClick={() => setMenuOpen(true)}
             >
               Barchasi
             </button>
           </div>
-          <div className="zf-services">
+          <div className="pos-modules">
             <button
               type="button"
-              className="zf-svc"
-              onClick={() => {
-                setOrderStatus('new')
-                setTab('orders')
-              }}
+              className="pos-mod"
+              onClick={() => setTab('orders')}
             >
               {stats.stats.new_orders > 0 ? (
-                <span className="zf-dot-badge">{stats.stats.new_orders}</span>
+                <span className="badge">{stats.stats.new_orders}</span>
               ) : null}
-              <span className="zf-svc-ico red">🆕</span>
-              <strong>Yangi</strong>
+              <span className="pos-mod-ico blue">📦</span>
+              <strong>Buyurtmalar</strong>
             </button>
             <button
               type="button"
-              className="zf-svc"
+              className="pos-mod"
               onClick={() => setTab('payments')}
             >
               {stats.payments_waiting > 0 ? (
-                <span className="zf-dot-badge">{stats.payments_waiting}</span>
+                <span className="badge">{stats.payments_waiting}</span>
               ) : null}
-              <span className="zf-svc-ico blue">💳</span>
-              <strong>Karta</strong>
+              <span className="pos-mod-ico amber">💳</span>
+              <strong>To‘lovlar</strong>
             </button>
             <button
               type="button"
-              className="zf-svc"
+              className="pos-mod"
               onClick={() => setTab('warehouse')}
             >
-              <span className="zf-svc-ico green">📥</span>
-              <strong>Kirim</strong>
+              <span className="pos-mod-ico green">🏭</span>
+              <strong>Ombor</strong>
             </button>
             <button
               type="button"
-              className="zf-svc"
+              className="pos-mod"
               onClick={() => setTab('products')}
             >
-              <span className="zf-svc-ico amber">💰</span>
-              <strong>Narx</strong>
+              <span className="pos-mod-ico lav">🏷</span>
+              <strong>Tovarlar</strong>
             </button>
             <button
               type="button"
-              className="zf-svc"
+              className="pos-mod"
               onClick={() => {
                 setMorePanel('broadcast')
                 setTab('more')
               }}
             >
-              <span className="zf-svc-ico blue">📣</span>
+              <span className="pos-mod-ico blue">📣</span>
               <strong>Xabar</strong>
             </button>
             <button
               type="button"
-              className="zf-svc"
+              className="pos-mod"
               onClick={() => {
                 setMorePanel('contacts')
                 setTab('more')
               }}
             >
-              <span className="zf-svc-ico green">👤</span>
-              <strong>Kontakt</strong>
-            </button>
-            <button
-              type="button"
-              className="zf-svc"
-              onClick={() => {
-                setMorePanel('csv')
-                setTab('more')
-              }}
-            >
-              <span className="zf-svc-ico amber">📄</span>
-              <strong>CSV</strong>
-            </button>
-            <button
-              type="button"
-              className="zf-svc"
-              onClick={() => {
-                setMorePanel('moves')
-                setTab('more')
-              }}
-            >
-              <span className="zf-svc-ico red">📋</span>
-              <strong>Jurnal</strong>
+              <span className="pos-mod-ico red">👤</span>
+              <strong>Mijozlar</strong>
             </button>
           </div>
 
-          {stats.daily.top?.length ? (
-            <section className="section">
-              <div className="zf-sec-h">
-                <h2>Bugungi operatsiyalar</h2>
-              </div>
-              <div className="list">
-                {stats.daily.top.map((t) => (
-                  <div key={t.product_name} className="tx">
-                    <div className="tx-head" style={{ cursor: 'default' }}>
-                      <div className="tx-left">
-                        <span className="tx-ico">🛒</span>
-                        <div>
-                          <h3 className="tx-title">{t.product_name}</h3>
-                          <p className="tx-sub">Top mahsulot</p>
-                        </div>
-                      </div>
-                      <div className="tx-right">
-                        <div className="tx-amount plus">+{t.qty}</div>
+          <div className="pos-sec">
+            <h2>Bugungi top</h2>
+            <button
+              type="button"
+              className="pos-link"
+              onClick={() => setTab('products')}
+            >
+              Tovarlar
+            </button>
+          </div>
+          <div className="list">
+            {stats.daily.top?.length ? (
+              stats.daily.top.map((t) => (
+                <div key={t.product_name} className="tx">
+                  <div className="tx-head" style={{ cursor: 'default' }}>
+                    <div className="tx-left">
+                      <span className="tx-ico">🛒</span>
+                      <div>
+                        <h3 className="tx-title">{t.product_name}</h3>
+                        <p className="tx-sub">Sotuv</p>
                       </div>
                     </div>
+                    <div className="tx-right">
+                      <div className="tx-amount plus">+{t.qty}</div>
+                    </div>
                   </div>
-                ))}
-              </div>
-            </section>
-          ) : null}
+                </div>
+              ))
+            ) : (
+              <div className="empty">Bugun hali savdo yo‘q</div>
+            )}
+          </div>
 
           <section className="section" style={{ marginTop: 14 }}>
             <div className="grid">
@@ -1010,13 +923,10 @@ export default function App() {
                 <div className="value accent">{money(stats.daily.paid_sum)}</div>
               </div>
               <div className="card">
-                <div className="label">Ombor birlik</div>
+                <div className="label">Ombor kirim/chiqim</div>
                 <div className="value">
-                  {stats.warehouse.units.toLocaleString()}
-                </div>
-                <p className="muted-sm">
                   +{stats.warehouse.today_in} / −{stats.warehouse.today_out}
-                </p>
+                </div>
               </div>
             </div>
           </section>
@@ -1492,7 +1402,7 @@ export default function App() {
           />
           <div className="menu-sheet" role="dialog">
             <div className="menu-handle" />
-            <h3>Tezkor menyu</h3>
+            <h3>POS menyu</h3>
             <div className="menu-grid">
               {(
                 [
