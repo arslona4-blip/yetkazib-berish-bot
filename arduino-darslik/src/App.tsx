@@ -5,7 +5,7 @@ import { Simulator } from './Simulator'
 import './styles.css'
 
 type View = 'home' | 'lesson'
-type Tab = 'steps' | 'sim' | 'code' | 'practice'
+type Tab = 'steps' | 'sim' | 'code' | 'tasks' | 'practice'
 
 export default function App() {
   const [view, setView] = useState<View>('home')
@@ -14,7 +14,9 @@ export default function App() {
   const [filter, setFilter] = useState<'all' | Lesson['level']>('all')
   const [tab, setTab] = useState<Tab>('steps')
   const [stepIdx, setStepIdx] = useState(0)
+  const [taskIdx, setTaskIdx] = useState(0)
   const [copied, setCopied] = useState(false)
+  const [showSolution, setShowSolution] = useState(false)
 
   const lesson = useMemo(
     () => LESSONS.find((l) => l.id === lessonId) || LESSONS[0],
@@ -27,12 +29,15 @@ export default function App() {
   }, [filter])
 
   const progress = Math.round((done.length / LESSONS.length) * 100)
+  const task = lesson.tasks[taskIdx] || lesson.tasks[0]
 
   function openLesson(id: string) {
     setLessonId(id)
     setView('lesson')
     setTab('steps')
     setStepIdx(0)
+    setTaskIdx(0)
+    setShowSolution(false)
     setCopied(false)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -47,9 +52,9 @@ export default function App() {
     })
   }
 
-  async function copyCode() {
+  async function copyText(text: string) {
     try {
-      await navigator.clipboard.writeText(lesson.code)
+      await navigator.clipboard.writeText(text)
       setCopied(true)
       setTimeout(() => setCopied(false), 1600)
     } catch {
@@ -67,13 +72,13 @@ export default function App() {
       <div className="page">
         <header className="hero">
           <div className="hero-glow" aria-hidden />
-          <p className="eyebrow">Telefon · PC · Simulyator</p>
+          <p className="eyebrow">32-GR · Robototexnika · Telefon/PC</p>
           <h1>
             Arduino <span>Darslik</span>
           </h1>
           <p className="lead">
-            Bosqichma-bosqich o‘rganing: IDE o‘rnatish, simulyator, tayyor kod va
-            amaliy mashq. Har darsda ko‘rib, kod yozib, sinab chiqing.
+            6 ta dars: komponentlar, svetofor, PWM, Serial, int, if/else. Har
+            darsda bosqichlar, simulyator, tayyor kod va topshiriq yechimlari.
           </p>
           <div className="progress-wrap">
             <div className="progress-meta">
@@ -94,7 +99,7 @@ export default function App() {
               ['all', 'Hammasi'],
               ['boshlangich', 'Boshlang‘ich'],
               ['ortacha', 'O‘rta'],
-              ['loyiha', 'Loyiha'],
+              ['loyiha', 'Amaliyot'],
             ] as const
           ).map(([k, label]) => (
             <button
@@ -111,7 +116,6 @@ export default function App() {
         <section className="grid">
           {filtered.map((l) => {
             const isDone = done.includes(l.id)
-            const globalIdx = LESSONS.findIndex((x) => x.id === l.id)
             return (
               <button
                 key={l.id}
@@ -120,15 +124,15 @@ export default function App() {
                 onClick={() => openLesson(l.id)}
               >
                 <div className="card-top">
-                  <span className="num">
-                    {String(globalIdx + 1).padStart(2, '0')}
-                  </span>
+                  <span className="num">{String(l.num).padStart(2, '0')}</span>
                   <span className="tag">{LEVEL_LABEL[l.level]}</span>
                 </div>
                 <h2>{l.title}</h2>
                 <p>{l.summary}</p>
                 <div className="card-foot">
-                  <span>{l.minutes} daq · simulyator</span>
+                  <span>
+                    {l.minutes} daq · {l.tasks.length} topshiriq
+                  </span>
                   <span>{isDone ? '✓ Tugadi' : 'Boshlash →'}</span>
                 </div>
               </button>
@@ -136,9 +140,7 @@ export default function App() {
           })}
         </section>
 
-        <footer className="foot">
-          1-darsdan boshlang: Arduino IDE ni xatosiz o‘rnatish
-        </footer>
+        <footer className="foot">1-darsdan boshlang: Arduino + maket + LED</footer>
       </div>
     )
   }
@@ -157,7 +159,8 @@ export default function App() {
         <div className="meta-row">
           <span className="tag">{LEVEL_LABEL[lesson.level]}</span>
           <span className="muted">
-            {idx + 1}/{LESSONS.length} · {lesson.minutes} daq
+            {idx + 1}/{LESSONS.length} · {lesson.minutes} daq ·{' '}
+            {lesson.tasks.length} topshiriq
           </span>
         </div>
         <h1>{lesson.title}</h1>
@@ -169,15 +172,20 @@ export default function App() {
           [
             ['steps', 'Bosqichlar'],
             ['sim', 'Simulyator'],
-            ['code', 'Tayyor kod'],
-            ['practice', 'Amaliyot'],
+            ['code', 'Dars kodi'],
+            ['tasks', 'Topshiriqlar'],
+            ['practice', 'Yakun'],
           ] as const
         ).map(([k, label]) => (
           <button
             key={k}
             type="button"
             className={`chip${tab === k ? ' on' : ''}`}
-            onClick={() => setTab(k)}
+            onClick={() => {
+              setTab(k)
+              setCopied(false)
+              if (k === 'tasks') setShowSolution(false)
+            }}
           >
             {label}
           </button>
@@ -205,11 +213,8 @@ export default function App() {
                 type="button"
                 className="btn primary"
                 onClick={() => {
-                  if (stepIdx < lesson.steps.length - 1) {
-                    setStepIdx((s) => s + 1)
-                  } else {
-                    setTab('sim')
-                  }
+                  if (stepIdx < lesson.steps.length - 1) setStepIdx((s) => s + 1)
+                  else setTab('sim')
                 }}
               >
                 {stepIdx < lesson.steps.length - 1
@@ -218,7 +223,6 @@ export default function App() {
               </button>
             </div>
           </section>
-
           <section className="block two">
             <div>
               <h3>Kerakli qismlar</h3>
@@ -237,7 +241,6 @@ export default function App() {
               </ul>
             </div>
           </section>
-
           <section className="block">
             <h3>Maqsad</h3>
             <ul>
@@ -253,19 +256,11 @@ export default function App() {
         <section className="block">
           <Simulator kind={lesson.sim} />
           <div className="actions">
-            <button
-              type="button"
-              className="btn ghost"
-              onClick={() => setTab('steps')}
-            >
+            <button type="button" className="btn ghost" onClick={() => setTab('steps')}>
               ← Bosqichlar
             </button>
-            <button
-              type="button"
-              className="btn primary"
-              onClick={() => setTab('code')}
-            >
-              Tayyor kod →
+            <button type="button" className="btn primary" onClick={() => setTab('code')}>
+              Dars kodi →
             </button>
           </div>
         </section>
@@ -274,8 +269,12 @@ export default function App() {
       {tab === 'code' ? (
         <section className="block">
           <div className="code-head">
-            <h3>Arduino IDE ga joylang</h3>
-            <button type="button" className="btn ghost" onClick={() => void copyCode()}>
+            <h3>Asosiy dars kodi</h3>
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={() => void copyText(lesson.code)}
+            >
               {copied ? 'Nusxalandi ✓' : 'Nusxa olish'}
             </button>
           </div>
@@ -285,24 +284,100 @@ export default function App() {
           <p className="tip">💡 {lesson.tip}</p>
           <ol className="howto">
             <li>Arduino IDE → File → New</li>
-            <li>Kodni joylashtiring (Ctrl+V)</li>
-            <li>Tools → Board / Port ni tekshiring</li>
-            <li>→ Upload · “Done uploading” ni kuting</li>
+            <li>Kodni joylashtiring</li>
+            <li>Board / Port ni tekshiring</li>
+            <li>Upload → Done uploading</li>
           </ol>
           <div className="actions">
-            <button
-              type="button"
-              className="btn ghost"
-              onClick={() => setTab('sim')}
-            >
+            <button type="button" className="btn ghost" onClick={() => setTab('sim')}>
               ← Simulyator
             </button>
             <button
               type="button"
               className="btn primary"
-              onClick={() => setTab('practice')}
+              onClick={() => setTab('tasks')}
             >
-              Amaliyot →
+              Topshiriqlarga →
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {tab === 'tasks' && task ? (
+        <section className="block">
+          <div className="task-nav">
+            {lesson.tasks.map((t) => (
+              <button
+                key={t.n}
+                type="button"
+                className={`chip${taskIdx === t.n - 1 ? ' on' : ''}`}
+                onClick={() => {
+                  setTaskIdx(t.n - 1)
+                  setShowSolution(false)
+                  setCopied(false)
+                }}
+              >
+                {t.n}
+              </button>
+            ))}
+          </div>
+          <h3>
+            Topshiriq {task.n}. {task.title}
+          </h3>
+          <p className="step-detail">{task.text}</p>
+          <div className="actions">
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={() => setShowSolution((v) => !v)}
+            >
+              {showSolution ? 'Yechimni yashirish' : 'Yechim kodini ko‘rsatish'}
+            </button>
+          </div>
+          {showSolution ? (
+            <>
+              <div className="code-head" style={{ marginTop: 12 }}>
+                <h3>Yechim</h3>
+                <button
+                  type="button"
+                  className="btn ghost"
+                  onClick={() => void copyText(task.code)}
+                >
+                  {copied ? 'Nusxalandi ✓' : 'Nusxa olish'}
+                </button>
+              </div>
+              <pre className="code">
+                <code>{task.code}</code>
+              </pre>
+            </>
+          ) : (
+            <p className="tip">Avval o‘zingiz yozing, keyin yechimni oching.</p>
+          )}
+          <div className="actions">
+            <button
+              type="button"
+              className="btn ghost"
+              disabled={taskIdx === 0}
+              onClick={() => {
+                setTaskIdx((i) => Math.max(0, i - 1))
+                setShowSolution(false)
+              }}
+            >
+              ← Oldingi
+            </button>
+            <button
+              type="button"
+              className="btn primary"
+              onClick={() => {
+                if (taskIdx < lesson.tasks.length - 1) {
+                  setTaskIdx((i) => i + 1)
+                  setShowSolution(false)
+                } else setTab('practice')
+              }}
+            >
+              {taskIdx < lesson.tasks.length - 1
+                ? 'Keyingi topshiriq →'
+                : 'Yakun →'}
             </button>
           </div>
         </section>
@@ -310,7 +385,7 @@ export default function App() {
 
       {tab === 'practice' ? (
         <section className="block">
-          <h3>Amaliy qiling</h3>
+          <h3>Yakuniy amaliyot</h3>
           <ol className="practice-list">
             {lesson.practice.map((p) => (
               <li key={p}>{p}</li>
