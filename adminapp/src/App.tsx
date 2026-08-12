@@ -99,6 +99,14 @@ export default function App() {
   const [tgReady, setTgReady] = useState(false)
   const [showPin, setShowPin] = useState(false)
   const [booting, setBooting] = useState(true)
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  const initials = useMemo(() => {
+    const raw = (shop || 'AD').trim()
+    const parts = raw.split(/\s+/).filter(Boolean)
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
+    return raw.slice(0, 2).toUpperCase()
+  }, [shop])
 
   async function bootstrap(a: AuthState) {
     setBusy(true)
@@ -579,7 +587,7 @@ export default function App() {
         <div className="login-box">
           <div className="login-mark" aria-hidden />
           <h1>
-            Admin <span style={{ color: 'var(--accent)' }}>Panel</span>
+            Admin <span>Panel</span>
           </h1>
           <p>Telegram orqali tekshirilmoqda…</p>
         </div>
@@ -593,7 +601,7 @@ export default function App() {
         <div className="login-box">
           <div className="login-mark" aria-hidden />
           <h1>
-            Admin <span style={{ color: 'var(--accent)' }}>Panel</span>
+            Admin <span>Panel</span>
           </h1>
           {tgInit ? (
             <>
@@ -705,34 +713,40 @@ export default function App() {
 
   return (
     <div className={`app${busy ? ' busy' : ''}`}>
-      <header className="top">
-        <div>
-          <h1 className="brand">
-            {shop} <span>Admin</span>
-          </h1>
-          <p className="sub">
-            Professional boshqaruv
-            {lastSync ? ` · yangilandi ${lastSync}` : ''}
-          </p>
-        </div>
-        <div className="actions top-actions">
+      <header className="uz-top">
+        <button
+          type="button"
+          className="uz-profile"
+          onClick={() => setMenuOpen(true)}
+        >
+          <span className="uz-avatar">{initials}</span>
+          <div className="uz-profile-name">
+            {shop.toUpperCase()}
+            <span>›</span>
+          </div>
+        </button>
+        <div className="uz-top-actions">
           <button
             type="button"
-            className="btn btn-ghost"
+            className="uz-icon-btn"
+            title="Yangilash"
             onClick={() => void refreshAll()}
           >
-            Yangilash
+            ↻
           </button>
           <button
             type="button"
-            className="btn btn-danger"
+            className="uz-icon-btn"
+            title="Bildirishnomalar"
             onClick={() => {
-              void api.logout(auth)
-              clearAuth()
-              setAuth(null)
+              setOrderStatus('new')
+              setTab('orders')
             }}
           >
-            Chiqish
+            🔔
+            {stats && stats.stats.new_orders > 0 ? (
+              <span className="dot" />
+            ) : null}
           </button>
         </div>
       </header>
@@ -741,76 +755,187 @@ export default function App() {
 
       {tab === 'dash' && stats ? (
         <>
-          <div className="grid grid-4">
+          <div className="uz-banners">
             <button
               type="button"
-              className="card clickable"
+              className="uz-banner b1"
               onClick={() => {
                 setOrderStatus('new')
                 setTab('orders')
               }}
             >
-              <div className="label">Yangi</div>
-              <div className="value accent">{stats.stats.new_orders}</div>
+              <strong>{stats.stats.new_orders} ta yangi buyurtma</strong>
+              <span>Darhol ko‘rib chiqing</span>
             </button>
             <button
               type="button"
-              className="card clickable"
-              onClick={() => {
-                setOrderStatus('active')
-                setTab('orders')
-              }}
-            >
-              <div className="label">Faol</div>
-              <div className="value">{stats.stats.active_orders}</div>
-            </button>
-            <button
-              type="button"
-              className="card clickable"
+              className="uz-banner b2"
               onClick={() => setTab('payments')}
             >
-              <div className="label">Karta kutmoqda</div>
-              <div className="value warn">{stats.payments_waiting}</div>
+              <strong>{stats.payments_waiting} ta to‘lov kutmoqda</strong>
+              <span>Kartani tasdiqlang</span>
             </button>
             <button
               type="button"
-              className="card clickable"
+              className="uz-banner b3"
               onClick={() => {
                 setLowOnly(true)
                 setTab('warehouse')
               }}
             >
-              <div className="label">Kam qoldiq</div>
-              <div className="value warn">{stats.warehouse.low_stock}</div>
+              <strong>{stats.warehouse.low_stock} ta kam qoldiq</strong>
+              <span>Omborni to‘ldiring</span>
             </button>
           </div>
 
-          <div className="section grid">
-            <div className="card">
-              <div className="label">Bugun savdo</div>
-              <div className="value mono">{money(stats.daily.revenue)}</div>
-              <p className="muted-sm">{stats.daily.orders_count} buyurtma</p>
-            </div>
-            <div className="card">
-              <div className="label">To‘langan / kutayotgan</div>
-              <div className="value" style={{ fontSize: '1rem' }}>
-                {money(stats.daily.paid_sum)}
-                <span className="muted-sm"> / </span>
-                {money(stats.daily.waiting_sum)}
-              </div>
-            </div>
-            <div className="card">
-              <div className="label">Ombor</div>
-              <div className="value">{stats.warehouse.units.toLocaleString()}</div>
+          <div className="uz-balance">
+            <div>
+              <p className="uz-balance-label">Bugungi savdo</p>
+              <p className="uz-balance-value">{money(stats.daily.revenue)}</p>
               <p className="muted-sm">
-                +{stats.warehouse.today_in} / −{stats.warehouse.today_out}
+                {stats.daily.orders_count} buyurtma
+                {lastSync ? ` · ${lastSync}` : ''}
               </p>
             </div>
+            <button
+              type="button"
+              className="uz-help"
+              onClick={() => {
+                setMorePanel('broadcast')
+                setTab('more')
+              }}
+            >
+              Yordam ?
+            </button>
+          </div>
+
+          <div className="uz-quick">
+            <button
+              type="button"
+              onClick={() => {
+                setOrderStatus('active')
+                setTab('orders')
+              }}
+            >
+              <span className="uz-quick-ico blue">📦</span>
+              <span>Buyurtmalar</span>
+            </button>
+            <button type="button" onClick={() => setTab('payments')}>
+              <span className="uz-quick-ico red">💳</span>
+              <span>To‘lovlar</span>
+            </button>
+            <button type="button" onClick={() => setTab('warehouse')}>
+              <span className="uz-quick-ico green">🏭</span>
+              <span>Ombor</span>
+            </button>
+          </div>
+
+          <div className="uz-features">
+            <button
+              type="button"
+              className="uz-feat light"
+              onClick={() => setTab('products')}
+            >
+              <strong>Tovarlar va narxlar</strong>
+              <em>{stats.warehouse.products} mahsulot</em>
+              <div className="uz-stack">
+                <span className="uz-mini-card c1" />
+                <span className="uz-mini-card c2" />
+                <span className="uz-mini-card c3" />
+              </div>
+            </button>
+            <button
+              type="button"
+              className="uz-feat hot"
+              onClick={() => {
+                setMorePanel('broadcast')
+                setTab('more')
+              }}
+            >
+              <strong>Xabar yuborish</strong>
+              <em>Barcha mijozlarga</em>
+              <span className="uz-feat-ico" aria-hidden>
+                📣
+              </span>
+            </button>
+          </div>
+
+          <div className="uz-serv-head">
+            <h2>Barcha xizmatlar bir joyda</h2>
+            <button type="button" className="uz-link" onClick={() => setMenuOpen(true)}>
+              ›
+            </button>
+          </div>
+          <div className="uz-services">
+            <button
+              type="button"
+              className="uz-svc"
+              onClick={() => {
+                setOrderStatus('new')
+                setTab('orders')
+              }}
+            >
+              {stats.stats.new_orders > 0 ? (
+                <span className="uz-badge hot">HOT</span>
+              ) : null}
+              <span className="uz-svc-ico red">🆕</span>
+              <strong>Yangi buyurtmalar</strong>
+            </button>
+            <button
+              type="button"
+              className="uz-svc"
+              onClick={() => setTab('payments')}
+            >
+              {stats.payments_waiting > 0 ? (
+                <span className="uz-badge warn">!</span>
+              ) : null}
+              <span className="uz-svc-ico blue">💳</span>
+              <strong>Karta to‘lovlari</strong>
+            </button>
+            <button
+              type="button"
+              className="uz-svc"
+              onClick={() => setTab('warehouse')}
+            >
+              <span className="uz-svc-ico green">📦</span>
+              <strong>Ombor kirim</strong>
+            </button>
+            <button
+              type="button"
+              className="uz-svc"
+              onClick={() => setTab('products')}
+            >
+              <span className="uz-svc-ico amber">🏷</span>
+              <strong>Narxlarni yangilash</strong>
+            </button>
+            <button
+              type="button"
+              className="uz-svc"
+              onClick={() => {
+                setMorePanel('contacts')
+                setTab('more')
+              }}
+            >
+              <span className="uz-badge new">NEW</span>
+              <span className="uz-svc-ico violet">👤</span>
+              <strong>Kontaktlar</strong>
+            </button>
+            <button
+              type="button"
+              className="uz-svc"
+              onClick={() => {
+                setMorePanel('csv')
+                setTab('more')
+              }}
+            >
+              <span className="uz-svc-ico blue">📄</span>
+              <strong>CSV import</strong>
+            </button>
           </div>
 
           {stats.daily.top?.length ? (
-            <section className="section">
-              <h2>Bugungi top mahsulotlar</h2>
+            <section className="section" style={{ marginTop: 16 }}>
+              <h2>Bugungi top</h2>
               <div className="list">
                 {stats.daily.top.map((t) => (
                   <div key={t.product_name} className="item row-between">
@@ -826,7 +951,12 @@ export default function App() {
 
       {tab === 'orders' ? (
         <section className="section">
-          <h2>Buyurtmalar</h2>
+          <div className="page-h">
+            <div>
+              <h1>Buyurtmalar</h1>
+              <p>Status va tafsilotlarni boshqaring</p>
+            </div>
+          </div>
           <div className="field">
             <label>Qidiruv (ID / telefon)</label>
             <input
@@ -859,10 +989,12 @@ export default function App() {
 
       {tab === 'payments' ? (
         <section className="section">
-          <h2>To‘lovlar (karta)</h2>
-          <p className="sub" style={{ marginBottom: 12 }}>
-            Mijoz karta orqali to‘lov yuborgan buyurtmalar
-          </p>
+          <div className="page-h">
+            <div>
+              <h1>To‘lovlar</h1>
+              <p>Karta orqali kutayotgan to‘lovlar</p>
+            </div>
+          </div>
           <div className="list">
             {payments.length === 0 ? (
               <div className="empty">Kutayotgan to‘lov yo‘q</div>
@@ -875,14 +1007,17 @@ export default function App() {
 
       {tab === 'warehouse' ? (
         <section className="section">
-          <div className="row-between" style={{ marginBottom: 10 }}>
-            <h2 style={{ margin: 0 }}>Ombor</h2>
+          <div className="page-h">
+            <div>
+              <h1>Ombor</h1>
+              <p>Kirim, chiqim va qoldiq</p>
+            </div>
             <button
               type="button"
               className={`chip${lowOnly ? ' active' : ''}`}
               onClick={() => setLowOnly((v) => !v)}
             >
-              Faqat kam qoldiq
+              Kam qoldiq
             </button>
           </div>
           <div className="card" style={{ marginBottom: 12 }}>
@@ -1023,7 +1158,23 @@ export default function App() {
 
       {tab === 'more' ? (
         <section className="section">
-          <h2>Ko‘proq</h2>
+          <div className="page-h">
+            <div>
+              <h1>Ko‘proq</h1>
+              <p>Broadcast, kontakt, CSV, jurnal</p>
+            </div>
+            <button
+              type="button"
+              className="btn btn-danger"
+              onClick={() => {
+                void api.logout(auth)
+                clearAuth()
+                setAuth(null)
+              }}
+            >
+              Chiqish
+            </button>
+          </div>
           <div className="tabs-inline">
             {(
               [
@@ -1206,7 +1357,12 @@ export default function App() {
 
       {tab === 'products' ? (
         <section className="section">
-          <h2>Mahsulotlar</h2>
+          <div className="page-h">
+            <div>
+              <h1>Mahsulotlar</h1>
+              <p>Narx va faollik</p>
+            </div>
+          </div>
           <div className="list">
             {catalog.map((p) => (
               <div key={p.id} className="item">
@@ -1252,31 +1408,122 @@ export default function App() {
         </section>
       ) : null}
 
+      {menuOpen ? (
+        <>
+          <button
+            type="button"
+            className="menu-backdrop"
+            aria-label="Yopish"
+            onClick={() => setMenuOpen(false)}
+          />
+          <div className="menu-sheet" role="dialog">
+            <div className="menu-handle" />
+            <h3>Tezkor menyu</h3>
+            <div className="menu-grid">
+              {(
+                [
+                  ['dash', '🏠', 'Asosiy', 'blue'],
+                  ['orders', '📦', 'Buyurtma', 'red'],
+                  ['payments', '💳', 'To‘lov', 'amber'],
+                  ['warehouse', '🏭', 'Ombor', 'green'],
+                  ['products', '🛍', 'Tovar', 'violet'],
+                  ['more', '⋯', 'Ko‘proq', 'blue'],
+                ] as const
+              ).map(([id, ico, label, tone]) => (
+                <button
+                  key={id}
+                  type="button"
+                  className="menu-item"
+                  onClick={() => {
+                    setTab(id)
+                    setMenuOpen(false)
+                  }}
+                >
+                  <span className={`mi uz-svc-ico ${tone}`}>{ico}</span>
+                  <span>{label}</span>
+                </button>
+              ))}
+              <button
+                type="button"
+                className="menu-item"
+                onClick={() => {
+                  void api.logout(auth)
+                  clearAuth()
+                  setAuth(null)
+                  setMenuOpen(false)
+                }}
+              >
+                <span className="mi uz-svc-ico red">⎋</span>
+                <span>Chiqish</span>
+              </button>
+            </div>
+          </div>
+        </>
+      ) : null}
+
       <nav className="nav" aria-label="Admin menyu">
         <div className="nav-inner">
-          {(
-            [
-              ['dash', '📊', 'Home'],
-              ['orders', '📦', 'Buyurtma'],
-              ['payments', '💳', 'To‘lov'],
-              ['warehouse', '🏭', 'Ombor'],
-              ['products', '🛍', 'Tovar'],
-              ['more', '⋯', 'Ko‘proq'],
-            ] as const
-          ).map(([id, ico, label]) => (
+          <button
+            type="button"
+            className={`nav-btn${tab === 'dash' ? ' active' : ''}`}
+            onClick={() => setTab('dash')}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z" />
+            </svg>
+            Asosiy
+          </button>
+          <button
+            type="button"
+            className={`nav-btn${tab === 'orders' ? ' active' : ''}`}
+            onClick={() => setTab('orders')}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M4 7h16v12H4z" />
+              <path d="M8 7V5a4 4 0 0 1 8 0v2" />
+            </svg>
+            Buyurtma
+          </button>
+          <div className="nav-center-wrap">
             <button
-              key={id}
               type="button"
-              className={`nav-btn${tab === id ? ' active' : ''}`}
-              onClick={() => setTab(id)}
+              className="nav-center"
+              aria-label="Menyu"
+              onClick={() => setMenuOpen(true)}
             >
-              <span>{ico}</span>
-              {label}
-              {id === 'payments' && stats && stats.payments_waiting > 0 ? (
-                <span className="nav-dot">{stats.payments_waiting}</span>
-              ) : null}
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="3" y="3" width="8" height="8" rx="2" />
+                <rect x="13" y="3" width="8" height="8" rx="2" />
+                <rect x="3" y="13" width="8" height="8" rx="2" />
+                <rect x="13" y="13" width="8" height="8" rx="2" />
+              </svg>
             </button>
-          ))}
+          </div>
+          <button
+            type="button"
+            className={`nav-btn${tab === 'payments' ? ' active' : ''}`}
+            onClick={() => setTab('payments')}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="6" width="18" height="12" rx="2" />
+              <path d="M3 10h18" />
+            </svg>
+            To‘lov
+            {stats && stats.payments_waiting > 0 ? (
+              <span className="nav-dot">{stats.payments_waiting}</span>
+            ) : null}
+          </button>
+          <button
+            type="button"
+            className={`nav-btn${tab === 'warehouse' ? ' active' : ''}`}
+            onClick={() => setTab('warehouse')}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M4 20V9l8-5 8 5v11" />
+              <path d="M9 20v-6h6v6" />
+            </svg>
+            Ombor
+          </button>
         </div>
       </nav>
     </div>
