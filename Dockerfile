@@ -13,6 +13,7 @@ COPY arduino ./arduino
 COPY jadval ./jadval
 COPY kichkintoy ./kichkintoy
 COPY slayd ./slayd
+COPY ingliz ./ingliz
 
 RUN mkdir -p /data
 

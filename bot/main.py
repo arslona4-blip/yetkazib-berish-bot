@@ -57,6 +57,7 @@ from bot.handlers import (
     contact_info,
     help_command,
     my_orders,
+    open_ingliz,
     payment_callback,
     precheckout_callback,
     product_callback,
@@ -174,6 +175,7 @@ def main() -> None:
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("ingliz", open_ingliz))
     app.add_handler(CommandHandler("id", show_my_id))
     app.add_handler(CommandHandler("stop_recur", stop_recur_command))
     app.add_handler(build_order_conversation())
@@ -195,6 +197,7 @@ def main() -> None:
     app.add_handler(MessageHandler(filters.Regex("^📋 Mening buyurtmalarim$"), my_orders))
     app.add_handler(MessageHandler(filters.Regex("^ℹ️ Yordam$"), help_command))
     app.add_handler(MessageHandler(filters.Regex("^📞 Aloqa$"), contact_info))
+    app.add_handler(MessageHandler(filters.Regex("^🇬🇧 Ingliz$"), open_ingliz))
     app.add_handler(MessageHandler(filters.Regex("^📦 Buyurtmalar$"), admin_orders_panel))
     app.add_handler(MessageHandler(filters.Regex("^🛠 Admin panel$"), admin_panel))
     app.add_handler(MessageHandler(filters.Regex("^🚴 Kuryer panel$"), courier_panel))
