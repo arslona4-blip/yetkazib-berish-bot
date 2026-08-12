@@ -131,12 +131,108 @@ function weatherText(code: number): string {
   return 'Noma’lum'
 }
 
+const UZ_ORDINAL: Record<number, string> = {
+  1: 'birinchi',
+  2: 'ikkinchi',
+  3: 'uchinchi',
+  4: 'to‘rtinchi',
+  5: 'beshinchi',
+  6: 'oltinchi',
+  7: 'yettinchi',
+  8: 'sakkizinchi',
+  9: 'to‘qqizinchi',
+  10: 'o‘ninchi',
+}
+
+const RU_ORDINAL: Record<number, string> = {
+  1: 'первый',
+  2: 'второй',
+  3: 'третий',
+  4: 'четвёртый',
+  5: 'пятый',
+  6: 'шестой',
+  7: 'седьмой',
+  8: 'восьмой',
+  9: 'девятый',
+  10: 'десятый',
+}
+
+/** Raqam o‘rniga so‘z — TTS “dva” demasligi uchun */
+export function periodOrdinal(n: number, lang: 'uz' | 'ru'): string {
+  if (lang === 'ru') return RU_ORDINAL[n] || String(n)
+  return UZ_ORDINAL[n] || `${n}-`
+}
+
+export function sayCurrentLesson(
+  n: number,
+  subject: string,
+  lang: 'uz' | 'ru',
+): string {
+  const ord = periodOrdinal(n, lang)
+  const fan = subject.trim() || (lang === 'ru' ? 'предмет не указан' : 'fan belgilanmagan')
+  if (lang === 'ru') return `Сейчас ${ord} урок. Предмет: ${fan}.`
+  return `Hozir ${ord} dars. Fan: ${fan}.`
+}
+
+export function sayNextLesson(
+  n: number,
+  subject: string,
+  lang: 'uz' | 'ru',
+): string {
+  const ord = periodOrdinal(n, lang)
+  const fan = subject.trim() || (lang === 'ru' ? 'предмет не указан' : 'fan belgilanmagan')
+  if (lang === 'ru') return `Следующий — ${ord} урок. Предмет: ${fan}.`
+  return `Keyingi dars — ${ord} dars. Fan: ${fan}.`
+}
+
+function pickVoice(lang: 'uz' | 'ru'): SpeechSynthesisVoice | null {
+  if (!('speechSynthesis' in window)) return null
+  const voices = window.speechSynthesis.getVoices()
+  if (!voices.length) return null
+  if (lang === 'ru') {
+    return (
+      voices.find((v) => v.lang.toLowerCase().startsWith('ru')) ||
+      voices.find((v) => /russia|русский/i.test(v.name)) ||
+      null
+    )
+  }
+  // O‘zbek ovozi kam — turkcha fonetika yaqinroq; raqamlar allaqachon so‘z
+  return (
+    voices.find((v) => v.lang.toLowerCase().startsWith('uz')) ||
+    voices.find((v) => v.lang.toLowerCase().startsWith('tr')) ||
+    voices.find((v) => /uzbek|turkish|türk|o‘zbek|ozbek/i.test(v.name)) ||
+    voices.find((v) => v.lang.toLowerCase().startsWith('en')) ||
+    null
+  )
+}
+
 export function speak(text: string, lang: 'uz' | 'ru') {
   if (!('speechSynthesis' in window)) return
-  const u = new SpeechSynthesisUtterance(text)
-  u.lang = lang === 'ru' ? 'ru-RU' : 'uz-UZ'
-  window.speechSynthesis.cancel()
-  window.speechSynthesis.speak(u)
+  const run = () => {
+    const u = new SpeechSynthesisUtterance(text)
+    // Raqamsiz matn; tr-TR ba’zan uz-UZ dan yaxshiroq o‘qiydi
+    u.lang = lang === 'ru' ? 'ru-RU' : 'tr-TR'
+    const voice = pickVoice(lang)
+    if (voice) {
+      u.voice = voice
+      u.lang = voice.lang || u.lang
+    }
+    u.rate = 0.92
+    u.pitch = 1
+    window.speechSynthesis.cancel()
+    window.speechSynthesis.speak(u)
+  }
+  // ba’zi brauzerlarda ovozlar kech yuklanadi
+  if (window.speechSynthesis.getVoices().length === 0) {
+    window.speechSynthesis.onvoiceschanged = () => {
+      window.speechSynthesis.onvoiceschanged = null
+      run()
+    }
+    // fallback
+    window.setTimeout(run, 250)
+  } else {
+    run()
+  }
 }
 
 export function listenOnce(lang: 'uz' | 'ru'): Promise<string> {
