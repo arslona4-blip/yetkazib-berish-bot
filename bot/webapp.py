@@ -68,6 +68,7 @@ ADMINAPP_DIR = BASE_DIR / "admin"
 ARDUINO_DIR = BASE_DIR / "arduino"
 JADVAL_DIR = BASE_DIR / "jadval"
 KICHKINTOY_DIR = BASE_DIR / "kichkintoy"
+SLAYD_DIR = BASE_DIR / "slayd"
 PHOTOS_DIR = Path(DATABASE_PATH).resolve().parent / "photos"
 
 
