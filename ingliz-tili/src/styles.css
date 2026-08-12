@@ -1,0 +1,514 @@
+:root {
+  --bg: #072a2e;
+  --bg2: #0b3a40;
+  --panel: rgba(255, 255, 255, 0.06);
+  --line: rgba(180, 230, 220, 0.16);
+  --text: #e8f6f3;
+  --muted: #8fb5b0;
+  --accent: #2dd4bf;
+  --accent2: #ffecb3;
+  --ok: #5eead4;
+  --bad: #fb7185;
+  --font: 'Sora', system-ui, sans-serif;
+  --display: 'Fraunces', Georgia, serif;
+  --safe: env(safe-area-inset-bottom, 0px);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  color: var(--text);
+  background:
+    radial-gradient(900px 480px at 0% -10%, #0f5c58 0%, transparent 55%),
+    radial-gradient(720px 420px at 100% 0%, #1a4a3a 0%, transparent 48%),
+    linear-gradient(165deg, #062226 0%, var(--bg) 45%, #0a3338 100%);
+  background-attachment: fixed;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.page {
+  width: min(920px, 100%);
+  margin: 0 auto;
+  padding: 20px 16px calc(28px + var(--safe));
+  animation: rise 0.5s ease both;
+}
+
+.lesson-page {
+  animation: rise 0.35s ease both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes waveDrift {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-40px);
+  }
+}
+
+@keyframes pulseSoft {
+  0% {
+    box-shadow: 0 0 0 0 rgba(45, 212, 191, 0.35);
+  }
+  100% {
+    box-shadow: 0 0 0 18px rgba(45, 212, 191, 0);
+  }
+}
+
+.hero {
+  position: relative;
+  min-height: min(52vh, 420px);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 12px 0 22px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.hero-bg {
+  position: absolute;
+  inset: -20% -10% auto;
+  height: 120%;
+  background:
+    radial-gradient(circle at 30% 40%, rgba(45, 212, 191, 0.22), transparent 42%),
+    radial-gradient(circle at 78% 30%, rgba(255, 236, 179, 0.12), transparent 38%);
+  pointer-events: none;
+}
+
+.hero-wave {
+  position: absolute;
+  left: -10%;
+  right: -20%;
+  bottom: 8%;
+  height: 70px;
+  opacity: 0.35;
+  background: repeating-linear-gradient(
+    115deg,
+    transparent 0 14px,
+    rgba(45, 212, 191, 0.35) 14px 16px
+  );
+  mask-image: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent);
+  animation: waveDrift 8s linear infinite;
+  pointer-events: none;
+}
+
+.eyebrow {
+  position: relative;
+  margin: 0 0 10px;
+  color: var(--accent2);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+}
+
+.brand,
+.lesson-head h1,
+.quiz-result h1,
+.q-prompt {
+  position: relative;
+  margin: 0;
+  font-family: var(--display);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+
+.brand {
+  font-size: clamp(3.2rem, 12vw, 5.2rem);
+  color: var(--text);
+  text-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+
+.brand::after {
+  content: '';
+  display: inline-block;
+  width: 0.42em;
+  height: 0.42em;
+  margin-left: 0.12em;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: 0.18em;
+  box-shadow: 0 0 24px rgba(45, 212, 191, 0.55);
+}
+
+.lead {
+  position: relative;
+  margin: 14px 0 0;
+  color: var(--muted);
+  max-width: 36ch;
+  line-height: 1.55;
+  font-size: 1.02rem;
+}
+
+.progress-wrap {
+  position: relative;
+  margin-top: 22px;
+  max-width: 360px;
+}
+
+.progress-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.progress-meta strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.bar {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #5eead4);
+  border-radius: inherit;
+  transition: width 0.45s ease;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 16px;
+}
+
+.chip,
+.tab,
+.ghost,
+.btn,
+.opt {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 10px 14px;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.15s ease;
+}
+
+.chip:hover,
+.tab:hover,
+.ghost:hover,
+.btn:hover,
+.opt:hover:not(:disabled),
+.lesson-btn:hover {
+  border-color: rgba(45, 212, 191, 0.45);
+  background: rgba(45, 212, 191, 0.1);
+}
+
+.chip.on,
+.tab.on {
+  background: rgba(45, 212, 191, 0.18);
+  border-color: rgba(45, 212, 191, 0.55);
+  color: var(--accent);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 12px;
+}
+
+.lesson-btn {
+  text-align: left;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.03));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 160px;
+}
+
+.lesson-btn.done {
+  border-color: rgba(45, 212, 191, 0.35);
+}
+
+.lesson-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.num {
+  font-family: var(--display);
+  font-size: 1.35rem;
+  color: var(--accent);
+}
+
+.tag {
+  font-size: 0.72rem;
+  color: var(--accent2);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.lesson-btn h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.lesson-btn p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.45;
+  flex: 1;
+}
+
+.lesson-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.foot {
+  margin-top: 28px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.ghost {
+  background: transparent;
+  padding: 8px 10px;
+}
+
+.ghost.ok {
+  color: var(--ok);
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.lesson-head h1 {
+  font-size: clamp(2rem, 6vw, 2.8rem);
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin: 18px 0 14px;
+  overflow-x: auto;
+}
+
+.tab {
+  flex: 1;
+  min-width: 96px;
+  text-align: center;
+}
+
+.flashcard {
+  position: relative;
+  padding: 28px 20px 20px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(420px 180px at 80% 0%, rgba(45, 212, 191, 0.16), transparent 60%),
+    rgba(255, 255, 255, 0.05);
+  text-align: center;
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.flashcard.pulse {
+  animation: pulseSoft 0.45s ease;
+}
+
+.speak {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: rgba(45, 212, 191, 0.12);
+  color: var(--accent);
+  font-size: 1.1rem;
+}
+
+.en {
+  margin: 8px 0 0;
+  font-family: var(--display);
+  font-size: clamp(2rem, 7vw, 2.8rem);
+  line-height: 1.15;
+}
+
+.en.phrase {
+  font-size: clamp(1.45rem, 5vw, 2rem);
+}
+
+.uz {
+  margin: 0;
+  color: var(--muted);
+  font-size: 1.08rem;
+}
+
+.tip {
+  margin: 4px 0 0;
+  color: var(--accent2);
+  font-size: 0.85rem;
+}
+
+.nav-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  margin-top: 18px;
+}
+
+.btn {
+  min-width: 48px;
+}
+
+.btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.btn.primary {
+  background: linear-gradient(135deg, #1f9e90, #2dd4bf);
+  border-color: transparent;
+  color: #043c3a;
+  font-weight: 600;
+}
+
+.btn.wide {
+  width: 100%;
+  margin-top: 12px;
+}
+
+.cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.cta-row.bottom {
+  margin-top: 18px;
+}
+
+.cta-row .btn {
+  flex: 1;
+  min-width: 140px;
+  text-align: center;
+}
+
+.quiz-box,
+.quiz-result {
+  padding: 8px 0 12px;
+}
+
+.reveal {
+  animation: rise 0.4s ease both;
+}
+
+.q-prompt {
+  font-size: clamp(1.45rem, 5vw, 2rem);
+  margin-bottom: 8px;
+}
+
+.hint {
+  color: var(--accent2);
+  margin: 0 0 14px;
+  font-size: 0.9rem;
+}
+
+.options {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0 8px;
+}
+
+.opt {
+  text-align: left;
+  padding: 14px 16px;
+  border-radius: 14px;
+}
+
+.opt.correct {
+  border-color: rgba(94, 234, 212, 0.7);
+  background: rgba(45, 212, 191, 0.2);
+}
+
+.opt.wrong {
+  border-color: rgba(251, 113, 133, 0.65);
+  background: rgba(251, 113, 133, 0.15);
+}
+
+.quiz-result h1 {
+  font-size: clamp(3rem, 12vw, 4.5rem);
+  color: var(--accent);
+}
+
+@media (max-width: 520px) {
+  .hero {
+    min-height: 44vh;
+  }
+
+  .lesson-btn {
+    min-height: 0;
+  }
+}
