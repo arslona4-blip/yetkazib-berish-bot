@@ -14,6 +14,7 @@ import {
   LESSONS,
   LEVEL_LABEL,
   SKILL_META,
+  TOPIC_LABEL,
   type Lesson,
   type Level,
   type QuizItem,
@@ -38,7 +39,7 @@ export default function App() {
   const [skill, setSkill] = useState<SkillId>('vocab')
   const [game, setGame] = useState<GameId>('match')
   const [progress, setProgress] = useState<Progress>(() => loadProgress())
-  const [filter, setFilter] = useState<'all' | Level>('all')
+  const [filter, setFilter] = useState<'all' | Level | 'zamon' | 'mavzu'>('all')
   const [toast, setToast] = useState('')
 
   const lesson = useMemo(
@@ -48,6 +49,9 @@ export default function App() {
 
   const filtered = useMemo(() => {
     if (filter === 'all') return LESSONS
+    if (filter === 'zamon' || filter === 'mavzu') {
+      return LESSONS.filter((l) => l.topic === filter)
+    }
     return LESSONS.filter((l) => l.level === filter)
   }, [filter])
 
@@ -101,8 +105,8 @@ export default function App() {
           <p className="eyebrow">O‘zbek → English · 6 ko‘nikma + o‘yinlar</p>
           <h1 className="brand">Ingliz</h1>
           <p className="lead">
-            Lug‘at, listening, reading, writing, speaking, talaffuz va quiz.
-            Zerikmang — o‘yinlar bilan mashq qiling.
+            So‘zlar, 12 zamon, listening/reading/writing/speaking, talaffuz va
+            o‘yinlar. Zerikmang — mashq qiling.
           </p>
           <div className="stats-row">
             <div className="stat">
@@ -148,12 +152,15 @@ export default function App() {
           </div>
         </section>
 
-        <div className="filters" role="tablist" aria-label="Daraja">
+        <div className="filters" role="tablist" aria-label="Filtr">
           {(
             [
               ['all', 'Hammasi'],
+              ['zamon', '12 zamon'],
+              ['mavzu', 'Mavzu'],
               ['boshlangich', 'Boshlang‘ich'],
               ['ortacha', 'O‘rta'],
+              ['ilgor', 'Ilg‘or'],
             ] as const
           ).map(([k, label]) => (
             <button
@@ -175,12 +182,14 @@ export default function App() {
               <button
                 key={l.id}
                 type="button"
-                className={`lesson-btn${isDone ? ' done' : ''}`}
+                className={`lesson-btn${isDone ? ' done' : ''}${l.topic === 'zamon' ? ' tense' : ''}`}
                 onClick={() => openHub(l.id)}
               >
                 <div className="lesson-top">
                   <span className="num">{String(l.num).padStart(2, '0')}</span>
-                  <span className="tag">{LEVEL_LABEL[l.level]}</span>
+                  <span className="tag">
+                    {l.topic === 'zamon' ? 'Zamon' : LEVEL_LABEL[l.level]}
+                  </span>
                 </div>
                 <h2>{l.title}</h2>
                 <p>{l.summary}</p>
@@ -221,9 +230,27 @@ export default function App() {
         </div>
 
         <header className="lesson-head">
-          <p className="eyebrow">Dars {String(lesson.num).padStart(2, '0')}</p>
+          <p className="eyebrow">
+            {TOPIC_LABEL[lesson.topic]} · {LEVEL_LABEL[lesson.level]} ·{' '}
+            {lesson.minutes} daq
+          </p>
           <h1>{lesson.title}</h1>
           <p className="lead">{lesson.tip}</p>
+          {lesson.formula ? (
+            <div className="formula-box">
+              <strong>Formula</strong>
+              <code>{lesson.formula}</code>
+            </div>
+          ) : null}
+          {lesson.signals && lesson.signals.length ? (
+            <div className="signals">
+              {lesson.signals.map((s) => (
+                <span key={s} className="signal">
+                  {s}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </header>
 
         <div className="skill-grid">
