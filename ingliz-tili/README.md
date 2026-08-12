@@ -39,3 +39,11 @@ rm -rf ../ingliz && cp -R dist ../ingliz
 - Chaqmoq (60s)
 
 XP, streak va dars progress `localStorage` da saqlanadi.
+
+## Bot
+
+`MINIAPP_URL` sozlangan bo‘lsa:
+
+- `/ingliz` buyrug‘i
+- «⋯ Ko‘proq» → 🇬🇧 Ingliz
+- `/start` dagi inline tugma
