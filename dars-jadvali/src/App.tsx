@@ -208,6 +208,10 @@ export default function App() {
       setSheet(null)
       return
     }
+    if (id === 'checklist') {
+      setSheet('checklist')
+      return
+    }
     if (id === 'print') {
       window.print()
       return
@@ -550,10 +554,26 @@ export default function App() {
       {tab === 'tasks' && (
         <section className="page">
           <div className="page-h">
-            <h1>{dict.tasks}</h1>
+            <div>
+              <h1>{dict.homework}</h1>
+              <p>
+                {lang === 'ru'
+                  ? 'Только домашние задания по урокам'
+                  : 'Faqat darslardan berilgan uyga vazifalar'}
+              </p>
+            </div>
+            <button type="button" className="btn-ghost" onClick={() => setSheet('checklist')}>
+              {dict.tasks}
+            </button>
           </div>
           <div className="cards">
-            {homeworks.length === 0 && <p className="empty-hint">—</p>}
+            {homeworks.length === 0 && (
+              <p className="empty-hint">
+                {lang === 'ru'
+                  ? 'Пока нет ДЗ. Откройте урок и добавьте «Домашнее задание».'
+                  : 'Hozircha uyga vazifa yo‘q. Darsni ochib «Uyga vazifa» yozing.'}
+              </p>
+            )}
             {homeworks.map((h) => (
               <label key={h.key} className="check-card">
                 <input
@@ -574,27 +594,6 @@ export default function App() {
                   <strong>{h.label}</strong>
                   <p>{h.cell.homework}</p>
                 </div>
-              </label>
-            ))}
-          </div>
-          <h3 className="subh">{dict.checklist}</h3>
-          <div className="cards">
-            {profile.checklist.map((c) => (
-              <label key={c.id} className="check-card">
-                <input
-                  type="checkbox"
-                  disabled={readOnly}
-                  checked={c.done}
-                  onChange={(e) =>
-                    patchProfile((p) => ({
-                      ...p,
-                      checklist: p.checklist.map((x) =>
-                        x.id === c.id ? { ...x, done: e.target.checked } : x,
-                      ),
-                    }))
-                  }
-                />
-                <span>{c.text}</span>
               </label>
             ))}
           </div>
@@ -693,7 +692,7 @@ export default function App() {
         </button>
         <button type="button" className={tab === 'tasks' ? 'on' : ''} onClick={() => setTab('tasks')}>
           <Icon name="homework" size={20} />
-          {dict.tasks}
+          {dict.homework}
         </button>
         <button type="button" className={tab === 'profile' ? 'on' : ''} onClick={() => setTab('profile')}>
           <Icon name="user" size={20} />
@@ -912,6 +911,11 @@ export default function App() {
 
           {sheet === 'checklist' && (
             <div className="form-stack">
+              <p className="muted">
+                {lang === 'ru'
+                  ? 'Личные дела: что взять утром, напоминания. Это не домашнее задание.'
+                  : 'Shaxsiy ishlar: ertalab nima olish, eslatmalar. Bu uyga vazifa emas.'}
+              </p>
               {profile.checklist.map((c) => (
                 <label key={c.id} className="check-card">
                   <input
@@ -930,6 +934,22 @@ export default function App() {
                   <span>{c.text}</span>
                 </label>
               ))}
+              {!readOnly && (
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  onClick={() => {
+                    const text = prompt(lang === 'ru' ? 'Новая задача' : 'Yangi shaxsiy vazifa')
+                    if (!text) return
+                    patchProfile((p) => ({
+                      ...p,
+                      checklist: [...p.checklist, { id: uid(), text, done: false }],
+                    }))
+                  }}
+                >
+                  + {dict.add}
+                </button>
+              )}
             </div>
           )}
 
