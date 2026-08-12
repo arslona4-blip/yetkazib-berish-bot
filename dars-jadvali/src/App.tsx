@@ -16,7 +16,7 @@ import {
   type DayId,
   type Profile,
 } from './model'
-import { activeProfile, downloadJson, loadSettings, readJsonFile, saveSettings } from './store'
+import { activeProfile, downloadBlob, downloadJson, loadSettings, readJsonFile, saveSettings, shareOrDownload } from './store'
 import { t } from './i18n'
 import {
   applyTemplate,
@@ -211,24 +211,7 @@ export default function App() {
       shareText(dict.brand, `${location.origin}/jadval/#share=${code}`)
       return
     }
-    if (id === 'calendar') {
-      const blob = new Blob([buildIcs(profile)], { type: 'text/calendar' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${profile.className}.ics`
-      a.click()
-      URL.revokeObjectURL(url)
-      return
-    }
-    if (id === 'admin') {
-      downloadJson(`sinf-${profile.className}.json`, profile)
-      return
-    }
-    if (id === 'backup') {
-      downloadJson(`jadval-backup.json`, settings)
-      return
-    }
+    // calendar / admin / backup — sheet orqali (mobil yuklash uchun)
     setSheet(id)
   }
 
@@ -1208,15 +1191,125 @@ export default function App() {
 
           {sheet === 'backup' && (
             <div className="seg col">
+              <p className="muted">
+                {lang === 'ru'
+                  ? 'Сохраните резервную копию или восстановите из файла.'
+                  : 'Zaxira nusxasini saqlang yoki fayldan tiklang.'}
+              </p>
               <button
                 type="button"
                 className="btn-primary"
-                onClick={() => downloadJson('jadval-backup.json', settings)}
+                onClick={() => {
+                  void shareOrDownload(
+                    'jadval-backup.json',
+                    new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' }),
+                    dict.backup,
+                  ).then((mode) =>
+                    alert(
+                      mode === 'shared'
+                        ? lang === 'ru'
+                          ? 'Отправлено'
+                          : 'Yuborildi'
+                        : lang === 'ru'
+                          ? 'Файл скачан / сохранён'
+                          : 'Fayl yuklandi / saqlandi',
+                    ),
+                  )
+                }}
               >
                 {dict.backup}
               </button>
               <button type="button" className="btn-ghost" onClick={() => fileRef.current?.click()}>
                 {dict.restore}
+              </button>
+            </div>
+          )}
+
+          {sheet === 'calendar' && (
+            <div className="seg col">
+              <p className="muted">
+                {lang === 'ru'
+                  ? 'Скачайте .ics и откройте в Google Calendar / Apple Calendar.'
+                  : '.ics faylni yuklab, Google Calendar yoki Apple Calendar da oching.'}
+              </p>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => {
+                  const name = `${profile.className || 'jadval'}.ics`
+                  const blob = new Blob([buildIcs(profile)], {
+                    type: 'text/calendar;charset=utf-8',
+                  })
+                  void shareOrDownload(name, blob, dict.calendar).then((mode) =>
+                    alert(
+                      mode === 'shared'
+                        ? lang === 'ru'
+                          ? 'Календарь отправлен'
+                          : 'Kalendar yuborildi'
+                        : lang === 'ru'
+                          ? 'Файл .ics сохранён. Откройте его в календаре.'
+                          : '.ics fayl saqlandi. Kalendar ilovasida oching.',
+                    ),
+                  )
+                }}
+              >
+                {lang === 'ru' ? 'Скачать .ics' : '.ics yuklab olish'}
+              </button>
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => {
+                  downloadBlob(
+                    `${profile.className || 'jadval'}.ics`,
+                    new Blob([buildIcs(profile)], { type: 'text/calendar;charset=utf-8' }),
+                  )
+                  alert(lang === 'ru' ? 'Скачивание запущено' : 'Yuklash boshlandi')
+                }}
+              >
+                {lang === 'ru' ? 'Прямое скачивание' : 'To‘g‘ridan-to‘g‘ri yuklash'}
+              </button>
+            </div>
+          )}
+
+          {sheet === 'admin' && (
+            <div className="seg col">
+              <p className="muted">
+                {lang === 'ru'
+                  ? 'Пакет класса (JSON) для учителя / одноклассников.'
+                  : 'Sinf paketi (JSON) — o‘qituvchi yoki sinfdoshlar uchun.'}
+              </p>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => {
+                  const name = `sinf-${profile.className || 'paket'}.json`
+                  const blob = new Blob([JSON.stringify(profile, null, 2)], {
+                    type: 'application/json',
+                  })
+                  void shareOrDownload(name, blob, dict.admin).then((mode) =>
+                    alert(
+                      mode === 'shared'
+                        ? lang === 'ru'
+                          ? 'Пакет отправлен'
+                          : 'Paket yuborildi'
+                        : lang === 'ru'
+                          ? 'JSON файл сохранён'
+                          : 'JSON fayl saqlandi',
+                    ),
+                  )
+                }}
+              >
+                {lang === 'ru' ? 'Отправить / скачать пакет' : 'Yuborish / yuklab olish'}
+              </button>
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => {
+                  downloadJson(`sinf-${profile.className || 'paket'}.json`, profile)
+                  alert(lang === 'ru' ? 'Скачивание запущено' : 'Yuklash boshlandi')
+                }}
+              >
+                {lang === 'ru' ? 'Прямое скачивание' : 'To‘g‘ridan-to‘g‘ri yuklash'}
               </button>
             </div>
           )}
