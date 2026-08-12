@@ -11,6 +11,7 @@ COPY shajara ./shajara
 COPY admin ./admin
 COPY arduino ./arduino
 COPY jadval ./jadval
+COPY kichkintoy ./kichkintoy
 
 RUN mkdir -p /data
 

@@ -67,6 +67,7 @@ SHAJARA_DIR = BASE_DIR / "shajara"
 ADMINAPP_DIR = BASE_DIR / "admin"
 ARDUINO_DIR = BASE_DIR / "arduino"
 JADVAL_DIR = BASE_DIR / "jadval"
+KICHKINTOY_DIR = BASE_DIR / "kichkintoy"
 PHOTOS_DIR = Path(DATABASE_PATH).resolve().parent / "photos"
 
 
@@ -768,6 +769,13 @@ async def serve_jadval_index(_request: web.Request) -> web.FileResponse:
     return web.FileResponse(index)
 
 
+async def serve_kichkintoy_index(_request: web.Request) -> web.FileResponse:
+    index = KICHKINTOY_DIR / "index.html"
+    if not index.is_file():
+        raise web.HTTPNotFound(text="Kichkintoy AI topilmadi")
+    return web.FileResponse(index)
+
+
 def create_app() -> web.Application:
     from bot.admin_api import register_admin_routes
 
@@ -813,6 +821,13 @@ def create_app() -> web.Application:
         app.router.add_static("/jadval/", JADVAL_DIR, show_index=False)
     else:
         logger.warning("jadval papkasi topilmadi: %s", JADVAL_DIR)
+
+    if KICHKINTOY_DIR.is_dir() and (KICHKINTOY_DIR / "index.html").is_file():
+        app.router.add_get("/kichkintoy", serve_kichkintoy_index)
+        app.router.add_get("/kichkintoy/", serve_kichkintoy_index)
+        app.router.add_static("/kichkintoy/", KICHKINTOY_DIR, show_index=False)
+    else:
+        logger.warning("kichkintoy papkasi topilmadi: %s", KICHKINTOY_DIR)
 
     if MINIAPP_DIR.is_dir():
         app.router.add_get("/", serve_index)
