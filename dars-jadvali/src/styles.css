@@ -101,9 +101,24 @@ select {
 .hero-top,
 .greet,
 .hero-sub,
+.brand-wrap,
 .feature-rail {
   position: relative;
   z-index: 1;
+}
+
+.brand-wrap {
+  display: grid;
+  place-items: center;
+  margin: 0.85rem 0 0.15rem;
+  animation: rise 0.7s ease 0.05s both;
+}
+
+.brand-emblem {
+  width: min(220px, 58vw);
+  height: auto;
+  filter: drop-shadow(0 14px 28px rgba(0, 0, 0, 0.35));
+  border-radius: 50%;
 }
 
 .hero-top {

@@ -290,6 +290,20 @@ export default function App() {
             <p className="greet">{greet}</p>
             <p className="hero-sub">{heroMeta}</p>
 
+            <div className="brand-wrap">
+              <picture>
+                <source srcSet="/jadval/brand-dars-jadvali.webp" type="image/webp" />
+                <img
+                  className="brand-emblem"
+                  src="/jadval/brand-dars-jadvali.png"
+                  alt="Dars Jadvali"
+                  width={220}
+                  height={220}
+                  decoding="async"
+                />
+              </picture>
+            </div>
+
             <div className="feature-rail">
               {featured.map((s) => (
                 <button
