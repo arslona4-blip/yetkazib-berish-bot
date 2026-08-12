@@ -1,4 +1,8 @@
-export type Level = 'boshlangich' | 'ortacha'
+import { TENSE_LESSONS } from './tenses'
+
+export type Level = 'boshlangich' | 'ortacha' | 'ilgor'
+
+export type Topic = 'mavzu' | 'zamon'
 
 export type Word = {
   en: string
@@ -45,10 +49,13 @@ export type Lesson = {
   id: string
   num: number
   level: Level
+  topic: Topic
   title: string
   summary: string
   minutes: number
   tip: string
+  formula?: string
+  signals?: string[]
   words: Word[]
   phrases: Phrase[]
   quiz: QuizItem[]
@@ -61,6 +68,12 @@ export type Lesson = {
 export const LEVEL_LABEL: Record<Level, string> = {
   boshlangich: 'Boshlang‘ich',
   ortacha: 'O‘rta',
+  ilgor: 'Ilg‘or',
+}
+
+export const TOPIC_LABEL: Record<Topic, string> = {
+  mavzu: 'Mavzu',
+  zamon: 'Zamon',
 }
 
 export const SKILL_META = [
@@ -90,11 +103,12 @@ export function answersMatch(input: string, answer: string, accept: string[] = [
   return list.some((a) => a === n)
 }
 
-export const LESSONS: Lesson[] = [
+export const THEME_LESSONS: Lesson[] = [
   {
     id: 'greetings',
     num: 1,
     level: 'boshlangich',
+    topic: 'mavzu',
     title: 'Salomlashish',
     summary: 'Hello, Good morning va kundalik salomlar.',
     minutes: 18,
@@ -206,6 +220,7 @@ export const LESSONS: Lesson[] = [
     id: 'family',
     num: 2,
     level: 'boshlangich',
+    topic: 'mavzu',
     title: 'Oila',
     summary: 'Family a’zolari: mother, father, sister…',
     minutes: 18,
@@ -312,6 +327,7 @@ export const LESSONS: Lesson[] = [
     id: 'numbers',
     num: 3,
     level: 'boshlangich',
+    topic: 'mavzu',
     title: 'Raqamlar',
     summary: '1 dan 20 gacha — one, two, twenty.',
     minutes: 20,
@@ -403,6 +419,7 @@ export const LESSONS: Lesson[] = [
     id: 'colors',
     num: 4,
     level: 'boshlangich',
+    topic: 'mavzu',
     title: 'Ranglar',
     summary: 'Red, blue, green va boshqa asosiy ranglar.',
     minutes: 16,
@@ -498,6 +515,7 @@ export const LESSONS: Lesson[] = [
     id: 'food',
     num: 5,
     level: 'boshlangich',
+    topic: 'mavzu',
     title: 'Ovqat',
     summary: 'Non, suv, meva — cafe va uyda gaplar.',
     minutes: 18,
@@ -600,6 +618,7 @@ export const LESSONS: Lesson[] = [
     id: 'daily',
     num: 6,
     level: 'ortacha',
+    topic: 'mavzu',
     title: 'Kunlik gaplar',
     summary: 'Uyda, yo‘lda, do‘konda kerakli iboralar.',
     minutes: 20,
@@ -708,6 +727,7 @@ export const LESSONS: Lesson[] = [
     id: 'questions',
     num: 7,
     level: 'ortacha',
+    topic: 'mavzu',
     title: 'So‘roq so‘zlari',
     summary: 'What, Where, Who, When, Why, How.',
     minutes: 20,
@@ -797,131 +817,6 @@ export const LESSONS: Lesson[] = [
       { text: 'Why are you late?', tip: 'late — uzun “ay”' },
     ],
   },
-  {
-    id: 'present',
-    num: 8,
-    level: 'ortacha',
-    title: 'Present Simple',
-    summary: 'I work, she works — kundalik odatlar.',
-    minutes: 22,
-    tip: 'He/She/It → -s. Inkor: don’t / doesn’t.',
-    words: [
-      { en: 'I work', uz: 'Men ishlayman' },
-      { en: 'She works', uz: 'U ishlaydi' },
-      { en: 'We study', uz: 'Biz o‘qiymiz' },
-      { en: 'He likes', uz: 'U yoqtiradi' },
-      { en: 'They play', uz: 'Ular o‘ynaydi' },
-      { en: 'Do you…?', uz: '…misiz?' },
-      { en: 'Does she…?', uz: 'U …mi?' },
-      { en: 'I don’t', uz: 'Men …mayman' },
-      { en: 'She doesn’t', uz: 'U …maydi' },
-      { en: 'Every day', uz: 'Har kuni' },
-    ],
-    phrases: [
-      { en: 'I work every day.', uz: 'Men har kuni ishlayman.' },
-      { en: 'She likes tea.', uz: 'U choy yoqtiradi.' },
-      { en: 'Do you speak English?', uz: 'Inglizcha gapirasizmi?' },
-      { en: 'Yes, I do. / No, I don’t.', uz: 'Ha. / Yo‘q.' },
-      { en: 'He doesn’t live here.', uz: 'U bu yerda yashamaydi.' },
-      { en: 'We study English.', uz: 'Biz ingliz tilini o‘rganamiz.' },
-    ],
-    quiz: [
-      {
-        prompt: 'To‘g‘ri variant:',
-        options: ['She work', 'She works', 'She working', 'She worked every'],
-        answer: 1,
-        hint: 'he/she/it → -s',
-      },
-      {
-        prompt: '“Do you speak English?” — javob (ha):',
-        options: ['Yes, I am', 'Yes, I do', 'Yes, I speak', 'Yes, does'],
-        answer: 1,
-      },
-      {
-        prompt: 'Inkor (u):',
-        options: ['He don’t live here', 'He doesn’t live here', 'He no live here', 'He not lives'],
-        answer: 1,
-      },
-      {
-        prompt: '“We study English.” — tarjimasi?',
-        options: [
-          'Biz inglizcha gapiramiz',
-          'Biz ingliz tilini o‘rganamiz',
-          'Ular o‘qiydi',
-          'Men ishlayman',
-        ],
-        answer: 1,
-      },
-    ],
-    reading: {
-      title: 'Every day',
-      text: 'I work every day. She likes tea in the morning. Do you speak English? Yes, I do. He doesn’t live here, but we study English together.',
-      questions: [
-        {
-          prompt: 'U (she) ertalab nima yoqtiradi?',
-          options: ['Coffee', 'Tea', 'Juice', 'Water only'],
-          answer: 1,
-        },
-        {
-          prompt: '“Yes, I do” nimaga javob?',
-          options: ['Do you speak English?', 'Where do you live?', 'Who is this?', 'What color?'],
-          answer: 0,
-        },
-        {
-          prompt: 'U (he) bu yerda yashaydimi?',
-          options: ['Ha', 'Yo‘q', 'Bilmaymiz', 'Faqat yakshanba'],
-          answer: 1,
-        },
-      ],
-    },
-    writing: [
-      { promptUz: '“U ishlaydi” (she) ni yozing', answer: 'She works' },
-      { promptUz: '“Inglizcha gapirasizmi?” ni yozing', answer: 'Do you speak English?' },
-      {
-        promptUz: '“U bu yerda yashamaydi.” (he) ni yozing',
-        answer: "He doesn't live here.",
-        accept: ['He does not live here.'],
-      },
-      { promptUz: '“Biz ingliz tilini o‘rganamiz.” ni yozing', answer: 'We study English.' },
-    ],
-    listening: [
-      {
-        audioText: 'She works',
-        options: ['She work', 'She works', 'She worked', 'She working'],
-        answer: 1,
-      },
-      {
-        audioText: 'Do you speak English?',
-        options: [
-          'Do you speak English?',
-          'Do you speak England?',
-          'Did you speak English?',
-          'Does you speak English?',
-        ],
-        answer: 0,
-      },
-      {
-        audioText: "He doesn't live here",
-        options: [
-          "He doesn't live here",
-          "He don't live here",
-          'He doesn’t leave here',
-          'He doesn’t life here',
-        ],
-        answer: 0,
-      },
-      {
-        audioText: 'We study English',
-        options: ['We study English', 'We studied English', 'We study England', 'We studio English'],
-        answer: 0,
-      },
-    ],
-    pronounce: [
-      { text: 'Works', tip: 'works — “s” qattiq' },
-      { text: 'Does', tip: 'daz' },
-      { text: "Doesn't", tip: 'DUZ-nt' },
-      { text: 'Do you speak English?', tip: 'speak — uzun “ee”' },
-      { text: 'Every day', tip: 'EV-ri day' },
-    ],
-  },
 ]
+
+export const LESSONS: Lesson[] = [...THEME_LESSONS, ...TENSE_LESSONS]

@@ -264,6 +264,54 @@ button {
   border-color: rgba(45, 212, 191, 0.35);
 }
 
+.lesson-btn.tense {
+  border-color: rgba(255, 236, 179, 0.28);
+  background:
+    linear-gradient(160deg, rgba(255, 236, 179, 0.08), rgba(255, 255, 255, 0.03));
+}
+
+.formula-box {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(45, 212, 191, 0.35);
+  background: rgba(45, 212, 191, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.formula-box strong {
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.formula-box code {
+  font-family: var(--font);
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.signals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.signal {
+  font-size: 0.75rem;
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--accent2);
+  background: rgba(255, 236, 179, 0.08);
+}
+
 .lesson-top {
   display: flex;
   justify-content: space-between;
