@@ -1,10 +1,8 @@
 # Ingliz
 
-Ingliz tilini o‘rganish PWA — so‘zlar, gaplar, talaffuz va testlar (`/ingliz/`).
+Ingliz tilini o‘rganish PWA — 6 ko‘nikma, talaffuz va o‘yinlar (`/ingliz/`).
 
 ## Online
-
-Deploy dan keyin:
 
 `https://<host>/ingliz/`
 
@@ -16,17 +14,28 @@ npm install
 npm run dev
 ```
 
-Production build (bot uchun `ingliz/` papkasiga):
+Production:
 
 ```bash
 npm run build
 rm -rf ../ingliz && cp -R dist ../ingliz
 ```
 
-## Imkoniyatlar
+## Ko‘nikmalar
 
-- 8 ta dars (salomlashish → present simple)
-- So‘z / gap kartochkalari + audio (Speech Synthesis)
-- Har darsda quiz
-- Progress `localStorage` da
-- Offline PWA
+- **Lug‘at** — so‘z/gap + eshitish
+- **Listening** — audio → variant
+- **Reading** — matn + savollar
+- **Writing** — yozib tekshirish
+- **Speaking** — mikrofon (Chrome)
+- **Talaffuz** — sekin eshitish + takrorlash
+- **Quiz** — bilim testi
+
+## O‘yinlar
+
+- Juftlash (EN↔UZ)
+- Harflar (scramble)
+- Xotira
+- Chaqmoq (60s)
+
+XP, streak va dars progress `localStorage` da saqlanadi.
