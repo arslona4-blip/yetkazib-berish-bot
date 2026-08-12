@@ -222,6 +222,8 @@ input {
 .period:nth-child(5) { animation-delay: 0.14s; }
 .period:nth-child(6) { animation-delay: 0.17s; }
 .period:nth-child(7) { animation-delay: 0.2s; }
+.period:nth-child(8) { animation-delay: 0.23s; }
+.period:nth-child(9) { animation-delay: 0.26s; }
 
 .p-num {
   width: 2.35rem;

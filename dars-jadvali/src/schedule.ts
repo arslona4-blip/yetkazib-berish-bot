@@ -15,7 +15,7 @@ export type Period = {
   end: string
 }
 
-/** Odatiy maktab qo‘ng‘iroq jadvali */
+/** Ixtisoslashtirilgan maktab qo‘ng‘iroq jadvali — 9 dars */
 export const DEFAULT_PERIODS: Period[] = [
   { n: 1, start: '08:00', end: '08:45' },
   { n: 2, start: '08:55', end: '09:40' },
@@ -24,6 +24,8 @@ export const DEFAULT_PERIODS: Period[] = [
   { n: 5, start: '11:50', end: '12:35' },
   { n: 6, start: '12:45', end: '13:30' },
   { n: 7, start: '13:40', end: '14:25' },
+  { n: 8, start: '14:35', end: '15:20' },
+  { n: 9, start: '15:30', end: '16:15' },
 ]
 
 export type CellKey = `${DayId}-${number}`
