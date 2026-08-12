@@ -27,6 +27,8 @@ import {
   fetchWeather,
   listenOnce,
   periodsProgress,
+  sayCurrentLesson,
+  sayNextLesson,
   shareText,
   speak,
   weekStats,
@@ -134,7 +136,11 @@ export default function App() {
     showSystemNotification(due.message, `${due.period.n}. ${due.subject}`)
     if (settings.alarm.sound) void playAlarmSound(5)
     if (settings.alarm.vibrate) vibrateAlarm()
-    speak(`${due.message}. ${due.subject}`, lang)
+    const spoken =
+      lang === 'ru'
+        ? `${due.message}. ${sayCurrentLesson(due.period.n, due.subject, 'ru')}`
+        : `${due.message}. ${sayCurrentLesson(due.period.n, due.subject, 'uz')}`
+    speak(spoken, lang)
   }, [now, profile, settings.alarm, fired, activeAlarm, readOnly, lang])
 
   function update(fn: (s: AppSettings) => AppSettings) {
@@ -238,21 +244,25 @@ export default function App() {
       setVoiceMsg(text)
       const dayNow = todayDayId()
       if (!dayNow) {
-        speak('Bugun dars yo‘q', lang)
+        const ans = lang === 'ru' ? 'Сегодня уроков нет.' : 'Bugun dars yo‘q.'
+        speak(ans, lang)
+        setVoiceMsg(ans)
         return
       }
       const liveP = currentPeriod(profile.periods, new Date())
       if (liveP) {
         const c = getEffectiveCell(profile, dayNow, liveP.n)
-        const ans = `Hozir ${liveP.n}-dars, ${c.subject || 'bo‘sh'}`
+        const ans = sayCurrentLesson(liveP.n, c.subject, lang)
         speak(ans, lang)
         setVoiceMsg(ans)
         return
       }
       const next = nextLessonsToday(profile).find((x) => x.start > new Date())
       const ans = next
-        ? `Keyingi ${next.period.n}-dars, ${next.subject}`
-        : 'Bugun dars qolmadi'
+        ? sayNextLesson(next.period.n, next.subject, lang)
+        : lang === 'ru'
+          ? 'На сегодня уроков больше нет.'
+          : 'Bugun dars qolmadi.'
       speak(ans, lang)
       setVoiceMsg(ans)
     } catch {
@@ -939,7 +949,11 @@ export default function App() {
 
           {sheet === 'voice' && (
             <div className="form-stack center-text">
-              <p>{lang === 'ru' ? 'Спросите: какой сейчас урок?' : 'So‘rang: hozir nechinchi dars?'}</p>
+              <p>
+                {lang === 'ru'
+                  ? 'Спросите: какой сейчас урок?'
+                  : 'So‘rang: «Hozir nechinchi dars?» — javob: «Hozir ikkinchi dars. Fan: Adabiyot.»'}
+              </p>
               <button type="button" className="btn-primary" onClick={() => void onVoice()}>
                 <Icon name="voice" size={18} /> {dict.voice}
               </button>
