@@ -9,6 +9,7 @@ COPY bot ./bot
 COPY miniapp ./miniapp
 COPY shajara ./shajara
 COPY admin ./admin
+COPY arduino ./arduino
 
 RUN mkdir -p /data
 

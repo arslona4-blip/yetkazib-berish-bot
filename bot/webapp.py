@@ -65,6 +65,7 @@ _bot = None
 MINIAPP_DIR = BASE_DIR / "miniapp"
 SHAJARA_DIR = BASE_DIR / "shajara"
 ADMINAPP_DIR = BASE_DIR / "admin"
+ARDUINO_DIR = BASE_DIR / "arduino"
 PHOTOS_DIR = Path(DATABASE_PATH).resolve().parent / "photos"
 
 
@@ -752,6 +753,13 @@ async def serve_admin_index(_request: web.Request) -> web.FileResponse:
     return web.FileResponse(index)
 
 
+async def serve_arduino_index(_request: web.Request) -> web.FileResponse:
+    index = ARDUINO_DIR / "index.html"
+    if not index.is_file():
+        raise web.HTTPNotFound(text="Arduino Darslik topilmadi")
+    return web.FileResponse(index)
+
+
 def create_app() -> web.Application:
     from bot.admin_api import register_admin_routes
 
@@ -783,6 +791,13 @@ def create_app() -> web.Application:
         app.router.add_static("/admin/", ADMINAPP_DIR, show_index=False)
     else:
         logger.warning("admin papkasi topilmadi: %s", ADMINAPP_DIR)
+
+    if ARDUINO_DIR.is_dir() and (ARDUINO_DIR / "index.html").is_file():
+        app.router.add_get("/arduino", serve_arduino_index)
+        app.router.add_get("/arduino/", serve_arduino_index)
+        app.router.add_static("/arduino/", ARDUINO_DIR, show_index=False)
+    else:
+        logger.warning("arduino papkasi topilmadi: %s", ARDUINO_DIR)
 
     if MINIAPP_DIR.is_dir():
         app.router.add_get("/", serve_index)
