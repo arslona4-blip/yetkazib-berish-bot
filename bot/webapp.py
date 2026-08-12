@@ -777,6 +777,13 @@ async def serve_kichkintoy_index(_request: web.Request) -> web.FileResponse:
     return web.FileResponse(index)
 
 
+async def serve_slayd_index(_request: web.Request) -> web.FileResponse:
+    index = SLAYD_DIR / "index.html"
+    if not index.is_file():
+        raise web.HTTPNotFound(text="Slayd Studio topilmadi")
+    return web.FileResponse(index)
+
+
 def create_app() -> web.Application:
     from bot.admin_api import register_admin_routes
 
@@ -829,6 +836,13 @@ def create_app() -> web.Application:
         app.router.add_static("/kichkintoy/", KICHKINTOY_DIR, show_index=False)
     else:
         logger.warning("kichkintoy papkasi topilmadi: %s", KICHKINTOY_DIR)
+
+    if SLAYD_DIR.is_dir() and (SLAYD_DIR / "index.html").is_file():
+        app.router.add_get("/slayd", serve_slayd_index)
+        app.router.add_get("/slayd/", serve_slayd_index)
+        app.router.add_static("/slayd/", SLAYD_DIR, show_index=False)
+    else:
+        logger.warning("slayd papkasi topilmadi: %s", SLAYD_DIR)
 
     if MINIAPP_DIR.is_dir():
         app.router.add_get("/", serve_index)
