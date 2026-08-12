@@ -335,6 +335,145 @@ textarea {
   max-width: 22ch;
 }
 
+.stage-inner.image-slide {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 18px;
+  align-items: center;
+  padding: clamp(16px, 3vw, 32px);
+}
+
+.img-frame {
+  height: 100%;
+  min-height: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+}
+
+.img-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  min-height: 220px;
+}
+
+.img-meta h2 {
+  margin: 0 0 8px;
+}
+
+.img-meta p {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.img-meta .icons {
+  margin-top: 12px !important;
+  font-size: 1.4rem;
+}
+
+.diagram {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: stretch;
+  margin-top: 8px;
+}
+
+.diagram.flow {
+  align-items: center;
+}
+
+.diagram.cycle,
+.diagram.cards,
+.diagram.compare {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  width: 100%;
+}
+
+.node {
+  position: relative;
+  background: var(--card);
+  border-radius: 14px;
+  padding: 14px 12px;
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  min-width: 110px;
+  flex: 1;
+}
+
+.node .ni {
+  font-size: 1.25rem;
+}
+
+.node strong {
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+
+.node .arrow {
+  position: absolute;
+  right: -14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--accent);
+  font-weight: 800;
+  z-index: 1;
+}
+
+@media (max-width: 700px) {
+  .node .arrow {
+    display: none;
+  }
+  .stage-inner.image-slide {
+    grid-template-columns: 1fr;
+  }
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.fact {
+  background: var(--card);
+  border-radius: 14px;
+  padding: 14px;
+  display: grid;
+  gap: 4px;
+}
+
+.fact span {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.fact strong {
+  font-size: clamp(1.2rem, 2.5vw, 1.7rem);
+  letter-spacing: -0.02em;
+}
+
+.fact em {
+  font-style: normal;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+@media (max-width: 700px) {
+  .facts {
+    grid-template-columns: 1fr;
+  }
+}
+
 .stage-foot {
   position: absolute;
   left: 24px;
