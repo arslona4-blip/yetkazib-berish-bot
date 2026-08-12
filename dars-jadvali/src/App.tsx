@@ -218,7 +218,7 @@ export default function App() {
     }
     if (id === 'share') {
       const code = encodeShare(profile)
-      shareText(dict.brand, `${location.origin}/jadval/#share=${code}`)
+      shareText(dict.brand, `${location.origin}/jadval-fedd3d/#share=${code}`)
       return
     }
     // calendar / admin / backup — sheet orqali (mobil yuklash uchun)
@@ -306,10 +306,10 @@ export default function App() {
 
             <div className="brand-wrap">
               <picture>
-                <source srcSet="/jadval/brand-dars-jadvali.webp" type="image/webp" />
+                <source srcSet="/jadval-fedd3d/brand-dars-jadvali.webp" type="image/webp" />
                 <img
                   className="brand-emblem"
-                  src="/jadval/brand-dars-jadvali.png"
+                  src="/jadval-fedd3d/brand-dars-jadvali.png"
                   alt="Dars Jadvali"
                   width={220}
                   height={220}
@@ -1150,7 +1150,7 @@ export default function App() {
           {sheet === 'install' && (
             <div className="form-stack">
               <img
-                src="/jadval/icon-192-v3.png"
+                src="/jadval-fedd3d/icon-192-v3.png"
                 alt="Dars Jadvali"
                 width={96}
                 height={96}
@@ -1162,7 +1162,7 @@ export default function App() {
               </p>
               <ol className="steps">
                 <li>Bosh ekrandagi eski «Jadval» ni bosib turing → O‘chirish</li>
-                <li>Brauzerda /jadval/ ni oching</li>
+                <li>Brauzerda /jadval-fedd3d/ ni oching</li>
                 <li>Menyu → «Bosh ekranga qo‘shish» / Add to Home Screen</li>
                 <li>«Dars Jadvali» ikonkasini tasdiqlang</li>
               </ol>

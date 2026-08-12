@@ -123,7 +123,7 @@ export function showSystemNotification(title: string, body: string) {
   try {
     const n = new Notification(title, {
       body,
-      icon: '/jadval/pwa-192.png',
+      icon: '/jadval-fedd3d/pwa-192.png',
       tag: 'dars-budilnik',
     })
     n.onclick = () => {

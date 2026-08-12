@@ -2,8 +2,10 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+const BASE = '/jadval-fedd3d/'
+
 export default defineConfig({
-  base: '/jadval/',
+  base: BASE,
   plugins: [
     react(),
     VitePWA({
@@ -18,7 +20,7 @@ export default defineConfig({
         'icon-512-maskable-v3.png',
       ],
       manifest: {
-        id: '/jadval/?v=3',
+        id: `${BASE}?v=4`,
         name: 'Dars Jadvali',
         short_name: 'Dars Jadvali',
         description: 'Maktab dars jadvali — zamonaviy o‘quvchi ilovasi',
@@ -27,8 +29,8 @@ export default defineConfig({
         display: 'standalone',
         orientation: 'any',
         lang: 'uz',
-        start_url: '/jadval/?source=pwa',
-        scope: '/jadval/',
+        start_url: `${BASE}?source=pwa`,
+        scope: BASE,
         icons: [
           {
             src: 'icon-192-v3.png',
@@ -51,7 +53,6 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // yangi ikonkalar darhol yangilansin
         cleanupOutdatedCaches: true,
       },
     }),

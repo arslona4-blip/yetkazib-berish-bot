@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import logging
+import os
 import threading
 import time
 from pathlib import Path
@@ -67,6 +68,8 @@ SHAJARA_DIR = BASE_DIR / "shajara"
 ADMINAPP_DIR = BASE_DIR / "admin"
 ARDUINO_DIR = BASE_DIR / "arduino"
 JADVAL_DIR = BASE_DIR / "jadval"
+# Maxfiy public path — eski /jadval/ yopilgan. Railway: JADVAL_PATH=jadval-xxxx
+JADVAL_PATH = (os.getenv("JADVAL_PATH") or "jadval-fedd3d").strip().strip("/")
 KICHKINTOY_DIR = BASE_DIR / "kichkintoy"
 SLAYD_DIR = BASE_DIR / "slayd"
 PHOTOS_DIR = Path(DATABASE_PATH).resolve().parent / "photos"
@@ -770,6 +773,23 @@ async def serve_jadval_index(_request: web.Request) -> web.FileResponse:
     return web.FileResponse(index)
 
 
+async def serve_jadval_gone(_request: web.Request) -> web.Response:
+    """Eski /jadval/ — maxfiy manzilga o‘tkazilgan, yangi path oshkor etilmaydi."""
+    html = """<!doctype html><html lang="uz"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Link yopilgan</title>
+<style>
+body{font-family:system-ui,sans-serif;background:#0b4f8a;color:#fff;min-height:100vh;
+display:grid;place-items:center;margin:0;padding:24px;text-align:center}
+.card{max-width:420px;background:rgba(255,255,255,.1);border-radius:16px;padding:28px}
+h1{margin:0 0 10px;font-size:1.4rem}p{margin:0;opacity:.9;line-height:1.45}
+</style></head><body><div class="card">
+<h1>Bu link yopilgan</h1>
+<p>Dars jadvali manzili o‘zgartirilgan. Yangi linkni admin / o‘qituvchidan so‘rang.</p>
+</div></body></html>"""
+    return web.Response(text=html, content_type="text/html", status=410)
+
+
 async def serve_kichkintoy_index(_request: web.Request) -> web.FileResponse:
     index = KICHKINTOY_DIR / "index.html"
     if not index.is_file():
@@ -824,9 +844,15 @@ def create_app() -> web.Application:
         logger.warning("arduino papkasi topilmadi: %s", ARDUINO_DIR)
 
     if JADVAL_DIR.is_dir() and (JADVAL_DIR / "index.html").is_file():
-        app.router.add_get("/jadval", serve_jadval_index)
-        app.router.add_get("/jadval/", serve_jadval_index)
-        app.router.add_static("/jadval/", JADVAL_DIR, show_index=False)
+        secret = f"/{JADVAL_PATH}"
+        app.router.add_get(secret, serve_jadval_index)
+        app.router.add_get(f"{secret}/", serve_jadval_index)
+        app.router.add_static(f"{secret}/", JADVAL_DIR, show_index=False)
+        # Eski ochiq link — yopiq (yangi manzil oshkor etilmaydi)
+        app.router.add_get("/jadval", serve_jadval_gone)
+        app.router.add_get("/jadval/", serve_jadval_gone)
+        app.router.add_route("*", "/jadval/{tail:.*}", serve_jadval_gone)
+        logger.info("Dars Jadvali: %s/ (eski /jadval/ yopiq)", secret)
     else:
         logger.warning("jadval papkasi topilmadi: %s", JADVAL_DIR)
 
