@@ -1,154 +1,174 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
-  GROUP,
-  LESSONS,
-  formatUzDate,
-  getNextLesson,
-  lessonStart,
-  weekdayShort,
-  type Lesson,
+  DAYS,
+  DEFAULT_PERIODS,
+  SUBJECT_SUGGESTIONS,
+  cellKey,
+  todayDayId,
+  type DayId,
 } from './schedule'
-import { loadDone, saveDone } from './progress'
-
-function statusOf(l: Lesson, nextId: string | null, now: Date) {
-  if (nextId && l.id === nextId) return 'next' as const
-  if (lessonStart(l).getTime() < now.getTime()) return 'past' as const
-  return 'upcoming' as const
-}
+import { loadSchedule, saveSchedule } from './progress'
 
 export default function App() {
-  const now = useMemo(() => new Date(), [])
-  const next = useMemo(() => getNextLesson(now), [now])
-  const [done, setDone] = useState(() => loadDone())
-  const [selected, setSelected] = useState<Lesson | null>(next)
+  const [state, setState] = useState(() => loadSchedule())
+  const [day, setDay] = useState<DayId>(() => todayDayId() ?? 'dush')
+  const [editing, setEditing] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
 
-  const doneCount = LESSONS.filter((l) => done.has(l.id)).length
+  const today = todayDayId()
+  const dayMeta = DAYS.find((d) => d.id === day)!
 
-  function toggleDone(id: string) {
-    setDone((prev) => {
-      const nextSet = new Set(prev)
-      if (nextSet.has(id)) nextSet.delete(id)
-      else nextSet.add(id)
-      saveDone(nextSet)
-      return nextSet
+  useEffect(() => {
+    saveSchedule(state)
+  }, [state])
+
+  const filledToday = useMemo(() => {
+    return DEFAULT_PERIODS.filter((p) => state.subjects[cellKey(day, p.n)]?.trim()).length
+  }, [state.subjects, day])
+
+  function openEdit(key: string) {
+    setEditing(key)
+    setDraft(state.subjects[key] || '')
+  }
+
+  function commitEdit() {
+    if (!editing) return
+    const value = draft.trim()
+    setState((s) => ({
+      ...s,
+      subjects: { ...s.subjects, [editing]: value },
+    }))
+    setEditing(null)
+  }
+
+  function clearDay() {
+    setState((s) => {
+      const subjects = { ...s.subjects }
+      for (const p of DEFAULT_PERIODS) {
+        subjects[cellKey(day, p.n)] = ''
+      }
+      return { ...s, subjects }
     })
   }
 
   return (
     <div className="app">
       <header className="hero">
-        <p className="brand">
-          32<span>-GR</span>
-        </p>
-        <p className="course">{GROUP.course}</p>
+        <p className="eyebrow">O‘quvchilar uchun</p>
+        <h1 className="brand">
+          Dars <span>jadvali</span>
+        </h1>
         <p className="tagline">
-          O‘quvchilar uchun dars jadvali — sana, vaqt va darslik bir joyda.
+          Sinfingiz fanlarini bir marta to‘ldiring — har kuni telefoningizda ko‘ring.
         </p>
-        <div className="meta-row">
-          <span className="chip">{GROUP.weekday} · {GROUP.time}</span>
-          <span className="chip">{GROUP.mode}</span>
-          <span className="chip">{GROUP.timezone}</span>
-          <span className="chip">
-            {doneCount}/{LESSONS.length} bajarildi
-          </span>
-        </div>
-        <div className="cta-row">
-          {next ? (
-            <a className="btn btn-primary" href={next.arduinoPath}>
-              Keyingi dars → {next.num}
-            </a>
-          ) : (
-            <a className="btn btn-primary" href="/arduino/">
-              Darslikka o‘tish
-            </a>
-          )}
-          <a className="btn btn-ghost" href="/arduino/">
-            Arduino Darslik
-          </a>
+
+        <div className="id-row">
+          <label className="field">
+            <span>Sinf</span>
+            <input
+              value={state.className}
+              onChange={(e) => setState((s) => ({ ...s, className: e.target.value }))}
+              placeholder="7-A"
+              maxLength={12}
+            />
+          </label>
+          <label className="field">
+            <span>Maktab</span>
+            <input
+              value={state.schoolName}
+              onChange={(e) => setState((s) => ({ ...s, schoolName: e.target.value }))}
+              placeholder="№12-maktab"
+              maxLength={40}
+            />
+          </label>
         </div>
       </header>
 
-      <section className="section">
-        <div className="section-head">
-          <h2>Dars jadvali</h2>
-          <p>6 ta dars · Juma 20:51</p>
+      <nav className="days" aria-label="Hafta kunlari">
+        {DAYS.map((d) => (
+          <button
+            key={d.id}
+            type="button"
+            className={`day-btn ${day === d.id ? 'on' : ''} ${today === d.id ? 'today' : ''}`}
+            onClick={() => setDay(d.id)}
+          >
+            {d.short}
+          </button>
+        ))}
+      </nav>
+
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>{dayMeta.full}</h2>
+            <p>
+              {state.className || 'Sinf'} · {filledToday}/{DEFAULT_PERIODS.length} dars
+              {today === day ? ' · Bugun' : ''}
+            </p>
+          </div>
+          <button type="button" className="text-btn" onClick={clearDay}>
+            Kunni tozalash
+          </button>
         </div>
 
-        <div className="list">
-          {LESSONS.map((l) => {
-            const st = statusOf(l, next?.id ?? null, now)
-            const isDone = done.has(l.id)
+        <ol className="periods">
+          {DEFAULT_PERIODS.map((p) => {
+            const key = cellKey(day, p.n)
+            const subject = state.subjects[key] || ''
+            const isEdit = editing === key
             return (
-              <button
-                key={l.id}
-                type="button"
-                className={`lesson ${st === 'next' ? 'next' : ''} ${isDone ? 'done' : ''}`}
-                onClick={() => setSelected(l)}
-              >
-                <div className="num">{l.num}</div>
-                <div className="body">
-                  <h3>{l.title}</h3>
-                  <p className="topic">{l.topic}</p>
-                  <div className="when">
-                    <span>
-                      <strong>{weekdayShort(l.date)}</strong> {formatUzDate(l.date)}
-                    </span>
-                    <span>{l.time}</span>
-                    <span>{l.minutes} daq</span>
-                    <span>{l.tasks} topshiriq</span>
-                  </div>
+              <li key={key} className={`period ${subject ? '' : 'empty'} ${isEdit ? 'edit' : ''}`}>
+                <div className="p-num">{p.n}</div>
+                <div className="p-body">
+                  {isEdit ? (
+                    <div className="edit-box">
+                      <input
+                        autoFocus
+                        list="subject-list"
+                        value={draft}
+                        placeholder="Fan nomi…"
+                        onChange={(e) => setDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') commitEdit()
+                          if (e.key === 'Escape') setEditing(null)
+                        }}
+                      />
+                      <div className="edit-actions">
+                        <button type="button" className="btn btn-primary" onClick={commitEdit}>
+                          Saqlash
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          onClick={() => setEditing(null)}
+                        >
+                          Bekor
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button type="button" className="subject-btn" onClick={() => openEdit(key)}>
+                      <strong>{subject || 'Fan qo‘shish'}</strong>
+                      <span>
+                        {p.start} – {p.end}
+                      </span>
+                    </button>
+                  )}
                 </div>
-                <div className="side">
-                  {st === 'next' && <span className="badge">Keyingi</span>}
-                  {st === 'past' && !isDone && <span className="badge past">O‘tdi</span>}
-                  {isDone && <span className="badge">✓</span>}
-                  <span
-                    role="checkbox"
-                    aria-checked={isDone}
-                    aria-label="Bajarildi deb belgilash"
-                    className={`check ${isDone ? 'on' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      toggleDone(l.id)
-                    }}
-                  >
-                    ✓
-                  </span>
-                </div>
-              </button>
+              </li>
             )
           })}
-        </div>
+        </ol>
       </section>
 
-      {selected && (
-        <section className="detail" aria-live="polite">
-          <h3>
-            {selected.num}-dars. {selected.title}
-          </h3>
-          <p>{selected.topic}</p>
-          <p>
-            {formatUzDate(selected.date)} · {selected.time} · {selected.minutes} daqiqa ·{' '}
-            {selected.tasks} ta uyga vazifa
-          </p>
-          <div className="actions">
-            <a className="btn btn-primary" href={selected.arduinoPath}>
-              Darslikni ochish
-            </a>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={() => toggleDone(selected.id)}
-            >
-              {done.has(selected.id) ? 'Belgila olib tashlash' : 'Bajarildi'}
-            </button>
-          </div>
-        </section>
-      )}
+      <datalist id="subject-list">
+        {SUBJECT_SUGGESTIONS.map((s) => (
+          <option key={s} value={s} />
+        ))}
+      </datalist>
 
       <p className="foot">
-        Telefon yoki PC ga o‘rnatib qo‘ying. Darslik:{' '}
-        <a href="/arduino/">/arduino/</a>
+        Ma’lumot telefoningizda saqlanadi. Bo‘sh katakni bosib fan yozing.
       </p>
     </div>
   )

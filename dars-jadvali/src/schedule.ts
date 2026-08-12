@@ -1,115 +1,84 @@
-export type Lesson = {
-  id: string
-  num: number
-  title: string
-  topic: string
-  date: string // YYYY-MM-DD
-  time: string // HH:MM
-  minutes: number
-  tasks: number
-  arduinoPath: string
+export const DAYS = [
+  { id: 'dush', short: 'Dush', full: 'Dushanba' },
+  { id: 'sesh', short: 'Sesh', full: 'Seshanba' },
+  { id: 'chor', short: 'Chor', full: 'Chorshanba' },
+  { id: 'pay', short: 'Pay', full: 'Payshanba' },
+  { id: 'jum', short: 'Jum', full: 'Juma' },
+  { id: 'shan', short: 'Shan', full: 'Shanba' },
+] as const
+
+export type DayId = (typeof DAYS)[number]['id']
+
+export type Period = {
+  n: number
+  start: string
+  end: string
 }
 
-/** 32-GR Online Robototexnika — haftalik onlayn darslar (Juma 20:51) */
-export const GROUP = {
-  name: '32-GR',
-  course: 'Online Robototexnika',
-  mode: 'Onlayn',
-  weekday: 'Juma',
-  time: '20:51',
-  timezone: 'Toshkent',
-}
-
-export const LESSONS: Lesson[] = [
-  {
-    id: 'dars1',
-    num: 1,
-    title: 'Arduino, maket, LED',
-    topic: 'Komponentlar bilan tanishish, LED yoqib-o‘chirish',
-    date: '2026-05-15',
-    time: '20:51',
-    minutes: 45,
-    tasks: 7,
-    arduinoPath: '/arduino/',
-  },
-  {
-    id: 'dars2',
-    num: 2,
-    title: 'Svetofor (3 LED)',
-    topic: '3 ta LED ni svetofor tartibida boshqarish',
-    date: '2026-05-22',
-    time: '20:51',
-    minutes: 35,
-    tasks: 2,
-    arduinoPath: '/arduino/',
-  },
-  {
-    id: 'dars3',
-    num: 3,
-    title: 'PWM va analog pinlar',
-    topic: 'Yorqinlikni analogWrite bilan boshqarish',
-    date: '2026-05-29',
-    time: '20:51',
-    minutes: 50,
-    tasks: 5,
-    arduinoPath: '/arduino/',
-  },
-  {
-    id: 'dars4',
-    num: 4,
-    title: 'Serial Monitor',
-    topic: 'Monitor portda matn chiqarish',
-    date: '2026-06-05',
-    time: '20:51',
-    minutes: 40,
-    tasks: 12,
-    arduinoPath: '/arduino/',
-  },
-  {
-    id: 'dars5',
-    num: 5,
-    title: 'o‘zgaruvchilar (int)',
-    topic: 'int tipi, qiymat o‘zgartirish, PWM bilan bog‘lash',
-    date: '2026-06-12',
-    time: '20:51',
-    minutes: 45,
-    tasks: 6,
-    arduinoPath: '/arduino/',
-  },
-  {
-    id: 'dars6',
-    num: 6,
-    title: 'if / else',
-    topic: 'Shart operatori, hisoblagich, LED holatlari',
-    date: '2026-06-19',
-    time: '20:51',
-    minutes: 55,
-    tasks: 10,
-    arduinoPath: '/arduino/',
-  },
+/** Odatiy maktab qo‘ng‘iroq jadvali */
+export const DEFAULT_PERIODS: Period[] = [
+  { n: 1, start: '08:00', end: '08:45' },
+  { n: 2, start: '08:55', end: '09:40' },
+  { n: 3, start: '09:50', end: '10:35' },
+  { n: 4, start: '10:55', end: '11:40' },
+  { n: 5, start: '11:50', end: '12:35' },
+  { n: 6, start: '12:45', end: '13:30' },
+  { n: 7, start: '13:40', end: '14:25' },
 ]
 
-export function lessonStart(l: Lesson): Date {
-  const [y, m, d] = l.date.split('-').map(Number)
-  const [hh, mm] = l.time.split(':').map(Number)
-  return new Date(y, m - 1, d, hh, mm, 0, 0)
+export type CellKey = `${DayId}-${number}`
+
+export type ScheduleState = {
+  className: string
+  schoolName: string
+  subjects: Record<string, string>
 }
 
-export function formatUzDate(iso: string): string {
-  const [y, m, d] = iso.split('-')
-  return `${d}.${m}.${y}`
+export const SUBJECT_SUGGESTIONS = [
+  'Ona tili',
+  'Adabiyot',
+  'Matematika',
+  'Algebra',
+  'Geometriya',
+  'Ingliz tili',
+  'Rus tili',
+  'Tarix',
+  'Fizika',
+  'Kimyo',
+  'Biologiya',
+  'Geografiya',
+  'Informatika',
+  'Jismoniy tarbiya',
+  'Tarbiya',
+  'Chizmachilik',
+  'Musiqa',
+  'Texnologiya',
+]
+
+/** JS getDay(): 0=Yak … 6=Shan → bizning DayId (Yakshanba yo‘q) */
+export function todayDayId(d = new Date()): DayId | null {
+  const map: (DayId | null)[] = [null, 'dush', 'sesh', 'chor', 'pay', 'jum', 'shan']
+  return map[d.getDay()]
 }
 
-const WEEKDAYS = ['Yak', 'Dush', 'Sesh', 'Chor', 'Pay', 'Jum', 'Shan']
-
-export function weekdayShort(iso: string): string {
-  const [y, m, d] = iso.split('-').map(Number)
-  return WEEKDAYS[new Date(y, m - 1, d).getDay()]
+export function cellKey(day: DayId, period: number): CellKey {
+  return `${day}-${period}`
 }
 
-export function getNextLesson(now = new Date()): Lesson | null {
-  for (const l of LESSONS) {
-    if (lessonStart(l).getTime() >= now.getTime() - 60 * 60 * 1000) return l
+export function emptySubjects(): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const day of DAYS) {
+    for (const p of DEFAULT_PERIODS) {
+      out[cellKey(day.id, p.n)] = ''
+    }
   }
-  return null
+  return out
+}
+
+export function defaultState(): ScheduleState {
+  return {
+    className: '7-A',
+    schoolName: 'Maktab',
+    subjects: emptySubjects(),
+  }
 }
