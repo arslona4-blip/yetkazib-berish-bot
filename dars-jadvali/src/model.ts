@@ -159,8 +159,8 @@ export function createProfile(partial?: Partial<Profile>): Profile {
   const periods = partial?.periods ?? DEFAULT_PERIODS.map((p) => ({ ...p }))
   return {
     id: partial?.id ?? uid(),
-    className: partial?.className ?? '9-A',
-    schoolName: partial?.schoolName ?? 'Ixtisoslashtirilgan maktab',
+    className: partial?.className ?? '',
+    schoolName: partial?.schoolName ?? '',
     periods,
     cells: partial?.cells ?? emptyCells(periods),
     substitutions: partial?.substitutions ?? {},
