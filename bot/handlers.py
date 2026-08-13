@@ -1929,12 +1929,13 @@ async def admin_product_callback(
     if action == "setcat":
         category_id = int(parts[2])
         context.user_data.setdefault("admin_product", {})["category_id"] = category_id
+        context.user_data["admin_product"]["_picked_category"] = True
         category = get_category(category_id)
         await query.edit_message_text(
             f"Toifa: {category['name'] if category else category_id}"
         )
         await query.message.reply_text(
-            "③ Narxni yozing (so‘m):",
+            "④ Narxni yozing (so‘m):",
             reply_markup=cancel_keyboard(),
         )
         return ProductAdminState.PRICE
@@ -2211,9 +2212,11 @@ async def admin_product_price(
 
     context.user_data.setdefault("admin_product", {})["price"] = price
     context.user_data["awaiting_admin"] = "product_stock"
+    # addin: ①kod ②nom ③narx ④ombor | add: …③toifa ④narx ⑤ombor
+    stock_step = "⑤" if context.user_data["admin_product"].get("_picked_category") else "④"
     await update.message.reply_text(
         f"✅ Narx: {price:,} so‘m\n\n"
-        "② Ombor sonini yozing (nechta bor?)\n"
+        f"{stock_step} Ombor sonini yozing (nechta bor?)\n"
         "Yoki «⏭ O'tkazib yuborish» → 0",
         reply_markup=ReplyKeyboardMarkup(
             [["⏭ O'tkazib yuborish"], ["❌ Bekor qilish"]],

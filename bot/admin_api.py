@@ -645,23 +645,21 @@ async def admin_product_create(request: web.Request) -> web.Response:
             raise web.HTTPBadRequest(
                 text=f"Barkod band: #{existing['id']} {existing['name']}"
             )
+    stock = 0
+    stock_raw = body.get("stock")
+    if stock_raw is not None and str(stock_raw).strip() != "":
+        try:
+            stock = max(0, int(stock_raw))
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(text="stock noto'g'ri") from exc
     pid = create_product(
         name=name,
         price=price,
         description=description,
         category_id=category_id,
         barcode=barcode,
-        stock=0,
+        stock=stock,
     )
-    stock_raw = body.get("stock")
-    if stock_raw is not None and str(stock_raw).strip() != "":
-        try:
-            stock = int(stock_raw)
-        except (TypeError, ValueError) as exc:
-            raise web.HTTPBadRequest(text="stock noto'g'ri") from exc
-        set_product_stock(
-            pid, stock, reason="in", note="Yangi mahsulot", admin_id=admin_id
-        )
     product = get_product_by_id(pid)
     logger.info("Admin %s created product #%s", admin_id, pid)
     return web.json_response({"ok": True, "product": _product_dict(product)})
