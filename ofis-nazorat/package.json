@@ -3,6 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "description": "Ofis kirish-chiqish nazorati (PC kamera)",
+  "author": "Ofis Nazorat",
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
@@ -11,7 +12,34 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "desktop": "npm run build && electron .",
-    "desktop:dev": "concurrently -k \"vite\" \"wait-on http://127.0.0.1:5177 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5177 electron .\""
+    "desktop:dev": "concurrently -k \"vite\" \"wait-on http://127.0.0.1:5177 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5177 electron .\"",
+    "dist:win": "npm run build && electron-builder --win portable --x64"
+  },
+  "build": {
+    "appId": "uz.ofis.nazorat",
+    "productName": "Ofis Nazorat",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "OfisNazorat-${version}-Windows.${ext}"
+    },
+    "portable": {
+      "artifactName": "OfisNazorat.exe"
+    },
+    "asar": true
   },
   "dependencies": {
     "@vladmandic/face-api": "^1.7.15",
@@ -26,6 +54,7 @@
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
     "electron": "^37.2.6",
+    "electron-builder": "^26.0.12",
     "oxlint": "^1.75.0",
     "typescript": "~6.0.2",
     "vite": "^8.2.0",
