@@ -262,6 +262,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
     welcome_caption = (
+        f"✨ <b>Assalomu alaykum, {name}!</b>\n"
+        f"👇 Pastdagi <b>🛒 Do'kon</b> tugmasini bosing!"
+    )
+    # Rasm yo‘q bo‘lsa — to‘liq matn
+    welcome_text_fallback = (
         f"✨ <b>Assalomu alaykum, {name}!</b>\n\n"
         f"🏪 <b>{SHOP_NAME}</b> ga xush kelibsiz!\n"
         f"🚚 Uyingizgacha tez yetkazib beramiz\n"
@@ -293,7 +298,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     if not photo_sent:
         await update.message.reply_text(
-            welcome_caption,
+            welcome_text_fallback,
             reply_markup=markup,
             parse_mode="HTML",
         )
