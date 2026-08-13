@@ -2,7 +2,9 @@ import * as faceapi from '@vladmandic/face-api'
 
 let ready = false
 
-export async function loadFaceModels(baseUrl = '/models') {
+export async function loadFaceModels(
+  baseUrl = `${import.meta.env.BASE_URL}models`.replace(/\/{2,}/g, '/'),
+) {
   if (ready) return
   await Promise.all([
     faceapi.nets.tinyFaceDetector.loadFromUri(baseUrl),
