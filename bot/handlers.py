@@ -37,6 +37,7 @@ from bot.config import (
     SHOP_NAME,
     SHOP_PHONE,
     SHOP_TELEGRAM,
+    WELCOME_PHOTO_PATH,
     card_payment_enabled,
     online_payment_enabled,
 )
@@ -260,9 +261,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "&text=Baraka%20Market%20%E2%80%94%20tez%20yetkazib%20berish!"
     )
 
-    await update.message.reply_text(
+    welcome_caption = (
         f"✨ <b>Assalomu alaykum, {name}!</b>\n\n"
-        f"🏪 <b>{SHOP_NAME}</b>\n"
+        f"🏪 <b>{SHOP_NAME}</b> ga xush kelibsiz!\n"
         f"🚚 Uyingizgacha tez yetkazib beramiz\n"
         f"{format_now_html()}\n\n"
         f"┌──────────────┐\n"
@@ -272,10 +273,30 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"└──────────────┘\n\n"
         f"🏷 Promo: <b>BARAKA10</b> — 10% chegirma "
         f"(min {MIN_ORDER_AMOUNT:,} so‘m)\n"
-        f"👇 Pastdagi <b>🛒 Do'kon</b> tugmasini bosing!",
-        reply_markup=menu_for(user.id),
-        parse_mode="HTML",
+        f"👇 Pastdagi <b>🛒 Do'kon</b> tugmasini bosing!"
     )
+    markup = menu_for(user.id)
+
+    photo_sent = False
+    if WELCOME_PHOTO_PATH.is_file():
+        try:
+            with WELCOME_PHOTO_PATH.open("rb") as photo:
+                await update.message.reply_photo(
+                    photo=photo,
+                    caption=welcome_caption,
+                    reply_markup=markup,
+                    parse_mode="HTML",
+                )
+            photo_sent = True
+        except Exception:
+            photo_sent = False
+
+    if not photo_sent:
+        await update.message.reply_text(
+            welcome_caption,
+            reply_markup=markup,
+            parse_mode="HTML",
+        )
     start_rows: list[list[InlineKeyboardButton]] = []
     shop_btn = shop_inline_button("🛒 Do'konni ochish")
     if shop_btn:
