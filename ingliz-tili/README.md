@@ -56,11 +56,3 @@ Filtr: **12 zamon** — har birida formula, signal so‘zlar va 7 ko‘nikma:
 - Chaqmoq (60s)
 
 XP, streak va dars progress `localStorage` da saqlanadi.
-
-## Bot
-
-`MINIAPP_URL` sozlangan bo‘lsa:
-
-- `/ingliz` buyrug‘i
-- «⋯ Ko‘proq» → 🇬🇧 Ingliz
-- `/start` dagi inline tugma

@@ -29,48 +29,6 @@ def admin_app_url() -> str:
     return urlunsplit((parts.scheme, parts.netloc, "/admin/", "", ""))
 
 
-def app_base_url() -> str:
-    """Mini App host (scheme://host) — boshqa PWAlar uchun."""
-    url = miniapp_shop_url()
-    if not url:
-        return ""
-    from urllib.parse import urlsplit, urlunsplit
-
-    parts = urlsplit(url)
-    if not parts.scheme or not parts.netloc:
-        return ""
-    return urlunsplit((parts.scheme, parts.netloc, "", "", ""))
-
-
-def pwa_url(path: str) -> str:
-    """Masalan: pwa_url('/ingliz/') → https://host/ingliz/"""
-    base = app_base_url()
-    if not base:
-        return ""
-    p = "/" + path.strip("/") + "/"
-    return f"{base}{p}"
-
-
-def ingliz_app_url() -> str:
-    return pwa_url("/ingliz/")
-
-
-def ingliz_inline_button(
-    label: str = "🇬🇧 Ingliz",
-) -> InlineKeyboardButton | None:
-    url = ingliz_app_url()
-    if not url:
-        return None
-    return InlineKeyboardButton(label, web_app=WebAppInfo(url=url))
-
-
-def ingliz_reply_button(label: str = "🇬🇧 Ingliz") -> KeyboardButton | None:
-    url = ingliz_app_url()
-    if not url:
-        return None
-    return KeyboardButton(label, web_app=WebAppInfo(url=url))
-
-
 def shop_reply_button(label: str = "🛒 Do'kon") -> KeyboardButton | None:
     url = miniapp_shop_url()
     if not url:
@@ -228,9 +186,6 @@ def more_menu_keyboard() -> ReplyKeyboardMarkup:
     shop = shop_reply_button("🛒 Do'kon")
     if shop:
         rows.insert(0, [shop])
-    ingliz = ingliz_reply_button()
-    if ingliz:
-        rows.insert(1 if shop else 0, [ingliz])
     return ReplyKeyboardMarkup(rows, resize_keyboard=True)
 
 
