@@ -484,12 +484,16 @@ async def api_promo(request: web.Request) -> web.Response:
 
 
 async def api_categories(_request: web.Request) -> web.Response:
+    from bot.category_emoji import category_label
+
     cats = get_categories(active_only=True)
     return web.json_response(
         [
             {
                 "id": int(c["id"]),
                 "name": c["name"],
+                "emoji": (c["emoji"] if "emoji" in c.keys() else "") or "📦",
+                "label": category_label(c),
             }
             for c in cats
         ]

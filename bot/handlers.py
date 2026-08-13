@@ -19,6 +19,7 @@ from telegram.ext import (
 )
 
 from bot.barcode_lookup import lookup_barcode_name
+from bot.category_emoji import category_label
 from bot.config import (
     ADMIN_IDS,
     BONUS_PERCENT,
@@ -576,7 +577,7 @@ async def show_category_products(
     user_id = update.effective_user.id
     category = get_category(category_id)
     products = get_products(category_id=category_id)
-    title = category["name"] if category else "Toifa"
+    title = category_label(category) if category else "Toifa"
     if not products:
         text = (
             f"📁 <b>{title}</b>\n\n"
@@ -1670,12 +1671,10 @@ async def show_admin_stock_panel(
             category_id=cat_id, low_only=False, limit=200
         )
         if cat_id == 0:
-            cat_name = "Toifasiz"
+            cat_name = "📦 Toifasiz"
         else:
-            from bot.database import get_category
-
             cat = get_category(cat_id)
-            cat_name = cat["name"] if cat else f"#{cat_id}"
+            cat_name = category_label(cat) if cat else f"#{cat_id}"
         if not products:
             await query.edit_message_text(
                 f"📁 {cat_name}\n\nMahsulot yo‘q.",
@@ -1713,10 +1712,10 @@ async def show_admin_stock_panel(
             category_id=cat_id, low_only=False, limit=500
         )
         if cat_id == 0:
-            cat_name = "Toifasiz"
+            cat_name = "📦 Toifasiz"
         else:
             cat = get_category(cat_id)
-            cat_name = cat["name"] if cat else f"#{cat_id}"
+            cat_name = category_label(cat) if cat else f"#{cat_id}"
         nonzero = sum(1 for p in products if int(p["stock"] or 0) > 0)
         if nonzero == 0:
             await query.answer("Hammasi allaqachon 0", show_alert=True)
@@ -1756,10 +1755,10 @@ async def show_admin_stock_panel(
         from bot.database import get_category, zero_category_stock
 
         if cat_id == 0:
-            cat_name = "Toifasiz"
+            cat_name = "📦 Toifasiz"
         else:
             cat = get_category(cat_id)
-            cat_name = cat["name"] if cat else f"#{cat_id}"
+            cat_name = category_label(cat) if cat else f"#{cat_id}"
         result = zero_category_stock(
             cat_id,
             admin_id=query.from_user.id,
@@ -1864,7 +1863,7 @@ async def show_admin_category_products(
 
     products = get_products(active_only=False, category_id=category_id)
     text = (
-        f"🗂 <b>{category['name']}</b>\n"
+        f"🗂 <b>{category_label(category)}</b>\n"
         f"Mahsulotlar: {len(products)} ta\n\n"
         "Mahsulotni tanlang yoki yangisini qo'shing."
     )
@@ -1974,7 +1973,7 @@ async def admin_product_callback(
             return None
         delete_category(category_id)
         await query.edit_message_text(
-            f"🗑 «{category['name']}» toifasi o'chirildi.",
+            f"🗑 «{category_label(category)}» toifasi o'chirildi.",
             reply_markup=admin_products_keyboard(),
         )
         return None
@@ -1988,7 +1987,7 @@ async def admin_product_callback(
             return ConversationHandler.END
         context.user_data["admin_product"] = {"category_id": category_id}
         await query.edit_message_text(
-            f"➕ «{category['name']}» — yangi mahsulot"
+            f"➕ «{category_label(category)}» — yangi mahsulot"
         )
         await query.message.reply_text(
             "① Shtrix-kod: skan / yozing / o‘tkazing",
@@ -2018,7 +2017,7 @@ async def admin_product_callback(
         context.user_data["admin_product"]["_picked_category"] = True
         category = get_category(category_id)
         await query.edit_message_text(
-            f"Toifa: {category['name'] if category else category_id}"
+            f"Toifa: {category_label(category) if category else category_id}"
         )
         await query.message.reply_text(
             "④ Narxni yozing (so‘m):",
@@ -2245,7 +2244,7 @@ async def admin_product_name(
     if preset_cat:
         category = get_category(preset_cat)
         await update.message.reply_text(
-            f"🗂 Toifa: {category['name'] if category else preset_cat}\n"
+            f"🗂 Toifa: {category_label(category) if category else preset_cat}\n"
             "③ Narxni yozing (so‘m):",
             reply_markup=cancel_keyboard(),
         )
@@ -2387,7 +2386,7 @@ async def _save_new_product(
         f"✅ Qo‘shildi!\n"
         f"#{product_id} <b>{data['name']}</b>\n"
         f"💰 {int(data['price']):,} so‘m · 📦 {stock} dona\n"
-        f"🗂 {category['name'] if category else '—'}\n"
+        f"🗂 {category_label(category) if category else '—'}\n"
         f"📷 {code}",
         parse_mode="HTML",
         reply_markup=main_menu_keyboard(is_admin(update.effective_user.id)),
@@ -2459,8 +2458,10 @@ async def admin_category_name(
         )
         return ProductAdminState.CATEGORY_NAME
 
+    cat = get_category(category_id)
+    label = category_label(cat) if cat else text
     await update.message.reply_text(
-        f"✅ Toifa qo'shildi!\n#{category_id} · {text}",
+        f"✅ Toifa qo'shildi!\n#{category_id} · {label}",
         reply_markup=main_menu_keyboard(is_admin(update.effective_user.id)),
     )
     await show_admin_categories(update, context)

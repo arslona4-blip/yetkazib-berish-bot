@@ -12,22 +12,22 @@ def _now_iso() -> str:
 
 
 DEFAULT_CATEGORIES = [
-    "🍞 Oziq-ovqat",
-    "🥤 Ichimliklar",
-    "🏠 Uy-ro'zg'or",
+    ("Oziq-ovqat", "🛒"),
+    ("Ichimliklar", "🥤"),
+    ("Uy-ro'zg'or", "🏠"),
 ]
 
 DEFAULT_PRODUCTS = [
-    ("Non (1 dona)", 4000, "Yangilik non", "🍞 Oziq-ovqat"),
-    ("Sut 1L", 12000, "Tabiiy sut", "🍞 Oziq-ovqat"),
-    ("Tuxum (10 dona)", 18000, "Tovuq tuxumi", "🍞 Oziq-ovqat"),
-    ("Guruch 1kg", 16000, "Oq guruch", "🍞 Oziq-ovqat"),
-    ("Yog' 1L", 22000, "O'simlik yog'i", "🍞 Oziq-ovqat"),
-    ("Shakar 1kg", 14000, "Oq shakar", "🍞 Oziq-ovqat"),
-    ("Choy 100g", 25000, "Qora choy", "🍞 Oziq-ovqat"),
-    ("Makaron 400g", 9000, "Spaghetti", "🍞 Oziq-ovqat"),
-    ("Cola 1.5L", 13000, "Ichimlik", "🥤 Ichimliklar"),
-    ("Suv 1.5L", 5000, "Ichiladigan suv", "🥤 Ichimliklar"),
+    ("Non (1 dona)", 4000, "Yangilik non", "Oziq-ovqat"),
+    ("Sut 1L", 12000, "Tabiiy sut", "Oziq-ovqat"),
+    ("Tuxum (10 dona)", 18000, "Tovuq tuxumi", "Oziq-ovqat"),
+    ("Guruch 1kg", 16000, "Oq guruch", "Oziq-ovqat"),
+    ("Yog' 1L", 22000, "O'simlik yog'i", "Oziq-ovqat"),
+    ("Shakar 1kg", 14000, "Oq shakar", "Oziq-ovqat"),
+    ("Choy 100g", 25000, "Qora choy", "Oziq-ovqat"),
+    ("Makaron 400g", 9000, "Spaghetti", "Oziq-ovqat"),
+    ("Cola 1.5L", 13000, "Ichimlik", "Ichimliklar"),
+    ("Suv 1.5L", 5000, "Ichiladigan suv", "Ichimliklar"),
 ]
 
 
@@ -63,7 +63,8 @@ def init_db() -> None:
             CREATE TABLE IF NOT EXISTS categories (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL UNIQUE,
-                is_active INTEGER NOT NULL DEFAULT 1
+                is_active INTEGER NOT NULL DEFAULT 1,
+                emoji TEXT NOT NULL DEFAULT '📦'
             );
 
             CREATE TABLE IF NOT EXISTS products (
@@ -142,8 +143,8 @@ def init_db() -> None:
         cat_count = conn.execute("SELECT COUNT(*) FROM categories").fetchone()[0]
         if cat_count == 0:
             conn.executemany(
-                "INSERT INTO categories (name) VALUES (?)",
-                [(name,) for name in DEFAULT_CATEGORIES],
+                "INSERT INTO categories (name, emoji) VALUES (?, ?)",
+                list(DEFAULT_CATEGORIES),
             )
 
         product_count = conn.execute("SELECT COUNT(*) FROM products").fetchone()[0]
@@ -189,6 +190,30 @@ def _migrate_features(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE products ADD COLUMN image_file_id TEXT")
     if "barcode" not in product_cols:
         conn.execute("ALTER TABLE products ADD COLUMN barcode TEXT")
+
+    cat_cols = {r[1] for r in conn.execute("PRAGMA table_info(categories)").fetchall()}
+    if "emoji" not in cat_cols:
+        conn.execute(
+            "ALTER TABLE categories ADD COLUMN emoji TEXT NOT NULL DEFAULT '📦'"
+        )
+        from bot.category_emoji import parse_category_name
+
+        rows = conn.execute("SELECT id, name FROM categories").fetchall()
+        for row in rows:
+            emoji, clean = parse_category_name(row["name"])
+            clean_name = clean or row["name"]
+            # Nomni tozalash (emoji alohida ustunda)
+            try:
+                conn.execute(
+                    "UPDATE categories SET emoji = ?, name = ? WHERE id = ?",
+                    (emoji, clean_name, int(row["id"])),
+                )
+            except sqlite3.IntegrityError:
+                conn.execute(
+                    "UPDATE categories SET emoji = ? WHERE id = ?",
+                    (emoji, int(row["id"])),
+                )
+
     conn.execute(
         """
         CREATE UNIQUE INDEX IF NOT EXISTS idx_products_barcode
@@ -438,23 +463,38 @@ def get_category(category_id: int) -> sqlite3.Row | None:
     return row
 
 
-def create_category(name: str) -> int:
+def create_category(name: str, emoji: str | None = None) -> int:
+    from bot.category_emoji import parse_category_name
+
+    parsed_emoji, clean_name = parse_category_name(name)
+    icon = (emoji or "").strip() or parsed_emoji
+    if not clean_name:
+        raise ValueError("Toifa nomi kerak")
     with get_connection() as conn:
         existing = conn.execute(
             "SELECT id FROM categories WHERE name = ?",
-            (name,),
+            (clean_name,),
         ).fetchone()
         if existing:
             conn.execute(
-                "UPDATE categories SET is_active = 1 WHERE id = ?",
-                (existing["id"],),
+                "UPDATE categories SET is_active = 1, emoji = ? WHERE id = ?",
+                (icon, existing["id"]),
             )
             return int(existing["id"])
         cursor = conn.execute(
-            "INSERT INTO categories (name, is_active) VALUES (?, 1)",
-            (name,),
+            "INSERT INTO categories (name, is_active, emoji) VALUES (?, 1, ?)",
+            (clean_name, icon),
         )
         return int(cursor.lastrowid)
+
+
+def set_category_emoji(category_id: int, emoji: str) -> None:
+    icon = (emoji or "").strip() or "📦"
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE categories SET emoji = ? WHERE id = ?",
+            (icon, int(category_id)),
+        )
 
 
 def delete_category(category_id: int) -> None:
@@ -469,7 +509,7 @@ def delete_category(category_id: int) -> None:
 def get_products(active_only: bool = True, category_id: int | None = None) -> list[sqlite3.Row]:
     with get_connection() as conn:
         query = """
-            SELECT p.*, c.name AS category_name
+            SELECT p.*, c.name AS category_name, c.emoji AS category_emoji
             FROM products p
             LEFT JOIN categories c ON c.id = p.category_id
             WHERE 1=1
@@ -2647,6 +2687,7 @@ def get_inventory_categories(
             SELECT
               c.id AS category_id,
               c.name AS category_name,
+              COALESCE(NULLIF(c.emoji, ''), '📦') AS emoji,
               COUNT(p.id) AS product_count,
               COALESCE(SUM(CASE WHEN COALESCE(p.stock, 0) <= ? THEN 1 ELSE 0 END), 0)
                 AS low_count,
@@ -2655,7 +2696,7 @@ def get_inventory_categories(
             LEFT JOIN products p
               ON p.category_id = c.id AND p.is_active = 1
             WHERE c.is_active = 1
-            GROUP BY c.id, c.name
+            GROUP BY c.id, c.name, c.emoji
             HAVING product_count > 0
             ORDER BY c.name COLLATE NOCASE
             """,
@@ -2678,6 +2719,7 @@ def get_inventory_categories(
         {
             "category_id": int(r["category_id"]),
             "category_name": r["category_name"],
+            "emoji": r["emoji"] or "📦",
             "product_count": int(r["product_count"]),
             "low_count": int(r["low_count"]),
             "stock_sum": int(r["stock_sum"]),
@@ -2689,6 +2731,7 @@ def get_inventory_categories(
             {
                 "category_id": 0,
                 "category_name": "Toifasiz",
+                "emoji": "📦",
                 "product_count": int(uncategorized["product_count"]),
                 "low_count": int(uncategorized["low_count"]),
                 "stock_sum": int(uncategorized["stock_sum"]),

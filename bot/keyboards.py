@@ -222,12 +222,15 @@ def cancel_keyboard() -> ReplyKeyboardMarkup:
 
 
 def catalog_categories_keyboard(categories) -> InlineKeyboardMarkup:
+    from bot.category_emoji import category_label
     from bot.database import get_products
 
     rows = []
     for category in categories:
         count = len(get_products(category_id=category["id"]))
-        label = f"{category['name']} · {count} ta"
+        label = f"{category_label(category)} · {count} ta"
+        if len(label) > 64:
+            label = label[:61] + "..."
         rows.append(
             [
                 InlineKeyboardButton(
@@ -337,12 +340,17 @@ def product_keyboard(
 
 
 def category_pick_keyboard(categories) -> InlineKeyboardMarkup:
+    from bot.category_emoji import category_label
+
     rows = []
     for category in categories:
+        label = category_label(category)
+        if len(label) > 64:
+            label = label[:61] + "..."
         rows.append(
             [
                 InlineKeyboardButton(
-                    category["name"],
+                    label,
                     callback_data=f"admin_prod:setcat:{category['id']}",
                 )
             ]
@@ -584,13 +592,20 @@ def admin_stock_categories_keyboard(
     categories: list[dict], *, low_only: bool = False
 ) -> InlineKeyboardMarkup:
     """Ombor: toifalar spiskasi."""
+    from bot.category_emoji import category_label
+
     rows: list[list[InlineKeyboardButton]] = []
     for cat in categories:
         low = int(cat.get("low_count") or 0)
         count = int(cat.get("product_count") or 0)
-        mark = "⚠️" if low else "📁"
+        # inventory cats may use category_name
+        fake = {
+            "name": cat.get("category_name") or cat.get("name") or "Toifa",
+            "emoji": cat.get("emoji") or "",
+        }
+        mark = category_label(fake)
         extra = f" · ⚠️{low}" if low else ""
-        label = f"{mark} {cat['category_name']} — {count} ta{extra}"
+        label = f"{mark} — {count} ta{extra}"
         if len(label) > 64:
             label = label[:61] + "..."
         cid = int(cat["category_id"])
@@ -907,12 +922,17 @@ def admin_all_products_list_keyboard(products) -> InlineKeyboardMarkup:
 
 def admin_categories_list_keyboard(categories_with_counts) -> InlineKeyboardMarkup:
     """Bitta xabarda toifalar spiskasi."""
+    from bot.category_emoji import category_label
+
     rows = []
     for category, count in categories_with_counts:
+        label = f"{category_label(category)} ({count})"
+        if len(label) > 64:
+            label = label[:61] + "..."
         rows.append(
             [
                 InlineKeyboardButton(
-                    f"{category['name']} ({count})",
+                    label,
                     callback_data=f"admin_prod:viewcat:{category['id']}",
                 )
             ]

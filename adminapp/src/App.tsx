@@ -37,6 +37,17 @@ declare global {
   }
 }
 
+function categoryChipLabel(
+  name: string,
+  emoji?: string | null,
+): string {
+  const icon = (emoji || '').trim() || '📦'
+  const n = (name || '').trim()
+  if (!n) return icon
+  if (n.startsWith(icon)) return n
+  return `${icon} ${n}`
+}
+
 function readTgInitData(): string {
   return (window.Telegram?.WebApp?.initData || '').trim()
 }
@@ -1698,7 +1709,7 @@ export default function App() {
                 className={`chip${selectedCat === c.category_id ? ' active' : ''}`}
                 onClick={() => setSelectedCat(c.category_id)}
               >
-                {c.category_name}
+                {categoryChipLabel(c.category_name, c.emoji)}
                 {c.low_count ? ` · ${c.low_count}` : ''}
               </button>
             ))}
@@ -2026,7 +2037,7 @@ export default function App() {
                   <option value="">Tanlanmagan</option>
                   {catalogCats.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name}
+                      {categoryChipLabel(c.name, c.emoji)}
                     </option>
                   ))}
                 </select>
@@ -2035,7 +2046,7 @@ export default function App() {
                 <input
                   value={newCatName}
                   onChange={(e) => setNewCatName(e.target.value)}
-                  placeholder="Yangi toifa"
+                  placeholder="🥤 Yangi toifa (emoji ixtiyoriy)"
                 />
                 <button
                   type="button"

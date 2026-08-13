@@ -51,6 +51,7 @@ export type Product = {
 export type Category = {
   category_id: number
   category_name: string
+  emoji?: string
   product_count: number
   low_count: number
   stock_sum: number
@@ -59,6 +60,7 @@ export type Category = {
 export type CatalogCategory = {
   id: number
   name: string
+  emoji?: string
   is_active: boolean
 }
 

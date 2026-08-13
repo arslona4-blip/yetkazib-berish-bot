@@ -145,7 +145,7 @@
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = `chip${state.categoryId === cat.id ? " active" : ""}`;
-      btn.textContent = cat.name;
+      btn.textContent = cat.label || `${cat.emoji || "📦"} ${cat.name}`.trim();
       btn.addEventListener("click", () => {
         state.categoryId = cat.id;
         renderCategories();
