@@ -75,6 +75,12 @@ DEFAULT_LANG = os.getenv("DEFAULT_LANG", "uz")
 # Admin PWA brauzer kirishi (kodsiz). Railway’da o‘zgartirish mumkin.
 ADMIN_APP_PIN = os.getenv("ADMIN_APP_PIN", "7788").strip()
 
+# /start da chiqadigan rasm (bo‘sh bo‘lsa — faqat matn)
+_WELCOME_DEFAULT = BASE_DIR / "bot" / "assets" / "welcome.jpg"
+WELCOME_PHOTO_PATH = Path(
+    os.getenv("WELCOME_PHOTO_PATH", str(_WELCOME_DEFAULT))
+).expanduser()
+
 # Eski konstanta — endi bot.timeutil.get_delivery_slots() ishlatiladi
 DELIVERY_SLOTS = []
 
