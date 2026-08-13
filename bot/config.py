@@ -72,6 +72,9 @@ WEBHOOK_PORT = int(os.getenv("WEBHOOK_LISTEN_PORT", "0") or "0")
 DATABASE_URL = os.getenv("DATABASE_URL", "")  # reserved; SQLite primary
 DEFAULT_LANG = os.getenv("DEFAULT_LANG", "uz")
 
+# Admin PWA brauzer kirishi (kodsiz). Railway’da o‘zgartirish mumkin.
+ADMIN_APP_PIN = os.getenv("ADMIN_APP_PIN", "7788").strip()
+
 # Eski konstanta — endi bot.timeutil.get_delivery_slots() ishlatiladi
 DELIVERY_SLOTS = []
 

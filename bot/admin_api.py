@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any
 
 from aiohttp import web
 
 from bot.config import (
+    ADMIN_APP_PIN,
     ADMIN_IDS,
     BONUS_PERCENT,
     LOW_STOCK_THRESHOLD,
@@ -73,8 +73,6 @@ from bot.database import (
 )
 
 logger = logging.getLogger(__name__)
-
-ADMIN_APP_PIN = os.getenv("ADMIN_APP_PIN", "").strip()
 
 
 def _require_admin(request: web.Request) -> int:
