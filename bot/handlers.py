@@ -148,13 +148,14 @@ class OrderState(IntEnum):
 class ProductAdminState(IntEnum):
     NAME = 1
     PRICE = 2
-    DESCRIPTION = 3
+    DESCRIPTION = 3  # eski; yangi oqimda STOCK ishlatiladi
     EDIT_PRICE = 4
     CATEGORY_NAME = 5
     PICK_CATEGORY = 6
     SIZE_NAME = 7
     SIZE_PRICE = 8
     BARCODE = 9
+    STOCK = 10
 
 
 def is_admin(user_id: int) -> bool:
@@ -1901,25 +1902,26 @@ async def admin_product_callback(
             return ConversationHandler.END
         context.user_data["admin_product"] = {"category_id": category_id}
         await query.edit_message_text(
-            f"➕ «{category['name']}» toifasiga yangi mahsulot"
+            f"➕ «{category['name']}» — yangi mahsulot"
         )
         await query.message.reply_text(
-            "Avval shtrix-kodni skanerlang.\n\n"
-            "1) «📷 Kodni skanerlash» — kamera\n"
-            "2) yoki kodni qo‘lda yozing\n"
-            "3) kod bo‘lmasa «⏭ O'tkazib yuborish»",
+            "① Shtrix-kod: skan / yozing / o‘tkazing",
             reply_markup=new_product_barcode_keyboard(),
         )
         return ProductAdminState.BARCODE
 
     if action == "add":
+        categories = get_categories()
+        if not categories:
+            await query.answer(
+                "Avval toifa yarating (Mahsulotlar → Yangi toifa).",
+                show_alert=True,
+            )
+            return ConversationHandler.END
         context.user_data["admin_product"] = {}
-        await query.edit_message_text("Yangi mahsulot qo'shish...")
+        await query.edit_message_text("➕ Yangi mahsulot")
         await query.message.reply_text(
-            "Avval shtrix-kodni skanerlang.\n\n"
-            "1) «📷 Kodni skanerlash» — kamera\n"
-            "2) yoki kodni qo‘lda yozing\n"
-            "3) kod bo‘lmasa «⏭ O'tkazib yuborish»",
+            "① Shtrix-kod: skan / yozing / o‘tkazing",
             reply_markup=new_product_barcode_keyboard(),
         )
         return ProductAdminState.BARCODE
@@ -1927,12 +1929,13 @@ async def admin_product_callback(
     if action == "setcat":
         category_id = int(parts[2])
         context.user_data.setdefault("admin_product", {})["category_id"] = category_id
+        context.user_data["admin_product"]["_picked_category"] = True
         category = get_category(category_id)
         await query.edit_message_text(
             f"Toifa: {category['name'] if category else category_id}"
         )
         await query.message.reply_text(
-            "💰 Narxni yozing (faqat raqam, so'm):",
+            "④ Narxni yozing (so‘m):",
             reply_markup=cancel_keyboard(),
         )
         return ProductAdminState.PRICE
@@ -2067,7 +2070,7 @@ async def _ask_new_product_name(
         )
     else:
         await msg.reply_text(
-            "🛍 Mahsulot nomini yozing:",
+            "② Mahsulot nomini yozing:",
             reply_markup=cancel_keyboard(),
         )
     return ProductAdminState.NAME
@@ -2141,7 +2144,7 @@ async def admin_product_name(
         return await cancel_product_admin(update, context)
     if text == "✏️ Boshqa nom yozaman":
         await update.message.reply_text(
-            "🛍 Mahsulot nomini yozing:",
+            "② Mahsulot nomini yozing:",
             reply_markup=cancel_keyboard(),
         )
         return ProductAdminState.NAME
@@ -2157,7 +2160,7 @@ async def admin_product_name(
         category = get_category(preset_cat)
         await update.message.reply_text(
             f"🗂 Toifa: {category['name'] if category else preset_cat}\n"
-            "💰 Narxni yozing (faqat raqam, so'm):",
+            "③ Narxni yozing (so‘m):",
             reply_markup=cancel_keyboard(),
         )
         return ProductAdminState.PRICE
@@ -2172,7 +2175,7 @@ async def admin_product_name(
         return ConversationHandler.END
 
     await update.message.reply_text(
-        "🗂 Toifani tanlang:",
+        "③ Toifani tanlang:",
         reply_markup=category_pick_keyboard(categories),
     )
     return ProductAdminState.PICK_CATEGORY
@@ -2202,36 +2205,65 @@ async def admin_product_price(
     price = parse_price_sum(raw)
     if price is None:
         await update.message.reply_text(
-            "Narxni shunday yozing:\n"
-            "• <code>12000</code>\n"
-            "• yoki <code>15000 so'm</code>\n"
-            "• yoki <code>15 000</code>",
+            "Narxni yozing. Masalan: <code>12000</code>",
             parse_mode="HTML",
         )
         return ProductAdminState.PRICE
 
     context.user_data.setdefault("admin_product", {})["price"] = price
-    # Conversation uzilsa ham izoh bosqichi ishlasin
-    context.user_data["awaiting_admin"] = "product_description"
+    context.user_data["awaiting_admin"] = "product_stock"
+    # addin: ①kod ②nom ③narx ④ombor | add: …③toifa ④narx ⑤ombor
+    stock_step = "⑤" if context.user_data["admin_product"].get("_picked_category") else "④"
     await update.message.reply_text(
-        f"✅ Narx: {price:,} so'm\n\n"
-        "📝 Izoh yozing yoki «O'tkazib yuborish» ni bosing:",
+        f"✅ Narx: {price:,} so‘m\n\n"
+        f"{stock_step} Ombor sonini yozing (nechta bor?)\n"
+        "Yoki «⏭ O'tkazib yuborish» → 0",
         reply_markup=ReplyKeyboardMarkup(
             [["⏭ O'tkazib yuborish"], ["❌ Bekor qilish"]],
             resize_keyboard=True,
         ),
     )
-    return ProductAdminState.DESCRIPTION
+    return ProductAdminState.STOCK
 
 
-async def admin_product_description(
+async def admin_product_stock(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> int:
     text = (update.message.text or "").strip()
     if _is_cancel_text(text):
         return await cancel_product_admin(update, context)
 
+    if _is_skip_text(text):
+        stock = 0
+    else:
+        digits = "".join(ch for ch in text if ch.isdigit())
+        if not digits:
+            await update.message.reply_text(
+                "Raqam yozing (masalan: 25) yoki o‘tkazing."
+            )
+            return ProductAdminState.STOCK
+        stock = int(digits)
+
+    context.user_data.setdefault("admin_product", {})["stock"] = stock
+    return await _save_new_product(update, context)
+
+
+async def admin_product_description(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    """Eski izoh bosqichi — endi to‘g‘ridan-to‘g‘ri saqlaydi (stock=0)."""
+    text = (update.message.text or "").strip()
+    if _is_cancel_text(text):
+        return await cancel_product_admin(update, context)
     description = "" if _is_skip_text(text) else text
+    context.user_data.setdefault("admin_product", {})["description"] = description
+    context.user_data["admin_product"].setdefault("stock", 0)
+    return await _save_new_product(update, context)
+
+
+async def _save_new_product(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
     data = context.user_data.get("admin_product") or {}
     if not data.get("name") or data.get("price") is None:
         context.user_data.pop("awaiting_admin", None)
@@ -2241,6 +2273,8 @@ async def admin_product_description(
         )
         return ConversationHandler.END
 
+    stock = int(data.get("stock") or 0)
+    description = str(data.get("description") or "")
     try:
         product_id = create_product(
             data["name"],
@@ -2248,37 +2282,63 @@ async def admin_product_description(
             description,
             data.get("category_id"),
             barcode=data.get("barcode"),
+            stock=stock,
         )
     except Exception as exc:
-        context.user_data["awaiting_admin"] = "product_description"
+        context.user_data["awaiting_admin"] = "product_stock"
         await update.message.reply_text(
-            f"❌ Mahsulot saqlanmadi: {exc}\nQayta urinib ko'ring yoki izoh yozing:"
+            f"❌ Saqlanmadi: {exc}\nOmbor sonini qayta yozing yoki o‘tkazing:"
         )
-        return ProductAdminState.DESCRIPTION
+        return ProductAdminState.STOCK
 
     category = get_category(data["category_id"]) if data.get("category_id") else None
+    category_id = data.get("category_id")
+    code = data.get("barcode") or "—"
     context.user_data.pop("admin_product", None)
     context.user_data.pop("awaiting_admin", None)
-    code = data.get("barcode") or "—"
 
     await update.message.reply_text(
-        f"✅ Mahsulot qo'shildi!\n"
-        f"#{product_id} {data['name']} — {data['price']:,} so'm\n"
+        f"✅ Qo‘shildi!\n"
+        f"#{product_id} <b>{data['name']}</b>\n"
+        f"💰 {int(data['price']):,} so‘m · 📦 {stock} dona\n"
         f"🗂 {category['name'] if category else '—'}\n"
-        f"📷 Kod: {code}\n\n"
-        f"🖼 Endi rasm qo‘shing — mijozlar ko‘proq sotib oladi!",
+        f"📷 {code}",
+        parse_mode="HTML",
         reply_markup=main_menu_keyboard(is_admin(update.effective_user.id)),
     )
+
+    again_row: list[InlineKeyboardButton] = []
+    if category_id:
+        again_row.append(
+            InlineKeyboardButton(
+                "➕ Yana shu toifaga",
+                callback_data=f"admin_prod:addin:{category_id}",
+            )
+        )
+    else:
+        again_row.append(
+            InlineKeyboardButton("➕ Yana qo‘shish", callback_data="admin_prod:add")
+        )
+
     await update.message.reply_text(
-        "Rasm qo‘shish yoki spiskaga qaytish:",
+        "Keyingi qadam (ixtiyoriy):",
         reply_markup=InlineKeyboardMarkup(
             [
                 [
                     InlineKeyboardButton(
-                        "🖼 Rasm qo‘shish",
+                        "🖼 Rasm",
                         callback_data=f"admin_prod:photo:{product_id}",
-                    )
+                    ),
+                    InlineKeyboardButton(
+                        "📦 Ombor",
+                        callback_data=f"admin_prod:stock:{product_id}",
+                    ),
+                    InlineKeyboardButton(
+                        "📐 O‘lcham",
+                        callback_data=f"admin_prod:size:{product_id}",
+                    ),
                 ],
+                again_row,
                 [
                     InlineKeyboardButton(
                         "📋 Spiska", callback_data="admin_prod:list"
@@ -2335,17 +2395,19 @@ async def admin_awaiting_text(
     draft = context.user_data.get("admin_product") or {}
     has_product_draft = bool(draft.get("name") and draft.get("price") is not None)
 
-    # Stuck recovery: izoh bosqichida conversation uzilgan bo'lsa
-    if mode not in {"category_name", "product_description"}:
-        if has_product_draft and (_is_skip_text(text) or _is_cancel_text(text)):
-            mode = "product_description"
+    # Stuck recovery: ombor / eski izoh bosqichida conversation uzilgan bo'lsa
+    if mode not in {"category_name", "product_stock", "product_description"}:
+        if has_product_draft and (_is_skip_text(text) or _is_cancel_text(text) or text.strip().isdigit()):
+            mode = "product_stock"
         else:
             return
 
     if mode == "category_name":
         await admin_category_name(update, context)
-    else:
+    elif mode == "product_description":
         await admin_product_description(update, context)
+    else:
+        await admin_product_stock(update, context)
     raise ApplicationHandlerStop
 
 
@@ -2835,6 +2897,9 @@ def build_product_admin_conversation() -> ConversationHandler:
             ],
             ProductAdminState.PRICE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, admin_product_price)
+            ],
+            ProductAdminState.STOCK: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, admin_product_stock)
             ],
             ProductAdminState.DESCRIPTION: [
                 MessageHandler(
