@@ -33,6 +33,7 @@ from bot.database import (
     get_admin_id_by_session,
     get_all_user_ids,
     get_categories,
+    get_category,
     get_contact,
     get_contact_balance,
     get_daily_report,
@@ -669,6 +670,7 @@ async def admin_categories_list(request: web.Request) -> web.Response:
                 {
                     "id": int(c["id"]),
                     "name": c["name"],
+                    "emoji": (c["emoji"] if "emoji" in c.keys() else "") or "📦",
                     "is_active": bool(c["is_active"]),
                 }
                 for c in cats
@@ -686,9 +688,21 @@ async def admin_categories_create(request: web.Request) -> web.Response:
     name = str(body.get("name") or "").strip()
     if not name:
         raise web.HTTPBadRequest(text="Nom kerak")
-    cid = create_category(name)
+    emoji = str(body.get("emoji") or "").strip() or None
+    try:
+        cid = create_category(name, emoji=emoji)
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text=str(exc)) from exc
+    cat = get_category(cid)
     logger.info("Admin %s created category #%s", admin_id, cid)
-    return web.json_response({"ok": True, "id": cid, "name": name})
+    return web.json_response(
+        {
+            "ok": True,
+            "id": cid,
+            "name": cat["name"] if cat else name,
+            "emoji": (cat["emoji"] if cat and "emoji" in cat.keys() else "") or "📦",
+        }
+    )
 
 
 async def admin_pos_sale(request: web.Request) -> web.Response:
