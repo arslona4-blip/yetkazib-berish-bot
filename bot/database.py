@@ -1690,6 +1690,72 @@ def set_product_stock(
     return stock
 
 
+def zero_category_stock(
+    category_id: int,
+    *,
+    admin_id: int | None = None,
+    note: str = "Toifa bo‘yicha 0",
+) -> dict[str, int]:
+    """Toifadagi barcha faol mahsulotlar qoldig‘ini 0 qiladi.
+
+    Qaytaradi: updated (o‘zgarganlar), skipped (allaqachon 0), total.
+    """
+    cid = int(category_id)
+    with get_connection() as conn:
+        if cid == 0:
+            rows = conn.execute(
+                """
+                SELECT id, COALESCE(stock, 0) AS stock
+                FROM products
+                WHERE is_active = 1 AND category_id IS NULL
+                """
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT id, COALESCE(stock, 0) AS stock
+                FROM products
+                WHERE is_active = 1 AND category_id = ?
+                """,
+                (cid,),
+            ).fetchall()
+        updated = 0
+        skipped = 0
+        now = _now_iso()
+        for row in rows:
+            old = int(row["stock"])
+            if old == 0:
+                skipped += 1
+                continue
+            pid = int(row["id"])
+            conn.execute(
+                "UPDATE products SET stock = 0 WHERE id = ?",
+                (pid,),
+            )
+            conn.execute(
+                """
+                INSERT INTO stock_movements (
+                    product_id, delta, stock_after, reason, note,
+                    order_id, admin_id, created_at
+                ) VALUES (?, ?, 0, ?, ?, NULL, ?, ?)
+                """,
+                (
+                    pid,
+                    -old,
+                    "inventory",
+                    (note or "").strip(),
+                    admin_id,
+                    now,
+                ),
+            )
+            updated += 1
+    return {
+        "updated": updated,
+        "skipped": skipped,
+        "total": updated + skipped,
+    }
+
+
 def adjust_product_stock(
     product_id: int,
     delta: int,

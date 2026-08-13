@@ -627,6 +627,7 @@ def admin_stock_list_keyboard(
     *,
     low_only: bool = False,
     back_callback: str = "admin:stock",
+    category_id: int | None = None,
 ) -> InlineKeyboardMarkup:
     """Ombor: mahsulotlar toifa bo'yicha guruhlangan spiska."""
     from collections import defaultdict
@@ -642,6 +643,15 @@ def admin_stock_list_keyboard(
         grouped[cat_name].append(product)
 
     rows: list[list[InlineKeyboardButton]] = []
+    if category_id is not None:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    "0️⃣ Shu toifadagi HAMMASINI 0 qilish",
+                    callback_data=f"admin:stock_zero:{int(category_id)}",
+                )
+            ]
+        )
     for cat_name in sorted(grouped.keys(), key=lambda x: x.casefold()):
         items = sorted(
             grouped[cat_name],
