@@ -16,6 +16,7 @@
    - `DATABASE_PATH=/data/bot.db`
    - `SHOP_NAME`, `SHOP_ADDRESS`, `SHOP_PHONE`, …
    - `DELIVERY_PRICE`, `MINIAPP_URL` (HTTPS)
+   - `ADMIN_APP_PIN` (ixtiyoriy; default `7788` — admin PWA ga kodsiz kirish)
 5. Settings → Volumes → Add → `/data`
 6. Deploy → Logs: Application started
 7. Telegramda `/start`, keyin `/id` — ID ni ko'ring

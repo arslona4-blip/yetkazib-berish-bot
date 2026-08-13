@@ -150,7 +150,7 @@ export default function App() {
   const [showProductForm, setShowProductForm] = useState(false)
   const [tgInit, setTgInit] = useState('')
   const [tgReady, setTgReady] = useState(false)
-  const [showPin, setShowPin] = useState(false)
+  const [showCode, setShowCode] = useState(false)
   const [booting, setBooting] = useState(true)
   const [menuOpen, setMenuOpen] = useState(false)
 
@@ -989,8 +989,66 @@ export default function App() {
           ) : (
             <>
               <p>
-                Brauzerdan kirish: botda <b>🛠 Admin panel</b> →{' '}
-                <b>🔑 Kirish kodi</b> bosing, keyin ID + kodni shu yerga yozing.
+                Brauzerdan kirish: Telegram Admin ID va PIN yozing.
+              </p>
+              <div className="field">
+                <label>Telegram Admin ID</label>
+                <input
+                  value={pinForm.adminId}
+                  onChange={(e) =>
+                    setPinForm((s) => ({ ...s, adminId: e.target.value }))
+                  }
+                  placeholder="123456789"
+                  inputMode="numeric"
+                />
+              </div>
+              <div className="field">
+                <label>PIN</label>
+                <input
+                  type="password"
+                  value={pinForm.pin}
+                  onChange={(e) =>
+                    setPinForm((s) => ({ ...s, pin: e.target.value }))
+                  }
+                  placeholder="••••"
+                  autoComplete="current-password"
+                />
+              </div>
+              {error ? <div className="error">{error}</div> : null}
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ width: '100%' }}
+                disabled={busy}
+                onClick={() =>
+                  void bootstrap({
+                    mode: 'pin',
+                    pin: pinForm.pin,
+                    adminId: Number(pinForm.adminId),
+                  })
+                }
+              >
+                PIN bilan kirish
+              </button>
+              <p className="muted-sm" style={{ marginTop: 12 }}>
+                {tgReady
+                  ? 'Yoki botdagi 🖥 Admin ilova tugmasini Telegram ichida bosing.'
+                  : 'Telegram kutilyapti…'}
+              </p>
+            </>
+          )}
+          <button
+            type="button"
+            className="btn btn-ghost"
+            style={{ width: '100%', marginTop: 10 }}
+            onClick={() => setShowCode((v) => !v)}
+          >
+            {showCode ? 'Kodni yopish' : 'Botdagi bir martalik kod'}
+          </button>
+          {showCode ? (
+            <>
+              <p className="muted-sm" style={{ marginTop: 12 }}>
+                Botda <b>🔑 Kirish kodi</b> oling, keyin shu yerga yozing.
               </p>
               <div className="field">
                 <label>Telegram Admin ID</label>
@@ -1015,7 +1073,6 @@ export default function App() {
                   autoComplete="one-time-code"
                 />
               </div>
-              {error ? <div className="error">{error}</div> : null}
               <button
                 type="button"
                 className="btn btn-primary"
@@ -1024,52 +1081,6 @@ export default function App() {
                 onClick={() => void loginWithCode()}
               >
                 Kod bilan kirish
-              </button>
-              <p className="muted-sm" style={{ marginTop: 12 }}>
-                {tgReady
-                  ? 'Yoki botdagi 🖥 Admin ilova tugmasini Telegram ichida bosing.'
-                  : 'Telegram kutilyapti…'}
-              </p>
-            </>
-          )}
-          <button
-            type="button"
-            className="btn btn-ghost"
-            style={{ width: '100%', marginTop: 10 }}
-            onClick={() => setShowPin((v) => !v)}
-          >
-            {showPin ? 'PIN yopish' : 'ADMIN_APP_PIN (ixtiyoriy)'}
-          </button>
-          {showPin ? (
-            <>
-              <p className="muted-sm" style={{ marginTop: 12 }}>
-                Faqat Railway’da <code>ADMIN_APP_PIN</code> bo‘lsa.
-              </p>
-              <div className="field">
-                <label>Admin PIN</label>
-                <input
-                  type="password"
-                  value={pinForm.pin}
-                  onChange={(e) =>
-                    setPinForm((s) => ({ ...s, pin: e.target.value }))
-                  }
-                  placeholder="••••"
-                />
-              </div>
-              <button
-                type="button"
-                className="btn btn-primary"
-                style={{ width: '100%' }}
-                disabled={busy}
-                onClick={() =>
-                  void bootstrap({
-                    mode: 'pin',
-                    pin: pinForm.pin,
-                    adminId: Number(pinForm.adminId),
-                  })
-                }
-              >
-                PIN bilan kirish
               </button>
             </>
           ) : null}
