@@ -1,0 +1,62 @@
+name: Kassa Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'kassa-android/**'
+      - 'adminapp/**'
+      - 'admin/**'
+      - '.github/workflows/kassa-android.yml'
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            kassa-android/package-lock.json
+            adminapp/package-lock.json
+
+      - name: Build admin web (kassa mode host)
+        working-directory: adminapp
+        run: |
+          npm ci
+          npm run build
+          rm -rf ../admin/*
+          cp -a dist/. ../admin/
+
+      - name: Setup Capacitor Android
+        working-directory: kassa-android
+        run: |
+          npm ci
+          npx cap add android || true
+          npx cap sync android
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Build debug APK
+        working-directory: kassa-android/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: kassa-android-apk
+          path: kassa-android/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
