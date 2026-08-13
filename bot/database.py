@@ -519,17 +519,40 @@ def create_product(
     description: str = "",
     category_id: int | None = None,
     barcode: str | None = None,
+    stock: int | None = 0,
 ) -> int:
     code = (barcode or "").strip() or None
+    initial_stock = max(0, int(stock if stock is not None else 0))
     with get_connection() as conn:
         cursor = conn.execute(
             """
-            INSERT INTO products (name, price, description, category_id, is_active, barcode)
-            VALUES (?, ?, ?, ?, 1, ?)
+            INSERT INTO products (
+                name, price, description, category_id, is_active, barcode, stock
+            )
+            VALUES (?, ?, ?, ?, 1, ?, ?)
             """,
-            (name, price, description, category_id, code),
+            (name, price, description, category_id, code, initial_stock),
         )
-        return int(cursor.lastrowid)
+        product_id = int(cursor.lastrowid)
+        if initial_stock:
+            conn.execute(
+                """
+                INSERT INTO stock_movements (
+                    product_id, delta, stock_after, reason, note,
+                    order_id, admin_id, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, NULL, NULL, ?)
+                """,
+                (
+                    product_id,
+                    initial_stock,
+                    initial_stock,
+                    "in",
+                    "Yangi mahsulot",
+                    _now_iso(),
+                ),
+            )
+        return product_id
 
 
 def get_product_by_barcode(barcode: str) -> sqlite3.Row | None:

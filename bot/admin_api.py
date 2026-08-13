@@ -651,6 +651,7 @@ async def admin_product_create(request: web.Request) -> web.Response:
         description=description,
         category_id=category_id,
         barcode=barcode,
+        stock=0,
     )
     stock_raw = body.get("stock")
     if stock_raw is not None and str(stock_raw).strip() != "":
