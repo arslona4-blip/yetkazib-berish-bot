@@ -398,9 +398,6 @@ def confirm_order_keyboard() -> InlineKeyboardMarkup:
                 )
             ],
             [
-                InlineKeyboardButton(
-                    "🏷 Promo kod", callback_data="order:add_promo"
-                ),
                 InlineKeyboardButton("❌ Bekor", callback_data="order:cancel"),
             ],
         ]
