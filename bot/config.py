@@ -39,7 +39,7 @@ PAYMENT_STATUS_LABELS = {
     "cash": "💵 Naqd",
     "card_waiting": "💳 Karta (tekshirilmoqda)",
     "paid": "✅ To'langan",
-    "debt": "📒 Qarzga",
+    "debt": "📒 Qarz (eski)",  # yangi qarz yo‘q; eski yozuvlar uchun
     "rejected": "❌ Rad etildi",
 }
 

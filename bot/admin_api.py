@@ -18,7 +18,6 @@ from bot.config import (
 )
 from bot.database import (
     add_bonus,
-    add_debt_entry,
     adjust_product_stock,
     calc_promo_discount,
     consume_admin_login_code,
@@ -27,7 +26,6 @@ from bot.database import (
     create_contact,
     create_order,
     create_product,
-    debt_totals,
     decrease_stock_for_order_items,
     delete_order,
     export_products_csv,
@@ -55,9 +53,7 @@ from bot.database import (
     get_warehouse_summary,
     import_products_csv,
     list_contacts,
-    list_debt_ledger,
     list_promos,
-    mark_order_as_debt,
     revoke_admin_session,
     save_order_items_direct,
     search_orders,
@@ -247,19 +243,6 @@ def _promo_dict(row) -> dict[str, Any]:
         "discount_amount": int(row["discount_amount"] or 0),
         "min_order": int(row["min_order"] or 0),
         "is_active": bool(row["is_active"]),
-    }
-
-
-def _debt_entry_dict(row) -> dict[str, Any]:
-    return {
-        "id": int(row["id"]),
-        "contact_id": int(row["contact_id"]),
-        "kind": row["kind"],
-        "amount": int(row["amount"] or 0),
-        "order_id": int(row["order_id"]) if row["order_id"] else None,
-        "note": row["note"] or "",
-        "created_by": int(row["created_by"]) if row["created_by"] else None,
-        "created_at": row["created_at"] or "",
     }
 
 
@@ -709,7 +692,7 @@ async def admin_categories_create(request: web.Request) -> web.Response:
 
 
 async def admin_pos_sale(request: web.Request) -> web.Response:
-    """Zifra kassa: do'kondagi sotuv (naqd / karta / qarz)."""
+    """Zifra kassa: do'kondagi sotuv (naqd / karta)."""
     admin_id = _require_admin(request)
     try:
         body = await request.json()
@@ -719,8 +702,8 @@ async def admin_pos_sale(request: web.Request) -> web.Response:
     if not isinstance(raw_items, list) or not raw_items:
         raise web.HTTPBadRequest(text="items kerak")
     payment = str(body.get("payment") or "cash").strip().lower()
-    if payment not in {"cash", "card", "debt"}:
-        raise web.HTTPBadRequest(text="payment: cash|card|debt")
+    if payment not in {"cash", "card"}:
+        raise web.HTTPBadRequest(text="payment: cash|card")
     phone = str(body.get("phone") or "").strip() or "—"
     customer = str(body.get("customer_name") or "").strip() or "Kassa mijoz"
     note = str(body.get("note") or "").strip()
@@ -791,18 +774,7 @@ async def admin_pos_sale(request: web.Request) -> web.Response:
     decrease_stock_for_order_items(order_id, lines)
     update_order_status(order_id, "delivered")
 
-    debt_balance = None
-    if payment == "debt":
-        if cid is None:
-            # Avtomatik kontakt
-            cid = create_contact(
-                name=customer,
-                phone=None if phone == "—" else phone,
-                note="Kassa qarz",
-            )
-        mark_order_as_debt(order_id, created_by=admin_id, contact_id=cid)
-        debt_balance = get_contact_balance(cid)
-    elif payment == "card":
+    if payment == "card":
         update_payment_status(order_id, "paid")
     else:
         update_payment_status(order_id, "cash")
@@ -825,118 +797,6 @@ async def admin_pos_sale(request: web.Request) -> web.Response:
             "total": total,
             "payment": payment,
             "contact_id": cid,
-            "debt_balance": debt_balance,
-        }
-    )
-
-
-async def admin_debts_totals(request: web.Request) -> web.Response:
-    _require_admin(request)
-    return web.json_response({"ok": True, **debt_totals()})
-
-
-async def admin_debts_list(request: web.Request) -> web.Response:
-    _require_admin(request)
-    debtors = list_contacts(debtors_only=True)
-    return web.json_response(
-        {
-            "ok": True,
-            "totals": debt_totals(),
-            "debtors": [_contact_dict(c) for c in debtors],
-        }
-    )
-
-
-async def admin_debt_ledger(request: web.Request) -> web.Response:
-    _require_admin(request)
-    try:
-        contact_id = int(request.match_info["contact_id"])
-    except ValueError as exc:
-        raise web.HTTPBadRequest(text="contact_id noto'g'ri") from exc
-    contact = get_contact(contact_id)
-    if not contact:
-        raise web.HTTPNotFound(text="Kontakt topilmadi")
-    entries = list_debt_ledger(contact_id, limit=100)
-    bal = get_contact_balance(contact_id)
-    return web.json_response(
-        {
-            "ok": True,
-            "contact": {
-                "id": int(contact["id"]),
-                "name": contact["name"] or "",
-                "phone": contact["phone"] or "",
-                "note": contact["note"] or "",
-                "balance": bal,
-            },
-            "balance": bal,
-            "entries": [_debt_entry_dict(e) for e in entries],
-        }
-    )
-
-
-async def admin_debt_add(request: web.Request) -> web.Response:
-    admin_id = _require_admin(request)
-    try:
-        body = await request.json()
-    except Exception as exc:
-        raise web.HTTPBadRequest(text="JSON noto'g'ri") from exc
-    try:
-        contact_id = int(body.get("contact_id"))
-        amount = int(body.get("amount"))
-    except (TypeError, ValueError) as exc:
-        raise web.HTTPBadRequest(text="contact_id/amount noto'g'ri") from exc
-    kind = str(body.get("kind") or "debt").strip().lower()
-    note = str(body.get("note") or "").strip()
-    if not get_contact(contact_id):
-        raise web.HTTPNotFound(text="Kontakt topilmadi")
-    try:
-        entry_id = add_debt_entry(
-            contact_id,
-            amount,
-            kind=kind,
-            note=note,
-            created_by=admin_id,
-        )
-    except ValueError as exc:
-        raise web.HTTPBadRequest(text=str(exc)) from exc
-    bal = get_contact_balance(contact_id)
-    logger.info(
-        "Admin %s debt %s contact=%s amount=%s",
-        admin_id,
-        kind,
-        contact_id,
-        amount,
-    )
-    return web.json_response(
-        {"ok": True, "id": entry_id, "balance": bal, "kind": kind, "amount": amount}
-    )
-
-
-async def admin_order_debt(request: web.Request) -> web.Response:
-    admin_id = _require_admin(request)
-    try:
-        order_id = int(request.match_info["order_id"])
-    except ValueError as exc:
-        raise web.HTTPBadRequest(text="order_id noto'g'ri") from exc
-    try:
-        body = await request.json()
-    except Exception:
-        body = {}
-    contact_id = body.get("contact_id") if isinstance(body, dict) else None
-    cid = int(contact_id) if contact_id not in (None, "", 0, "0") else None
-    try:
-        resolved_cid, balance = mark_order_as_debt(
-            order_id, created_by=admin_id, contact_id=cid
-        )
-    except ValueError as exc:
-        raise web.HTTPBadRequest(text=str(exc)) from exc
-    order = get_order(order_id)
-    return web.json_response(
-        {
-            "ok": True,
-            "order": _order_dict(order),
-            "contact_id": resolved_cid,
-            "balance": balance,
         }
     )
 
@@ -1010,12 +870,10 @@ async def admin_reports(request: web.Request) -> web.Response:
         report = get_range_report(date_from, date_to)
     except ValueError as exc:
         raise web.HTTPBadRequest(text=str(exc)) from exc
-    debts = debt_totals()
     return web.json_response(
         {
             "ok": True,
             "report": report,
-            "debts": debts,
             "warehouse": get_warehouse_summary(),
         }
     )
@@ -1106,8 +964,7 @@ async def admin_products_import(request: web.Request) -> web.Response:
 
 async def admin_contacts_list(request: web.Request) -> web.Response:
     _require_admin(request)
-    debtors_only = request.rel_url.query.get("debtors") == "1"
-    contacts = [_contact_dict(c) for c in list_contacts(debtors_only=debtors_only)]
+    contacts = [_contact_dict(c) for c in list_contacts(debtors_only=False)]
     return web.json_response({"ok": True, "contacts": contacts})
 
 
@@ -1185,13 +1042,8 @@ def register_admin_routes(app: web.Application) -> None:
     app.router.add_get("/api/admin/orders/{order_id}", admin_order_detail)
     app.router.add_post("/api/admin/orders/{order_id}/status", admin_order_status)
     app.router.add_post("/api/admin/orders/{order_id}/payment", admin_order_payment)
-    app.router.add_post("/api/admin/orders/{order_id}/debt", admin_order_debt)
     app.router.add_delete("/api/admin/orders/{order_id}", admin_order_delete)
     app.router.add_post("/api/admin/pos/sale", admin_pos_sale)
-    app.router.add_get("/api/admin/debts", admin_debts_list)
-    app.router.add_get("/api/admin/debts/totals", admin_debts_totals)
-    app.router.add_get("/api/admin/debts/{contact_id}", admin_debt_ledger)
-    app.router.add_post("/api/admin/debts", admin_debt_add)
     app.router.add_get("/api/admin/promos", admin_promos_list)
     app.router.add_post("/api/admin/promos", admin_promos_upsert)
     app.router.add_patch("/api/admin/promos/{code}", admin_promos_patch)
