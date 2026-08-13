@@ -11,7 +11,6 @@ import type {
   CatalogCategory,
   Category,
   Contact,
-  DebtEntry,
   MorePanel,
   Movement,
   Order,
@@ -103,26 +102,9 @@ export default function App() {
   const [cart, setCart] = useState<CartLine[]>([])
   const [kassaSearch, setKassaSearch] = useState('')
   const [kassaBarcode, setKassaBarcode] = useState('')
-  const [kassaPay, setKassaPay] = useState<'cash' | 'card' | 'debt'>('cash')
-  const [kassaCustomer, setKassaCustomer] = useState('')
-  const [kassaPhone, setKassaPhone] = useState('')
+  const [kassaPay, setKassaPay] = useState<'cash' | 'card'>('cash')
   const [kassaPromo, setKassaPromo] = useState('')
-  const [kassaContactId, setKassaContactId] = useState(0)
   const [kassaMsg, setKassaMsg] = useState('')
-  const [debtors, setDebtors] = useState<Contact[]>([])
-  const [debtTotals, setDebtTotals] = useState({
-    debts: 0,
-    payments: 0,
-    open: 0,
-  })
-  const [debtContactId, setDebtContactId] = useState<number | null>(null)
-  const [debtEntries, setDebtEntries] = useState<DebtEntry[]>([])
-  const [debtBalance, setDebtBalance] = useState(0)
-  const [debtForm, setDebtForm] = useState({
-    amount: '',
-    kind: 'payment' as 'debt' | 'payment',
-    note: '',
-  })
   const [promos, setPromos] = useState<Promo[]>([])
   const [promoForm, setPromoForm] = useState({
     code: '',
@@ -613,10 +595,6 @@ export default function App() {
 
   async function checkoutPos() {
     if (!auth || cart.length === 0) return
-    if (kassaPay === 'debt' && !kassaCustomer.trim() && !kassaContactId) {
-      setError('Qarz uchun mijoz ismi yoki kontakt tanlang')
-      return
-    }
     setBusy(true)
     setKassaMsg('')
     try {
@@ -626,79 +604,18 @@ export default function App() {
           quantity: l.quantity,
         })),
         payment: kassaPay,
-        customer_name: kassaCustomer.trim() || undefined,
-        phone: kassaPhone.trim() || undefined,
         promo_code: kassaPromo.trim() || undefined,
-        contact_id: kassaContactId || undefined,
       })
       setCart([])
       setKassaPromo('')
       setKassaMsg(
         `Chek #${res.order.id} · ${money(res.total)} · ${
-          res.payment === 'cash'
-            ? 'Naqd'
-            : res.payment === 'card'
-              ? 'Karta'
-              : `Qarz (qoldiq ${money(res.debt_balance || 0)})`
+          res.payment === 'cash' ? 'Naqd' : 'Karta'
         }`,
       )
       await refreshAll(auth, true)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Sotuv xato')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function loadDebts() {
-    if (!auth) return
-    try {
-      const res = await api.debts(auth)
-      setDebtors(res.debtors)
-      setDebtTotals(res.totals)
-      const c = await api.contacts(auth)
-      setContacts(c.contacts)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Qarz xato')
-    }
-  }
-
-  async function openDebtLedger(contactId: number) {
-    if (!auth) return
-    setBusy(true)
-    try {
-      const res = await api.debtLedger(auth, contactId)
-      setDebtContactId(contactId)
-      setDebtEntries(res.entries)
-      setDebtBalance(res.balance)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Jurnal xato')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function submitDebtEntry() {
-    if (!auth || !debtContactId) return
-    const amount = Number(debtForm.amount)
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setError('Summa noto‘g‘ri')
-      return
-    }
-    setBusy(true)
-    try {
-      const res = await api.addDebt(auth, {
-        contact_id: debtContactId,
-        amount,
-        kind: debtForm.kind,
-        note: debtForm.note.trim() || undefined,
-      })
-      setDebtForm({ amount: '', kind: 'payment', note: '' })
-      setDebtBalance(res.balance)
-      await openDebtLedger(debtContactId)
-      await loadDebts()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Qarz yozuvi xato')
     } finally {
       setBusy(false)
     }
@@ -745,7 +662,6 @@ export default function App() {
     try {
       const res = await api.reports(auth, reportFrom, reportTo)
       setReport(res.report)
-      setDebtTotals(res.debts)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Hisobot xato')
     } finally {
@@ -815,28 +731,12 @@ export default function App() {
     }
   }
 
-  async function markOrderDebt(orderId: number) {
-    if (!auth) return
-    if (!window.confirm(`#${orderId} qarzga yozilsinmi?`)) return
-    setBusy(true)
-    try {
-      await api.markDebt(auth, orderId)
-      await refreshAll(auth, true)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Qarz xato')
-    } finally {
-      setBusy(false)
-    }
-  }
-
   useEffect(() => {
     if (!auth) return
-    if (tab === 'debts') void loadDebts()
     if (tab === 'promos') void loadPromos()
     if (tab === 'reports') void loadReport()
     if (tab === 'products' || tab === 'kassa') {
       void loadCatalogCats()
-      void loadContacts()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth, tab])
@@ -934,15 +834,6 @@ export default function App() {
             >
               O‘chirish
             </button>
-            {o.payment_status !== 'debt' && o.payment_status !== 'paid' ? (
-              <button
-                type="button"
-                className="btn btn-warn"
-                onClick={() => void markOrderDebt(o.id)}
-              >
-                Qarzga
-              </button>
-            ) : null}
           </div>
         )}
       </article>
@@ -1243,14 +1134,6 @@ export default function App() {
             <button
               type="button"
               className="pos-mod"
-              onClick={() => setTab('debts')}
-            >
-              <span className="pos-mod-ico red">📒</span>
-              <strong>Qarz</strong>
-            </button>
-            <button
-              type="button"
-              className="pos-mod"
               onClick={() => setTab('reports')}
             >
               <span className="pos-mod-ico green">📊</span>
@@ -1343,7 +1226,7 @@ export default function App() {
           <div className="page-h">
             <div>
               <h1>Kassa</h1>
-              <p>Do‘kon sotuvi · naqd / karta / qarz</p>
+              <p>Do‘kon sotuvi · naqd / karta</p>
             </div>
             <button
               type="button"
@@ -1449,7 +1332,6 @@ export default function App() {
                 [
                   ['cash', 'Naqd'],
                   ['card', 'Karta'],
-                  ['debt', 'Qarz'],
                 ] as const
               ).map(([id, label]) => (
                 <button
@@ -1470,43 +1352,6 @@ export default function App() {
                 placeholder="BARAKA10"
               />
             </div>
-            {kassaPay === 'debt' ? (
-              <>
-                <div className="field">
-                  <label>Mijoz (kontakt)</label>
-                  <select
-                    value={kassaContactId || ''}
-                    onChange={(e) =>
-                      setKassaContactId(Number(e.target.value) || 0)
-                    }
-                  >
-                    <option value="">Yangi mijoz…</option>
-                    {contacts.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                        {c.balance ? ` (${money(c.balance)})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label>Ism</label>
-                  <input
-                    value={kassaCustomer}
-                    onChange={(e) => setKassaCustomer(e.target.value)}
-                    placeholder="Mijoz ismi"
-                  />
-                </div>
-                <div className="field">
-                  <label>Telefon</label>
-                  <input
-                    value={kassaPhone}
-                    onChange={(e) => setKassaPhone(e.target.value)}
-                    placeholder="+998..."
-                  />
-                </div>
-              </>
-            ) : null}
             {kassaMsg ? <p className="muted-sm ok-text">{kassaMsg}</p> : null}
             <button
               type="button"
@@ -1518,130 +1363,6 @@ export default function App() {
               Sotish · {money(cartTotal)}
             </button>
           </div>
-        </section>
-      ) : null}
-
-      {tab === 'debts' ? (
-        <section className="section">
-          <div className="page-h">
-            <div>
-              <h1>Qarzdorlar</h1>
-              <p>Qarz berish va undirish</p>
-            </div>
-          </div>
-          <div className="grid">
-            <div className="card">
-              <div className="label">Ochiq qarz</div>
-              <div className="value accent">{money(debtTotals.open)}</div>
-            </div>
-            <div className="card">
-              <div className="label">Jami berilgan</div>
-              <div className="value">{money(debtTotals.debts)}</div>
-            </div>
-          </div>
-
-          {debtContactId ? (
-            <div className="card" style={{ marginTop: 12 }}>
-              <div className="row-between">
-                <h3>Jurnal · balans {money(debtBalance)}</h3>
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={() => {
-                    setDebtContactId(null)
-                    setDebtEntries([])
-                  }}
-                >
-                  Orqaga
-                </button>
-              </div>
-              <div className="field">
-                <label>Amaliyot</label>
-                <select
-                  value={debtForm.kind}
-                  onChange={(e) =>
-                    setDebtForm((s) => ({
-                      ...s,
-                      kind: e.target.value as 'debt' | 'payment',
-                    }))
-                  }
-                >
-                  <option value="payment">To‘lov (undirish)</option>
-                  <option value="debt">Qo‘shimcha qarz</option>
-                </select>
-              </div>
-              <div className="field">
-                <label>Summa</label>
-                <input
-                  value={debtForm.amount}
-                  onChange={(e) =>
-                    setDebtForm((s) => ({ ...s, amount: e.target.value }))
-                  }
-                  inputMode="numeric"
-                  placeholder="100000"
-                />
-              </div>
-              <div className="field">
-                <label>Izoh</label>
-                <input
-                  value={debtForm.note}
-                  onChange={(e) =>
-                    setDebtForm((s) => ({ ...s, note: e.target.value }))
-                  }
-                />
-              </div>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => void submitDebtEntry()}
-              >
-                Saqlash
-              </button>
-              <div className="list" style={{ marginTop: 12 }}>
-                {debtEntries.map((e) => (
-                  <div key={e.id} className="item">
-                    <div className="row-between">
-                      <h3>{e.kind === 'debt' ? 'Qarz' : 'To‘lov'}</h3>
-                      <span
-                        className={`mono ${e.kind === 'debt' ? 'danger-text' : 'ok-text'}`}
-                      >
-                        {e.kind === 'debt' ? '+' : '−'}
-                        {money(e.amount)}
-                      </span>
-                    </div>
-                    <p>
-                      {e.created_at}
-                      {e.note ? ` · ${e.note}` : ''}
-                      {e.order_id ? ` · #${e.order_id}` : ''}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="list" style={{ marginTop: 12 }}>
-              {debtors.length === 0 ? (
-                <div className="empty">Qarzdor yo‘q</div>
-              ) : (
-                debtors.map((d) => (
-                  <button
-                    key={d.id}
-                    type="button"
-                    className="item kassa-pick"
-                    onClick={() => void openDebtLedger(d.id)}
-                  >
-                    <div className="row-between">
-                      <h3>{d.name}</h3>
-                      <span className="mono danger-text">
-                        {money(d.balance || 0)}
-                      </span>
-                    </div>
-                    <p>{d.phone || 'Telefon yo‘q'}</p>
-                  </button>
-                ))
-              )}
-            </div>
-          )}
         </section>
       ) : null}
 
@@ -1689,10 +1410,6 @@ export default function App() {
                 <div className="card">
                   <div className="label">To‘langan</div>
                   <div className="value">{money(report.paid_sum)}</div>
-                </div>
-                <div className="card">
-                  <div className="label">Qarz savdo</div>
-                  <div className="value">{money(report.debt_sum)}</div>
                 </div>
                 <div className="card">
                   <div className="label">P&L (taxminiy)</div>
@@ -2414,7 +2131,6 @@ export default function App() {
                   ['payments', '💳', 'To‘lov'],
                   ['warehouse', '🏭', 'Ombor'],
                   ['products', '🛍', 'Tovar'],
-                  ['debts', '📒', 'Qarz'],
                   ['reports', '📊', 'Hisobot'],
                   ['promos', '🏷', 'Promo'],
                   ['more', '⋯', 'Ko‘proq'],
@@ -2489,14 +2205,14 @@ export default function App() {
           </div>
           <button
             type="button"
-            className={`nav-btn${tab === 'debts' ? ' active' : ''}`}
-            onClick={() => setTab('debts')}
+            className={`nav-btn${tab === 'products' ? ' active' : ''}`}
+            onClick={() => setTab('products')}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M6 4h12v16H6z" />
               <path d="M9 8h6M9 12h6M9 16h4" />
             </svg>
-            Qarz
+            Tovar
           </button>
           <button
             type="button"

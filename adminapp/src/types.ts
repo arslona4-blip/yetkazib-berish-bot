@@ -5,7 +5,6 @@ export type Tab =
   | 'payments'
   | 'warehouse'
   | 'products'
-  | 'debts'
   | 'reports'
   | 'promos'
   | 'more'
@@ -93,17 +92,6 @@ export type Promo = {
   discount_amount: number
   min_order: number
   is_active: boolean
-}
-
-export type DebtEntry = {
-  id: number
-  contact_id: number
-  kind: string
-  amount: number
-  order_id: number | null
-  note: string
-  created_by: number | null
-  created_at: string
 }
 
 export type CartLine = {

@@ -293,7 +293,7 @@ def place_miniapp_order(
         raise ValueError("Bonus noto'g'ri") from exc
     total = max(0, subtotal + delivery_fee - discount - bonus_spent)
 
-    allowed_pay = {"pending", "cash", "card_waiting", "debt"}
+    allowed_pay = {"pending", "cash", "card_waiting"}
     payment_method = (payment_method or "pending").strip().lower()
     if payment_method not in allowed_pay:
         payment_method = "pending"
