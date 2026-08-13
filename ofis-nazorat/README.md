@@ -2,31 +2,28 @@
 
 Botga aloqasi yo‘q. Ofisga kim kirgan / kim chiqqanini PC webcam orqali yozadi.
 
-## Brauzersiz (tavsiya)
+## Eng oson (tavsiya)
 
-### Windows
-1. `ofis-nazorat` papkasini oching
-2. **`start-desktop.bat`** ni ikki marta bosing
-3. Birinchi marta `npm install` bo‘lishi mumkin — kuting
-4. Oyna ochiladi (Chrome/Edge kerak emas)
+1. **`OfisNazorat.exe`** ni yuklab oling
+2. Ikki marta bosing
+3. Kamerani yoqing → xodim yuzini saqlang
 
-### Terminal orqali
+Node.js va brauzer kerak emas.
+
+GitHub Actions: repo → **Actions** → **Ofis Nazorat Windows exe** → oxirgi run → **Artifacts** → `OfisNazorat-Windows`
+
+Yoki o‘zingiz yig‘ish:
 ```bash
 cd ofis-nazorat
 npm install
-npm run desktop
+npm run dist:win
 ```
-
-## Brauzerda (ixtiyoriy)
-```bash
-npm run dev
-```
-`http://localhost:5177`
+Natija: `ofis-nazorat/release/OfisNazorat.exe`
 
 ## Qanday ishlatiladi
-1. **Kamerani yoqish**
-2. Ism → **Yuzni saqlash**
+1. Kamerani yoqish (doimiy ishlaydi)
+2. Ism → Yuzni saqlash
 3. Eshik oldidan o‘tsa — avtomatik KIRISH / CHIQISH
-4. Jurnalni **CSV** qilib saqlash mumkin
+4. Jurnalni CSV qilib saqlash mumkin
 
 Ma’lumotlar faqat shu PC da saqlanadi.
