@@ -1,7 +1,7 @@
 {
   "name": "ofis-nazorat",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Ofis kirish-chiqish nazorati (PC kamera)",
   "author": "Ofis Nazorat",
   "main": "electron/main.cjs",
@@ -26,7 +26,12 @@
       "electron/**/*",
       "package.json"
     ],
-    "extraResources": [],
+    "extraResources": [
+      {
+        "from": "public/models",
+        "to": "models"
+      }
+    ],
     "win": {
       "target": [
         {

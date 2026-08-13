@@ -2,14 +2,30 @@ import * as faceapi from '@vladmandic/face-api'
 
 let ready = false
 
-export async function loadFaceModels(
-  baseUrl = `${import.meta.env.BASE_URL}models`.replace(/\/{2,}/g, '/'),
-) {
+/** Electron query ?models=file:///.../ yoki web dagi ./models */
+export function resolveModelsBase(): string {
+  try {
+    const fromQuery = new URLSearchParams(window.location.search).get('models')
+    if (fromQuery) {
+      return decodeURIComponent(fromQuery).replace(/\/?$/, '')
+    }
+  } catch {
+    // ignore
+  }
+  try {
+    return new URL('models', window.location.href).href.replace(/\/?$/, '')
+  } catch {
+    return './models'
+  }
+}
+
+export async function loadFaceModels(baseUrl = resolveModelsBase()) {
   if (ready) return
+  const base = baseUrl.replace(/\/?$/, '')
   await Promise.all([
-    faceapi.nets.tinyFaceDetector.loadFromUri(baseUrl),
-    faceapi.nets.faceLandmark68TinyNet.loadFromUri(baseUrl),
-    faceapi.nets.faceRecognitionNet.loadFromUri(baseUrl),
+    faceapi.nets.tinyFaceDetector.loadFromUri(base),
+    faceapi.nets.faceLandmark68TinyNet.loadFromUri(base),
+    faceapi.nets.faceRecognitionNet.loadFromUri(base),
   ])
   ready = true
 }
@@ -49,7 +65,10 @@ export function matchPerson(
 ): { id: string; name: string; distance: number } | null {
   let best: { id: string; name: string; distance: number } | null = null
   for (const p of people) {
-    const dist = faceapi.euclideanDistance(descriptor, Float32Array.from(p.descriptor))
+    const dist = faceapi.euclideanDistance(
+      descriptor,
+      Float32Array.from(p.descriptor),
+    )
     if (dist < threshold && (!best || dist < best.distance)) {
       best = { id: p.id, name: p.name, distance: dist }
     }
