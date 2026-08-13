@@ -68,14 +68,15 @@ export default function App() {
     ;(async () => {
       try {
         setStatus('Yuz modellari yuklanmoqda…')
-        await loadFaceModels('/models')
+        await loadFaceModels()
         if (!cancelled) {
           setModelsOk(true)
           setStatus('Modellari tayyor. Kamerani yoqing.')
         }
       } catch (e) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : 'Model yuklanmadi')
+          const msg = e instanceof Error ? e.message : 'Model yuklanmadi'
+          setError(`${msg} (qayta o‘rnatish: yangi OfisNazorat.exe)`)
           setStatus('Model xato')
         }
       }

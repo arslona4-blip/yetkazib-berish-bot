@@ -1,7 +1,16 @@
 const { app, BrowserWindow, session } = require('electron')
 const path = require('path')
+const { pathToFileURL } = require('url')
 
 const isDev = !app.isPackaged
+
+function modelsDir() {
+  if (isDev) {
+    return path.join(__dirname, '..', 'public', 'models')
+  }
+  // extraResources → resources/models (asar tashqarisida)
+  return path.join(process.resourcesPath, 'models')
+}
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -16,10 +25,11 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
+      // lokal model .bin fayllarini yuklash uchun
+      webSecurity: false,
     },
   })
 
-  // Kameraga ruxsat — so‘ramasdan ruxsat
   session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
     if (permission === 'media' || permission === 'mediaKeySystem') {
       callback(true)
@@ -31,7 +41,11 @@ function createWindow() {
   if (isDev) {
     win.loadURL(process.env.VITE_DEV_SERVER_URL || 'http://127.0.0.1:5177')
   } else {
-    win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
+    const indexHtml = path.join(__dirname, '..', 'dist', 'index.html')
+    const modelsUrl = pathToFileURL(modelsDir()).href.replace(/\/?$/, '/')
+    win.loadFile(indexHtml, {
+      query: { models: modelsUrl },
+    })
   }
 }
 
