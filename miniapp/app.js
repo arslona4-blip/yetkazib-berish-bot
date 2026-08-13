@@ -20,7 +20,6 @@
     cart: loadCart(),
     bonusPoints: 0,
     discount: 0,
-    promoCode: "",
   };
 
   const els = {
@@ -38,7 +37,6 @@
     phone: document.getElementById("phone"),
     address: document.getElementById("address"),
     slot: document.getElementById("slot"),
-    promo: document.getElementById("promo"),
     bonus: document.getElementById("bonus"),
     paymentMethod: document.getElementById("paymentMethod"),
     note: document.getElementById("note"),
@@ -398,50 +396,6 @@
     }
   }
 
-  async function validatePromo() {
-    const code = (els.promo && els.promo.value.trim()) || "";
-    if (!code) {
-      state.discount = 0;
-      state.promoCode = "";
-      renderCart();
-      return;
-    }
-    const subtotal = cartSubtotal();
-    try {
-      const data = await api("/api/promo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, subtotal }),
-      });
-      if (data && data.ok) {
-        state.discount = Number(data.discount) || 0;
-        state.promoCode = data.code || code.toUpperCase();
-        if (els.status) {
-          els.status.hidden = false;
-          els.status.classList.remove("error");
-          els.status.textContent = `Promo qo'llandi: −${formatMoney(state.discount)}`;
-        }
-      } else {
-        state.discount = 0;
-        state.promoCode = "";
-        if (els.status) {
-          els.status.hidden = false;
-          els.status.classList.add("error");
-          els.status.textContent = (data && data.message) || "Promo yaroqsiz";
-        }
-      }
-    } catch (err) {
-      state.discount = 0;
-      state.promoCode = "";
-      if (els.status) {
-        els.status.hidden = false;
-        els.status.classList.add("error");
-        els.status.textContent = err.message || "Promo tekshirilmadi";
-      }
-    }
-    renderCart();
-  }
-
   async function bootstrap() {
     document.querySelectorAll(".nav-btn").forEach((btn) => {
       btn.addEventListener("click", () => showView(btn.dataset.view));
@@ -449,14 +403,6 @@
 
     els.form.addEventListener("submit", onCheckout);
 
-    if (els.promo) {
-      els.promo.addEventListener("change", () => {
-        validatePromo();
-      });
-      els.promo.addEventListener("blur", () => {
-        validatePromo();
-      });
-    }
     if (els.bonus) {
       els.bonus.addEventListener("input", () => renderCart());
       els.bonus.addEventListener("change", () => renderCart());
@@ -539,14 +485,6 @@
       return;
     }
 
-    const promoInput = (els.promo && els.promo.value.trim()) || "";
-    if (promoInput && promoInput.toUpperCase() !== (state.promoCode || "").toUpperCase()) {
-      await validatePromo();
-      if (promoInput && !state.promoCode) {
-        return;
-      }
-    }
-
     const initData = getInitData();
     const telegramUser = getTelegramUser();
     const params = new URLSearchParams(window.location.search);
@@ -560,7 +498,7 @@
       address: els.address.value.trim(),
       slot: els.slot.value,
       note: els.note.value.trim(),
-      promo_code: state.promoCode || "",
+      promo_code: "",
       bonus_spent: bonus,
       payment_method: (els.paymentMethod && els.paymentMethod.value) || "pending",
       items: state.cart.map((item) => ({
@@ -580,7 +518,6 @@
     if (checkoutViaSendData(payload)) {
       state.cart = [];
       state.discount = 0;
-      state.promoCode = "";
       saveCart();
       updateBadge();
       els.status.hidden = false;
@@ -607,8 +544,6 @@
       });
       state.cart = [];
       state.discount = 0;
-      state.promoCode = "";
-      if (els.promo) els.promo.value = "";
       if (els.bonus) els.bonus.value = "";
       saveCart();
       updateBadge();

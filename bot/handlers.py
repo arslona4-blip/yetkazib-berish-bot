@@ -348,7 +348,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "2️⃣ <b>Savatcha</b> — miqdorni sozlang\n"
         "3️⃣ <b>Buyurtma berish</b> — manzil + vaqt\n"
         "4️⃣ Tasdiqlang va to‘lovni tanlang\n\n"
-        f"🏷 Promo: <b>BARAKA10</b> (10%, min {MIN_ORDER_AMOUNT:,} so‘m)\n"
         f"👥 Do‘st taklif qilsangiz — +{REFERRAL_BONUS:,} bonus\n"
         "   («⋯ Ko‘proq» → «👥 Ulashish»)\n\n"
         "Savol bo‘lsa — «📞 Aloqa» ni bosing.",
@@ -1265,13 +1264,16 @@ async def show_order_summary_message(message, user, context: ContextTypes.DEFAUL
     order["price"] = total
 
     cart_text = format_cart(user_id)
+    discount_line = ""
+    if discount:
+        discount_line = f"🏷 Chegirma: −{discount:,}\n"
     summary = (
         f"🧾 <b>Buyurtmani tekshiring</b>\n"
         f"{format_now_html()}\n\n"
         f"{cart_text}\n\n"
         f"🕒 Yetkazish: <b><u>{order.get('delivery_slot') or '—'}</u></b>\n"
         f"🚚 Yetkazish narxi: {delivery_fee:,} so'm\n"
-        f"🏷 Promo: {order.get('promo_code') or '—'} (−{discount:,})\n"
+        f"{discount_line}"
         f"🎁 Bonus: −{bonus_spent:,}\n"
         f"📍 Qayerdan: {order['pickup_address']}\n"
         f"🏁 Qayerga: {delivery}\n"

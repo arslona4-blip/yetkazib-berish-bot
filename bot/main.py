@@ -11,7 +11,6 @@ from telegram.ext import (
 
 from bot.config import (
     BOT_TOKEN,
-    MIN_ORDER_AMOUNT,
     SHOP_ADDRESS,
     SHOP_HOURS,
     SHOP_NAME,
@@ -108,7 +107,6 @@ def _bot_description_uz() -> str:
         f"🛒 Do'kon — katalog va buyurtma\n"
         f"📷 Skaner — shtrix-kod bilan savatga\n"
         f"📋 Mening buyurtmalarim — holatni kuzating\n\n"
-        f"🏷 Promo: BARAKA10 (10%, min {MIN_ORDER_AMOUNT:,} so'm)\n\n"
         f"Boshlash: /start"
     )
 
