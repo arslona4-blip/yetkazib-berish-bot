@@ -276,8 +276,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"│ 🕐 {SHOP_HOURS}\n"
         f"│ 📞 {SHOP_PHONE}\n"
         f"└──────────────┘\n\n"
-        f"🏷 Promo: <b>BARAKA10</b> — 10% chegirma "
-        f"(min {MIN_ORDER_AMOUNT:,} so‘m)\n"
         f"👇 Pastdagi <b>🛒 Do'kon</b> tugmasini bosing!"
     )
     markup = menu_for(user.id)
