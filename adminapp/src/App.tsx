@@ -61,18 +61,9 @@ function money(n: number) {
   return `${Number(n || 0).toLocaleString('uz-UZ')} so‘m`
 }
 
-function isKassaOnlyMode() {
-  try {
-    return new URLSearchParams(window.location.search).get('mode') === 'kassa'
-  } catch {
-    return false
-  }
-}
-
 export default function App() {
-  const kassaOnly = isKassaOnlyMode()
   const [auth, setAuth] = useState<AuthState | null>(null)
-  const [tab, setTab] = useState<Tab>(kassaOnly ? 'kassa' : 'dash')
+  const [tab, setTab] = useState<Tab>('dash')
   const [shop, setShop] = useState('Admin')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -622,8 +613,7 @@ export default function App() {
 
   async function checkoutPos() {
     if (!auth || cart.length === 0) return
-    const pay = kassaOnly ? 'cash' : kassaPay
-    if (pay === 'debt' && !kassaCustomer.trim() && !kassaContactId) {
+    if (kassaPay === 'debt' && !kassaCustomer.trim() && !kassaContactId) {
       setError('Qarz uchun mijoz ismi yoki kontakt tanlang')
       return
     }
@@ -635,7 +625,7 @@ export default function App() {
           product_id: l.product_id,
           quantity: l.quantity,
         })),
-        payment: pay,
+        payment: kassaPay,
         customer_name: kassaCustomer.trim() || undefined,
         phone: kassaPhone.trim() || undefined,
         promo_code: kassaPromo.trim() || undefined,
@@ -1454,30 +1444,24 @@ export default function App() {
           </div>
 
           <div className="card" style={{ marginTop: 12 }}>
-            {kassaOnly ? (
-              <p className="muted-sm" style={{ marginBottom: 10 }}>
-                To‘lov: faqat <b>Naqd</b>
-              </p>
-            ) : (
-              <div className="tabs-inline">
-                {(
-                  [
-                    ['cash', 'Naqd'],
-                    ['card', 'Karta'],
-                    ['debt', 'Qarz'],
-                  ] as const
-                ).map(([id, label]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    className={`chip${kassaPay === id ? ' active' : ''}`}
-                    onClick={() => setKassaPay(id)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div className="tabs-inline">
+              {(
+                [
+                  ['cash', 'Naqd'],
+                  ['card', 'Karta'],
+                  ['debt', 'Qarz'],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={`chip${kassaPay === id ? ' active' : ''}`}
+                  onClick={() => setKassaPay(id)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <div className="field">
               <label>Promo kod</label>
               <input
@@ -1486,7 +1470,7 @@ export default function App() {
                 placeholder="BARAKA10"
               />
             </div>
-            {!kassaOnly && kassaPay === 'debt' ? (
+            {kassaPay === 'debt' ? (
               <>
                 <div className="field">
                   <label>Mijoz (kontakt)</label>
@@ -2423,26 +2407,18 @@ export default function App() {
             <h3>POS menyu</h3>
             <div className="menu-grid">
               {(
-                (
-                  kassaOnly
-                    ? ([
-                        ['kassa', '🖥', 'Kassa'],
-                        ['products', '🛍', 'Tovar'],
-                        ['warehouse', '🏭', 'Ombor'],
-                      ] as const)
-                    : ([
-                        ['dash', '🏠', 'Asosiy'],
-                        ['kassa', '🖥', 'Kassa'],
-                        ['orders', '📦', 'Buyurtma'],
-                        ['payments', '💳', 'To‘lov'],
-                        ['warehouse', '🏭', 'Ombor'],
-                        ['products', '🛍', 'Tovar'],
-                        ['debts', '📒', 'Qarz'],
-                        ['reports', '📊', 'Hisobot'],
-                        ['promos', '🏷', 'Promo'],
-                        ['more', '⋯', 'Ko‘proq'],
-                      ] as const)
-                )
+                [
+                  ['dash', '🏠', 'Asosiy'],
+                  ['kassa', '🖥', 'Kassa'],
+                  ['orders', '📦', 'Buyurtma'],
+                  ['payments', '💳', 'To‘lov'],
+                  ['warehouse', '🏭', 'Ombor'],
+                  ['products', '🛍', 'Tovar'],
+                  ['debts', '📒', 'Qarz'],
+                  ['reports', '📊', 'Hisobot'],
+                  ['promos', '🏷', 'Promo'],
+                  ['more', '⋯', 'Ko‘proq'],
+                ] as const
               ).map(([id, ico, label]) => (
                 <button
                   key={id}
@@ -2477,46 +2453,6 @@ export default function App() {
 
       <nav className="nav" aria-label="Admin menyu">
         <div className="nav-inner">
-          {kassaOnly ? (
-            <>
-              <button
-                type="button"
-                className={`nav-btn${tab === 'products' ? ' active' : ''}`}
-                onClick={() => setTab('products')}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M4 7h16v12H4z" />
-                  <path d="M8 7V5a4 4 0 0 1 8 0v2" />
-                </svg>
-                Tovar
-              </button>
-              <div className="nav-center-wrap">
-                <button
-                  type="button"
-                  className={`nav-center${tab === 'kassa' ? ' active' : ''}`}
-                  aria-label="Kassa"
-                  onClick={() => setTab('kassa')}
-                >
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="4" width="18" height="14" rx="2" />
-                    <path d="M7 18v2M17 18v2M8 10h8M8 13h5" />
-                  </svg>
-                </button>
-              </div>
-              <button
-                type="button"
-                className={`nav-btn${tab === 'warehouse' ? ' active' : ''}`}
-                onClick={() => setTab('warehouse')}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M4 20V9l8-5 8 5v11" />
-                  <path d="M9 20v-6h6v6" />
-                </svg>
-                Ombor
-              </button>
-            </>
-          ) : (
-            <>
           <button
             type="button"
             className={`nav-btn${tab === 'dash' ? ' active' : ''}`}
@@ -2573,8 +2509,6 @@ export default function App() {
             </svg>
             Ombor
           </button>
-            </>
-          )}
         </div>
       </nav>
     </div>
