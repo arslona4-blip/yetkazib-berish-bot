@@ -119,8 +119,6 @@ from bot.keyboards import (
     contact_keyboard,
     courier_order_keyboard,
     delivery_slots_keyboard,
-    ingliz_app_url,
-    ingliz_inline_button,
     location_keyboard,
     main_menu_keyboard,
     more_menu_keyboard,
@@ -280,9 +278,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     shop_btn = shop_inline_button("🛒 Do'konni ochish")
     if shop_btn:
         start_rows.append([shop_btn])
-    ingliz_btn = ingliz_inline_button("🇬🇧 Ingliz")
-    if ingliz_btn:
-        start_rows.append([ingliz_btn])
     start_rows.append(
         [
             InlineKeyboardButton("🛒 Savatcham", callback_data="cart:view"),
@@ -318,16 +313,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         if MINIAPP_URL
         else ""
     )
-    ingliz_line = (
-        "🇬🇧 <b>Ingliz</b> — /ingliz yoki «⋯ Ko‘proq» → Ingliz\n"
-        if ingliz_app_url()
-        else ""
-    )
     await update.message.reply_text(
         "🧭 <b>Qanday buyurtma beriladi?</b>\n\n"
         f"{shop_line}"
         f"{scan_line}"
-        f"{ingliz_line}"
         "1️⃣ <b>Katalog</b> — yoqqan mahsulotni bosing\n"
         "    (avtomatik savatchaga tushadi ✅)\n"
         "2️⃣ <b>Savatcha</b> — miqdorni sozlang\n"
@@ -337,25 +326,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         f"👥 Do‘st taklif qilsangiz — +{REFERRAL_BONUS:,} bonus\n"
         "   («⋯ Ko‘proq» → «👥 Ulashish»)\n\n"
         "Savol bo‘lsa — «📞 Aloqa» ni bosing.",
-        parse_mode="HTML",
-    )
-
-
-async def open_ingliz(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Ingliz o‘quv PWA — WebApp tugma yoki havola."""
-    btn = ingliz_inline_button("🇬🇧 Inglizni ochish")
-    url = ingliz_app_url()
-    if not btn or not url:
-        await update.message.reply_text(
-            "🇬🇧 Ingliz ilovasi hozircha ulanmagan.\n"
-            "Admin MINIAPP_URL ni sozlasin.",
-        )
-        return
-    await update.message.reply_text(
-        "🇬🇧 <b>Ingliz</b> — lug‘at, listening, reading, writing, "
-        "speaking, talaffuz va o‘yinlar.\n\n"
-        "Pastdagi tugmani bosing 👇",
-        reply_markup=InlineKeyboardMarkup([[btn]]),
         parse_mode="HTML",
     )
 
