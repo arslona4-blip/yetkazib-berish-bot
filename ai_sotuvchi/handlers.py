@@ -265,6 +265,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int | N
     kb = search_results_keyboard(products) if products else None
     await update.message.reply_text(
         answer,
+        parse_mode="HTML",
         reply_markup=kb or main_keyboard(is_admin(uid)),
     )
     if kb:
