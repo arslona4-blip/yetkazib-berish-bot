@@ -566,6 +566,8 @@
       renderCart();
       els.status.hidden = false;
       els.status.textContent = `Buyurtma #${result.order_id} qabul qilindi!`;
+      els.submit.disabled = true;
+      els.submit.textContent = "Yuborildi ✓";
       if (tg) {
         try {
           tg.HapticFeedback && tg.HapticFeedback.notificationOccurred("success");
@@ -581,11 +583,8 @@
       els.status.classList.add("error");
       els.status.textContent = err.message || "Buyurtma yuborilmadi";
       els.submit.disabled = false;
-    } finally {
       els.submit.textContent = "Buyurtma berish";
-      if (els.status.classList.contains("error")) {
-        renderCart();
-      }
+      renderCart();
     }
   }
 
