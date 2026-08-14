@@ -364,14 +364,7 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await query.edit_message_text("Savat tozalandi.")
         return
 
-    if data == "cart:order":
-        await context.bot.send_message(
-            uid,
-            "Buyurtmani yakunlash uchun <b>Buyurtma berish</b> tugmasini bosing.",
-            parse_mode="HTML",
-            reply_markup=main_keyboard(is_admin(uid)),
-        )
-        return
+    # cart:order — ConversationHandler entry orqali (bu yerda spam xabar yo‘q)
 
     if data.startswith("reorder:"):
         oid = int(data.split(":")[1])
@@ -386,12 +379,6 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             f"Buyurtma #{oid} savatga qayta yuklandi.\n\n{text}",
             parse_mode="HTML",
             reply_markup=kb or main_keyboard(is_admin(uid)),
-        )
-        await context.bot.send_message(
-            uid,
-            "Davom etish uchun <b>Buyurtma berish</b> ni bosing.",
-            parse_mode="HTML",
-            reply_markup=main_keyboard(is_admin(uid)),
         )
         return
 
@@ -487,30 +474,52 @@ async def admin_price_input(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     return ConversationHandler.END
 
 
-async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    uid = update.effective_user.id
+async def _begin_checkout(context: ContextTypes.DEFAULT_TYPE, uid: int, reply) -> int:
+    """Buyurtma suhbatini boshlash (message yoki callback)."""
     items = db.get_cart(uid)
     total = sum(i["line_total"] for i in items)
     if not items:
-        await update.message.reply_text(
+        await reply(
             "Avval savatga mahsulot qo‘shing.",
             reply_markup=main_keyboard(is_admin(uid)),
         )
         return ConversationHandler.END
     if total < MIN_ORDER_AMOUNT:
-        await update.message.reply_text(
+        await reply(
             f"Minimal buyurtma: {money(MIN_ORDER_AMOUNT)}\n"
             f"Hozirgi savat: {money(total)}",
             reply_markup=main_keyboard(is_admin(uid)),
         )
         return ConversationHandler.END
     context.user_data["order"] = {}
-    await update.message.reply_text(
+    await reply(
         "Telefon raqamingizni yozing:\n<i>+998 90 123 45 67</i>",
         parse_mode="HTML",
         reply_markup=cancel_keyboard(),
     )
     return WAIT_PHONE
+
+
+async def start_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    uid = update.effective_user.id
+
+    async def reply(text: str, **kwargs):
+        await update.message.reply_text(text, **kwargs)
+
+    return await _begin_checkout(context, uid, reply)
+
+
+async def start_order_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Savatdagi inline «Buyurtma berish» — to‘g‘ridan checkout."""
+    query = update.callback_query
+    if query:
+        await query.answer()
+    uid = update.effective_user.id
+
+    async def reply(text: str, **kwargs):
+        await context.bot.send_message(uid, text, **kwargs)
+
+    return await _begin_checkout(context, uid, reply)
 
 
 async def order_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
