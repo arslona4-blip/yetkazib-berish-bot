@@ -19,6 +19,7 @@ from bot.config import (
     WEBHOOK_PATH,
     WEBHOOK_PORT,
     WEBHOOK_URL,
+    delivery_rates_plain,
 )
 from bot.contacts import build_contact_conversations, contact_callback
 from bot.database import init_db
@@ -105,6 +106,7 @@ def _bot_description_uz() -> str:
         f"🛒 Do'kon — katalog va buyurtma\n"
         f"📷 Skaner — shtrix-kod bilan savatga\n"
         f"📋 Mening buyurtmalarim — holatni kuzating\n\n"
+        f"{delivery_rates_plain()}\n\n"
         f"Boshlash: /start"
     )
 

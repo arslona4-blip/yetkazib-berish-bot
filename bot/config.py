@@ -54,6 +54,34 @@ MIN_ORDER_AMOUNT = int(os.getenv("MIN_ORDER_AMOUNT", "30000"))
 BONUS_PERCENT = int(os.getenv("BONUS_PERCENT", "2"))
 BONUS_RATE = int(os.getenv("BONUS_RATE", "100"))  # 100 so'm = 1 ball
 
+
+def _som(amount: int) -> str:
+    return f"{int(amount):,}".replace(",", " ")
+
+
+def delivery_rates_html() -> str:
+    """Mijozga ko‘rinadigan yetkazish tariflari."""
+    thr = _som(DELIVERY_FEE_THRESHOLD)
+    low = _som(DELIVERY_FEE_LOW)
+    high = _som(DELIVERY_FEE_HIGH)
+    return (
+        f"🚚 <b>Yetkazish narxi</b>\n"
+        f"• {thr} so‘mgacha — <b>{low} so‘m</b>\n"
+        f"• {thr} so‘mdan yuqori — <b>{high} so‘m</b>"
+    )
+
+
+def delivery_rates_plain() -> str:
+    thr = _som(DELIVERY_FEE_THRESHOLD)
+    low = _som(DELIVERY_FEE_LOW)
+    high = _som(DELIVERY_FEE_HIGH)
+    return (
+        f"🚚 Yetkazish narxi\n"
+        f"• {thr} so‘mgacha — {low} so‘m\n"
+        f"• {thr} so‘mdan yuqori — {high} so‘m"
+    )
+
+
 SHOP_NAME = os.getenv("SHOP_NAME", "Do'kon")
 SHOP_ADDRESS = os.getenv("SHOP_ADDRESS", "Toshkent sh.")
 SHOP_PHONE = os.getenv("SHOP_PHONE", "+998 90 123 45 67")

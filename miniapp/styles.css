@@ -262,6 +262,17 @@ main {
   font-size: 0.82rem;
 }
 
+.delivery-rates {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  font-size: 0.84rem;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
 .checkout {
   display: flex;
   flex-direction: column;

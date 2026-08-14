@@ -32,6 +32,7 @@
     deliveryLabel: document.getElementById("deliveryLabel"),
     discountLabel: document.getElementById("discountLabel"),
     totalLabel: document.getElementById("totalLabel"),
+    deliveryRates: document.getElementById("deliveryRates"),
     minOrderHint: document.getElementById("minOrderHint"),
     bonusHint: document.getElementById("bonusHint"),
     phone: document.getElementById("phone"),
@@ -84,6 +85,19 @@
     const raw = els.bonus ? Number(els.bonus.value || 0) : 0;
     if (!Number.isFinite(raw) || raw < 0) return 0;
     return Math.min(Math.floor(raw), state.bonusPoints || 0);
+  }
+
+  function deliveryRatesText() {
+    const cfg = state.config || {};
+    const thr = Number(cfg.delivery_fee_threshold) || 50000;
+    const low = Number(cfg.delivery_fee_low) || 5000;
+    const high =
+      Number(cfg.delivery_fee_high) || Number(cfg.delivery_price) || 10000;
+    const fmt = (n) => formatMoney(n).replace(" so'm", "");
+    return (
+      `Yetkazish narxi: ${fmt(thr)} so‘mgacha — ${fmt(low)} so‘m; ` +
+      `${fmt(thr)} so‘mdan yuqori — ${fmt(high)} so‘m`
+    );
   }
 
   function deliveryFeeFor(subtotal) {
@@ -299,6 +313,9 @@
 
     els.subtotalLabel.textContent = formatMoney(subtotal);
     els.deliveryLabel.textContent = formatMoney(delivery);
+    if (els.deliveryRates) {
+      els.deliveryRates.textContent = deliveryRatesText();
+    }
     if (els.discountLabel) {
       const off = discount + bonus;
       els.discountLabel.textContent =
@@ -427,6 +444,7 @@
     els.shopName.textContent = config.shop_name || "Do'kon";
     const metaParts = [config.shop_hours, config.shop_phone].filter(Boolean);
     els.shopMeta.textContent = metaParts.join(" · ");
+    renderCart();
 
     if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
       const u = tg.initDataUnsafe.user;
