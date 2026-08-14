@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-from ai_sotuvchi.config import MIN_ORDER_AMOUNT, SHOP_HOURS, SHOP_NAME, SHOP_PHONE, money
+from ai_sotuvchi.config import (
+    DELIVERY_FEE,
+    MIN_ORDER_AMOUNT,
+    SHOP_HOURS,
+    SHOP_NAME,
+    SHOP_PHONE,
+    money,
+)
 
 
 STATUS_LABELS = {
@@ -37,7 +44,8 @@ def welcome_text(first_name: str | None = None) -> str:
         "Mahsulot qidiraman, savat yig‘aman va buyurtmani qabul qilaman.\n\n"
         f"⏰ Ish vaqti: <b>{SHOP_HOURS}</b>\n"
         f"📞 Aloqa: <b>{SHOP_PHONE}</b>\n"
-        f"💳 Minimal buyurtma: <b>{money(MIN_ORDER_AMOUNT)}</b>\n\n"
+        f"💳 Minimal buyurtma: <b>{money(MIN_ORDER_AMOUNT)}</b>\n"
+        f"🚚 Yetkazish: <b>{money(DELIVERY_FEE)}</b>\n\n"
         "<i>Yozing:</i> «guruch bormi?» yoki «2 ta sut»\n"
         "yoki pastdagi menyudan boshlang."
     )
@@ -50,8 +58,9 @@ def shop_card() -> str:
         f"⏰ {SHOP_HOURS}\n"
         f"📞 {SHOP_PHONE}\n"
         f"💳 Minimal buyurtma: {money(MIN_ORDER_AMOUNT)}\n"
+        f"🚚 Yetkazish: {money(DELIVERY_FEE)}\n"
         "————————————\n"
-        "Yetkazib berish — buyurtma berilganda tasdiqlanadi."
+        "Buyurtmadan keyin admin tasdiqlaydi."
     )
 
 
@@ -64,6 +73,9 @@ def order_receipt(
     items: list[dict],
     total: int,
     status: str = "new",
+    note: str = "",
+    subtotal: int | None = None,
+    delivery_fee: int | None = None,
 ) -> str:
     lines = [
         f"<b>Buyurtma #{order_id}</b>",
@@ -72,14 +84,20 @@ def order_receipt(
         f"👤 {customer}",
         f"📞 {phone}",
         f"📍 {address}",
-        "————————————",
     ]
+    if note:
+        lines.append(f"📝 {note}")
+    lines.append("————————————")
     for it in items:
         lines.append(
             f"• {it.get('name')} × {it.get('quantity')} — "
             f"{money(int(it.get('line_total') or 0))}"
         )
     lines.append("————————————")
+    if subtotal is not None:
+        lines.append(f"Mahsulotlar: {money(subtotal)}")
+    if delivery_fee is not None:
+        lines.append(f"Yetkazish: {money(delivery_fee)}")
     lines.append(f"<b>Jami: {money(total)}</b>")
     return "\n".join(lines)
 
@@ -93,7 +111,9 @@ def cart_text(items: list[dict], total: int) -> str:
             f"• {it['name']} × {it['quantity']} — {money(it['line_total'])}"
         )
     lines.append("————————————")
-    lines.append(f"<b>Jami: {money(total)}</b>")
+    lines.append(f"Mahsulotlar: {money(total)}")
+    lines.append(f"Yetkazish: {money(DELIVERY_FEE)}")
+    lines.append(f"<b>Jami: {money(total + DELIVERY_FEE)}</b>")
     if total < MIN_ORDER_AMOUNT:
         need = MIN_ORDER_AMOUNT - total
         lines.append(f"Minimal gacha yana: {money(need)}")
@@ -110,7 +130,6 @@ def admin_home(stats: dict) -> str:
         f"Yetkazilgan: <b>{stats['delivered']}</b>\n"
         f"Tushum: <b>{money(stats['revenue'])}</b>\n"
         "————————————\n"
-        "➕ Mahsulot — yangi mahsulot\n"
-        "📦 Buyurtmalar — /orders\n"
-        "📊 Statistika — /stats"
+        "➕ Mahsulot · /orders · /stats\n"
+        "📢 Xabar — /broadcast"
     )

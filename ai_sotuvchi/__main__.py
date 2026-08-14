@@ -15,15 +15,19 @@ from telegram.ext import (
     filters,
 )
 
-from ai_sotuvchi.config import ADMIN_IDS, BOT_TOKEN, is_admin
+from ai_sotuvchi.config import ADMIN_IDS, BOT_TOKEN
 from ai_sotuvchi.database import init_db
 from ai_sotuvchi.handlers import (
     WAIT_ADDRESS,
+    WAIT_BROADCAST,
     WAIT_NAME,
+    WAIT_NOTE,
     WAIT_PHONE,
+    WAIT_PROD_CAT,
     WAIT_PROD_NAME,
     WAIT_PROD_PHOTO,
     WAIT_PROD_PRICE,
+    add_product_category,
     add_product_name,
     add_product_photo,
     add_product_price,
@@ -32,12 +36,14 @@ from ai_sotuvchi.handlers import (
     admin_orders_cmd,
     admin_panel,
     admin_stats_cmd,
+    broadcast_message,
     callback_router,
     cancel_add_product,
     cancel_order_flow,
     on_text,
     order_address,
     order_name,
+    order_note,
     order_phone,
     shop_info,
     show_cart,
@@ -45,6 +51,7 @@ from ai_sotuvchi.handlers import (
     show_my_orders,
     start,
     start_add_product,
+    start_broadcast,
     start_order,
 )
 from ai_sotuvchi.keyboards import bot_commands
@@ -104,6 +111,9 @@ def main() -> None:
             WAIT_NAME: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, order_name)
             ],
+            WAIT_NOTE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, order_note)
+            ],
         },
         fallbacks=[
             CommandHandler("cancel", cancel_order_flow),
@@ -129,11 +139,32 @@ def main() -> None:
                 MessageHandler(filters.PHOTO, add_product_photo),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, add_product_photo),
             ],
+            WAIT_PROD_CAT: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, add_product_category)
+            ],
         },
         fallbacks=[
             CommandHandler("cancel", cancel_add_product),
             MessageHandler(filters.Regex(r"^Bekor qilish$"), cancel_add_product),
             MessageHandler(filters.Regex(r"(?i)^bekor"), cancel_add_product),
+        ],
+        allow_reentry=True,
+    )
+
+    broadcast_conv = ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.Regex(r"^📢 Xabar$"), start_broadcast),
+            MessageHandler(filters.Regex(r"^Xabar$"), start_broadcast),
+            CommandHandler("broadcast", start_broadcast),
+        ],
+        states={
+            WAIT_BROADCAST: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_message)
+            ],
+        },
+        fallbacks=[
+            CommandHandler("cancel", cancel_add_product),
+            MessageHandler(filters.Regex(r"^Bekor qilish$"), cancel_add_product),
         ],
         allow_reentry=True,
     )
@@ -151,10 +182,11 @@ def main() -> None:
     app.add_handler(CommandHandler("on", admin_on_cmd))
     app.add_handler(add_product_conv)
     app.add_handler(order_conv)
+    app.add_handler(broadcast_conv)
     app.add_handler(CallbackQueryHandler(callback_router))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
 
-    logger.info("AI Sotuvchi (pro) ishga tushdi")
+    logger.info("AI Sotuvchi (pro+) ishga tushdi")
     app.run_polling(allowed_updates=["message", "callback_query"])
 
 

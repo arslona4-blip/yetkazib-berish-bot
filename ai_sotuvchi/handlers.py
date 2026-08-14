@@ -10,7 +10,9 @@ from telegram.ext import ContextTypes, ConversationHandler
 from ai_sotuvchi.ai import catalog_text, reply_to_user
 from ai_sotuvchi.config import (
     ADMIN_IDS,
+    DELIVERY_FEE,
     MIN_ORDER_AMOUNT,
+    PRODUCT_CATEGORIES,
     is_admin,
     money,
 )
@@ -23,6 +25,7 @@ from ai_sotuvchi.keyboards import (
     catalog_keyboard,
     categories_keyboard,
     main_keyboard,
+    my_order_keyboard,
     search_results_keyboard,
     skip_keyboard,
 )
@@ -37,9 +40,26 @@ from ai_sotuvchi.texts import (
 
 logger = logging.getLogger(__name__)
 
-WAIT_PHONE, WAIT_ADDRESS, WAIT_NAME = range(3)
-WAIT_PROD_NAME, WAIT_PROD_PRICE, WAIT_PROD_PHOTO = range(10, 13)
+WAIT_PHONE, WAIT_ADDRESS, WAIT_NAME, WAIT_NOTE = range(4)
+WAIT_PROD_NAME, WAIT_PROD_PRICE, WAIT_PROD_PHOTO, WAIT_PROD_CAT = range(10, 14)
 WAIT_ADMIN_PRICE = 20
+WAIT_BROADCAST = 30
+
+
+def _category_reply_keyboard():
+    from telegram import ReplyKeyboardMarkup
+
+    rows: list[list[str]] = []
+    row: list[str] = []
+    for cat in PRODUCT_CATEGORIES:
+        row.append(cat)
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append(["Bekor qilish"])
+    return ReplyKeyboardMarkup(rows, resize_keyboard=True)
 
 
 def _cart_message(uid: int) -> tuple[str, object]:
@@ -47,6 +67,32 @@ def _cart_message(uid: int) -> tuple[str, object]:
     total = sum(i["line_total"] for i in items)
     text = cart_text(items, total)
     return text, cart_keyboard(items) if items else None
+
+
+def _receipt_from_order(order, items: list | None = None, status: str | None = None) -> str:
+    if items is None:
+        try:
+            items = json.loads(order["items_json"] or "[]")
+        except json.JSONDecodeError:
+            items = []
+    keys = order.keys()
+    delivery = int(order["delivery_fee"] or 0) if "delivery_fee" in keys else 0
+    if "subtotal" in keys and order["subtotal"]:
+        subtotal = int(order["subtotal"])
+    else:
+        subtotal = int(order["total"]) - delivery
+    return order_receipt(
+        int(order["id"]),
+        customer=order["customer_name"],
+        phone=order["phone"],
+        address=order["address"],
+        items=items or [],
+        total=int(order["total"]),
+        status=status or order["status"],
+        note=order["note"] or "",
+        subtotal=subtotal,
+        delivery_fee=delivery,
+    )
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -99,16 +145,35 @@ async def show_my_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             reply_markup=main_keyboard(is_admin(update.effective_user.id)),
         )
         return
-    lines = ["<b>Mening buyurtmalarim</b>", "————————————"]
-    for o in orders:
-        lines.append(
-            f"#{o['id']} · {money(int(o['total']))} · {status_line(o['status'])}"
-        )
     await update.message.reply_text(
-        "\n".join(lines),
+        "<b>Mening buyurtmalarim</b>",
         parse_mode="HTML",
         reply_markup=main_keyboard(is_admin(update.effective_user.id)),
     )
+    for o in orders:
+        try:
+            items = json.loads(o["items_json"] or "[]")
+        except json.JSONDecodeError:
+            items = []
+        delivery = int(o["delivery_fee"] or 0) if "delivery_fee" in o.keys() else 0
+        subtotal = int(o["subtotal"] or 0) if "subtotal" in o.keys() else int(o["total"]) - delivery
+        receipt = order_receipt(
+            int(o["id"]),
+            customer=o["customer_name"],
+            phone=o["phone"],
+            address=o["address"],
+            items=items,
+            total=int(o["total"]),
+            status=o["status"],
+            note=o["note"] or "",
+            subtotal=subtotal,
+            delivery_fee=delivery,
+        )
+        await update.message.reply_text(
+            receipt,
+            parse_mode="HTML",
+            reply_markup=my_order_keyboard(int(o["id"])),
+        )
 
 
 async def ai_hint(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -140,6 +205,8 @@ def _is_menu(text: str) -> str | None:
         "🛠 Admin": "admin",
         "➕ Mahsulot": "add",
         "Mahsulot": "add",
+        "📢 Xabar": "broadcast",
+        "Xabar": "broadcast",
     }
     return mapping.get(text)
 
@@ -169,6 +236,8 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int | N
         return ConversationHandler.END
     if action == "add" and is_admin(uid):
         return await start_add_product(update, context)
+    if action == "broadcast" and is_admin(uid):
+        return await start_broadcast(update, context)
     if action == "order":
         return await start_order(update, context)
 
@@ -303,6 +372,28 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         return
 
+    if data.startswith("reorder:"):
+        oid = int(data.split(":")[1])
+        added = db.fill_cart_from_order(uid, oid)
+        if added <= 0:
+            await query.answer("Mahsulotlar topilmadi", show_alert=True)
+            return
+        await query.answer("Savatga yuklandi")
+        text, kb = _cart_message(uid)
+        await context.bot.send_message(
+            uid,
+            f"Buyurtma #{oid} savatga qayta yuklandi.\n\n{text}",
+            parse_mode="HTML",
+            reply_markup=kb or main_keyboard(is_admin(uid)),
+        )
+        await context.bot.send_message(
+            uid,
+            "Davom etish uchun <b>Buyurtma berish</b> ni bosing.",
+            parse_mode="HTML",
+            reply_markup=main_keyboard(is_admin(uid)),
+        )
+        return
+
     if data.startswith("ap:") and is_admin(uid):
         parts = data.split(":")
         action, pid = parts[1], int(parts[2])
@@ -350,15 +441,7 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         except json.JSONDecodeError:
             items = []
         if order:
-            receipt = order_receipt(
-                oid,
-                customer=order["customer_name"],
-                phone=order["phone"],
-                address=order["address"],
-                items=items,
-                total=int(order["total"]),
-                status=status,
-            )
+            receipt = _receipt_from_order(order, items, status=status)
             await query.edit_message_text(
                 receipt,
                 parse_mode="HTML",
@@ -467,18 +550,48 @@ async def order_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if len(name) < 2:
         await update.message.reply_text("Ism yozing:")
         return WAIT_NAME
+    context.user_data.setdefault("order", {})["name"] = name
+    await update.message.reply_text(
+        "Izoh yozing (ixtiyoriy)\nyoki <b>O‘tkazib yuborish</b>",
+        parse_mode="HTML",
+        reply_markup=skip_keyboard(),
+    )
+    return WAIT_NOTE
+
+
+async def order_note(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    text = (update.message.text or "").strip()
+    if text in {"Bekor qilish", "Bekor", "/cancel"}:
+        return await cancel_order_flow(update, context)
+    note = ""
+    if text not in {"O‘tkazib yuborish", "Otkazib yuborish", "Skip"}:
+        note = text
+    context.user_data.setdefault("order", {})["note"] = note
+    return await _finalize_order(update, context)
+
+
+async def _finalize_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     uid = update.effective_user.id
     order_data = context.user_data.get("order") or {}
     items = db.get_cart(uid)
-    total = sum(i["line_total"] for i in items)
+    if not items:
+        await update.message.reply_text(
+            "Savat bo‘sh.",
+            reply_markup=main_keyboard(is_admin(uid)),
+        )
+        return ConversationHandler.END
+    subtotal = sum(i["line_total"] for i in items)
+    name = str(order_data.get("name") or "")
     order_id = db.create_order(
         uid,
         customer_name=name,
         phone=order_data.get("phone", ""),
         address=order_data.get("address", ""),
+        note=order_data.get("note", ""),
+        delivery_fee=DELIVERY_FEE,
     )
     context.user_data.pop("order", None)
-
+    total = subtotal + DELIVERY_FEE
     receipt = order_receipt(
         order_id,
         customer=name,
@@ -487,13 +600,15 @@ async def order_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         items=items,
         total=total,
         status="new",
+        note=order_data.get("note", ""),
+        subtotal=subtotal,
+        delivery_fee=DELIVERY_FEE,
     )
     await update.message.reply_text(
         "✅ Buyurtma qabul qilindi.\n\n" + receipt,
         parse_mode="HTML",
         reply_markup=main_keyboard(is_admin(uid)),
     )
-
     for admin_id in ADMIN_IDS:
         try:
             await context.bot.send_message(
@@ -544,7 +659,7 @@ async def start_add_product(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return ConversationHandler.END
     context.user_data["new_product"] = {}
     await update.message.reply_text(
-        "<b>Yangi mahsulot</b>\n\n1/3 — Nomini yozing\n<i>Masalan: Sut 1L</i>",
+        "<b>Yangi mahsulot</b>\n\n1/4 — Nomini yozing\n<i>Masalan: Sut 1L</i>",
         parse_mode="HTML",
         reply_markup=cancel_keyboard(),
     )
@@ -560,7 +675,7 @@ async def add_product_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return WAIT_PROD_NAME
     context.user_data.setdefault("new_product", {})["name"] = text
     await update.message.reply_text(
-        "2/3 — Narxini yozing (so‘m)\n<i>Masalan: 12000</i>",
+        "2/4 — Narxini yozing (so‘m)\n<i>Masalan: 12000</i>",
         parse_mode="HTML",
         reply_markup=cancel_keyboard(),
     )
@@ -581,7 +696,7 @@ async def add_product_price(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return WAIT_PROD_PRICE
     context.user_data.setdefault("new_product", {})["price"] = price
     await update.message.reply_text(
-        "3/3 — Rasm yuboring (ixtiyoriy)\nyoki <b>O‘tkazib yuborish</b>",
+        "3/4 — Rasm yuboring (ixtiyoriy)\nyoki <b>O‘tkazib yuborish</b>",
         parse_mode="HTML",
         reply_markup=skip_keyboard(),
     )
@@ -612,9 +727,42 @@ async def add_product_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         )
         return WAIT_PROD_PHOTO
 
-    pid = db.add_product(name, price, category="Umumiy", image_file_id=image_id)
+    context.user_data.setdefault("new_product", {})["image_file_id"] = image_id
+    await update.message.reply_text(
+        "4/4 — Kategoriyani tanlang:",
+        reply_markup=_category_reply_keyboard(),
+    )
+    return WAIT_PROD_CAT
+
+
+async def add_product_category(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    text = (update.message.text or "").strip()
+    if text in {"Bekor qilish", "Bekor", "/cancel"}:
+        return await cancel_add_product(update, context)
+    category = text if text in PRODUCT_CATEGORIES else (text or "Umumiy")
+    if len(category) < 2:
+        await update.message.reply_text("Kategoriyani tanlang yoki yozing:")
+        return WAIT_PROD_CAT
+
+    data = context.user_data.get("new_product") or {}
+    name = str(data.get("name") or "").strip()
+    price = int(data.get("price") or 0)
+    image_id = data.get("image_file_id")
+    if not name or price <= 0:
+        await update.message.reply_text(
+            "Ma’lumot yo‘qaldi. Qaytadan boshlang.",
+            reply_markup=main_keyboard(True),
+        )
+        return ConversationHandler.END
+
+    pid = db.add_product(
+        name, price, category=category, image_file_id=image_id
+    )
     context.user_data.pop("new_product", None)
-    caption = f"✅ Qo‘shildi\n<b>{name}</b>\n{money(price)} · #{pid}"
+    caption = (
+        f"✅ Qo‘shildi\n<b>{name}</b>\n"
+        f"{money(price)} · {category} · #{pid}"
+    )
     if image_id:
         await update.message.reply_photo(
             photo=image_id,
@@ -636,6 +784,48 @@ async def cancel_add_product(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.message.reply_text(
         "Bekor qilindi.",
         reply_markup=main_keyboard(is_admin(update.effective_user.id)),
+    )
+    return ConversationHandler.END
+
+
+async def start_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("Faqat admin.")
+        return ConversationHandler.END
+    customers = db.list_customer_ids()
+    await update.message.reply_text(
+        f"Mijozlarga xabar ({len(customers)} ta).\n"
+        "Xabar matnini yozing:",
+        reply_markup=cancel_keyboard(),
+    )
+    return WAIT_BROADCAST
+
+
+async def broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if not is_admin(update.effective_user.id):
+        return ConversationHandler.END
+    text = (update.message.text or "").strip()
+    if text in {"Bekor qilish", "Bekor", "/cancel"}:
+        await update.message.reply_text(
+            "Bekor qilindi.",
+            reply_markup=main_keyboard(True),
+        )
+        return ConversationHandler.END
+    if len(text) < 2:
+        await update.message.reply_text("Xabar yozing:")
+        return WAIT_BROADCAST
+    customers = db.list_customer_ids()
+    ok = 0
+    fail = 0
+    for cid in customers:
+        try:
+            await context.bot.send_message(cid, f"📢 {text}")
+            ok += 1
+        except Exception:
+            fail += 1
+    await update.message.reply_text(
+        f"Yuborildi: {ok}\nYetkmadi: {fail}",
+        reply_markup=main_keyboard(True),
     )
     return ConversationHandler.END
 
@@ -673,15 +863,7 @@ async def admin_orders_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             items = json.loads(o["items_json"] or "[]")
         except json.JSONDecodeError:
             items = []
-        receipt = order_receipt(
-            int(o["id"]),
-            customer=o["customer_name"],
-            phone=o["phone"],
-            address=o["address"],
-            items=items,
-            total=int(o["total"]),
-            status=o["status"],
-        )
+        receipt = _receipt_from_order(o, items)
         await update.message.reply_text(
             receipt,
             parse_mode="HTML",
