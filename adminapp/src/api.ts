@@ -169,7 +169,6 @@ export const api = {
     req<{
       ok: boolean
       report: import('./types').RangeReport
-      warehouse: import('./types').StatsPayload['warehouse']
     }>(`/api/admin/reports?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, auth),
   categories: (auth: AuthState | null) =>
     req<{ ok: boolean; categories: import('./types').CatalogCategory[] }>(
@@ -181,43 +180,6 @@ export const api = {
       '/api/admin/categories',
       auth,
       { method: 'POST', body: JSON.stringify({ name }) },
-    ),
-  whCategories: (auth: AuthState | null, lowOnly?: boolean) => {
-    const q = new URLSearchParams()
-    if (lowOnly) q.set('low_only', '1')
-    return req<{ ok: boolean; categories: import('./types').Category[] }>(
-      `/api/admin/warehouse/categories?${q}`,
-      auth,
-    )
-  },
-  whProducts: (auth: AuthState | null, categoryId?: number, lowOnly?: boolean) => {
-    const q = new URLSearchParams()
-    if (categoryId !== undefined) q.set('category_id', String(categoryId))
-    if (lowOnly) q.set('low_only', '1')
-    return req<{ ok: boolean; products: import('./types').Product[] }>(
-      `/api/admin/warehouse/products?${q}`,
-      auth,
-    )
-  },
-  whMoves: (auth: AuthState | null) =>
-    req<{ ok: boolean; movements: import('./types').Movement[] }>(
-      '/api/admin/warehouse/movements?limit=50',
-      auth,
-    ),
-  whStock: (
-    auth: AuthState | null,
-    body: {
-      product_id: number
-      mode: string
-      qty: number
-      delta?: number
-      note?: string
-    },
-  ) =>
-    req<{ ok: boolean; stock: number; name: string }>(
-      '/api/admin/warehouse/stock',
-      auth,
-      { method: 'POST', body: JSON.stringify(body) },
     ),
   products: (auth: AuthState | null) =>
     req<{ ok: boolean; products: import('./types').Product[] }>(
