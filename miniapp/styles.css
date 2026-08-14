@@ -296,6 +296,17 @@ main {
   border-color: var(--accent);
 }
 
+.pay-note {
+  margin: -4px 0 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
 .status {
   margin: 0;
   padding: 12px;

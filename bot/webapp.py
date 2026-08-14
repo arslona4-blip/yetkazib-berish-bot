@@ -676,8 +676,11 @@ async def api_order(request: web.Request) -> web.Response:
             )
             await _bot.send_message(
                 user_id,
-                "To'lov usulini tanlang:",
+                "💵 <b>To‘lov faqat naqd</b>\n"
+                "🙏 Qarzga berilmaydi — tushunganingiz uchun rahmat.\n\n"
+                "To‘lov usulini tanlang:",
                 reply_markup=payment_keyboard(order_id, amount=total),
+                parse_mode="HTML",
             )
         except Exception as exc:
             logger.warning("Mijoz xabar xatosi %s: %s", user_id, exc)
