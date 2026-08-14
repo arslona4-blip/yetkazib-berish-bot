@@ -12,6 +12,7 @@ def main_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
     ]
     if is_admin:
         rows.append(["Admin", "➕ Mahsulot"])
+        rows.append(["📢 Xabar"])
     return ReplyKeyboardMarkup(rows, resize_keyboard=True)
 
 
@@ -131,6 +132,31 @@ def admin_product_keyboard(product_id: int, active: bool = True) -> InlineKeyboa
     )
 
 
+def my_order_keyboard(order_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "Qayta buyurtma", callback_data=f"reorder:{order_id}"
+                )
+            ]
+        ]
+    )
+
+
+def product_category_keyboard(categories: list[str] | tuple[str, ...]) -> InlineKeyboardMarkup:
+    buttons: list[list[InlineKeyboardButton]] = []
+    row: list[InlineKeyboardButton] = []
+    for cat in categories:
+        row.append(InlineKeyboardButton(cat, callback_data=f"pcat:{cat}"))
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    return InlineKeyboardMarkup(buttons)
+
+
 def bot_commands(is_admin: bool = False) -> list[BotCommand]:
     cmds = [
         BotCommand("start", "Bosh menyu"),
@@ -146,6 +172,7 @@ def bot_commands(is_admin: bool = False) -> list[BotCommand]:
                 BotCommand("orders", "Buyurtmalar"),
                 BotCommand("stats", "Statistika"),
                 BotCommand("add", "Mahsulot qo‘shish"),
+                BotCommand("broadcast", "Mijozlarga xabar"),
             ]
         )
     return cmds

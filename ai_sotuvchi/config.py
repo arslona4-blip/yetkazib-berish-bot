@@ -29,6 +29,15 @@ SHOP_NAME = os.getenv("AI_SOTUVCHI_SHOP_NAME", "AI Sotuvchi")
 SHOP_PHONE = os.getenv("AI_SOTUVCHI_SHOP_PHONE", "+998 99 819 34 37")
 SHOP_HOURS = os.getenv("AI_SOTUVCHI_SHOP_HOURS", "09:00 - 21:00")
 MIN_ORDER_AMOUNT = int(os.getenv("AI_SOTUVCHI_MIN_ORDER", "10000"))
+DELIVERY_FEE = int(os.getenv("AI_SOTUVCHI_DELIVERY_FEE", "10000"))
+PRODUCT_CATEGORIES = tuple(
+    c.strip()
+    for c in os.getenv(
+        "AI_SOTUVCHI_CATEGORIES",
+        "Oziq-ovqat,Ichimliklar,Uy-ro‘zg‘or,Umumiy",
+    ).split(",")
+    if c.strip()
+)
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 OPENAI_BASE_URL = os.getenv(
