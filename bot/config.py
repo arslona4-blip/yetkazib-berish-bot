@@ -50,7 +50,8 @@ DELIVERY_FEE_HIGH = int(
 )
 # Eski kod / Railway DELIVERY_PRICE — yuqori stavka
 DELIVERY_PRICE = DELIVERY_FEE_HIGH
-MIN_ORDER_AMOUNT = int(os.getenv("MIN_ORDER_AMOUNT", "10000"))
+# Minimal buyurtma — 10 000 so'm (Railway MIN_ORDER_AMOUNT env e'tiborga olinmaydi)
+MIN_ORDER_AMOUNT = 10000
 BONUS_PERCENT = int(os.getenv("BONUS_PERCENT", "2"))
 BONUS_RATE = int(os.getenv("BONUS_RATE", "100"))  # 100 so'm = 1 ball
 
