@@ -85,11 +85,17 @@ def init_db() -> None:
         count = conn.execute("SELECT COUNT(*) AS c FROM products").fetchone()["c"]
         if count == 0:
             seed = [
+                ("Guruch 250g", 5500, "Oq guruch", "Oziq-ovqat"),
+                ("Guruch 500g", 10000, "Oq guruch", "Oziq-ovqat"),
                 ("Guruch 1kg", 18000, "Oq guruch, yumshoq", "Oziq-ovqat"),
+                ("Sut 0.5L", 7000, "Pastörizatsiya qilingan", "Ichimliklar"),
                 ("Sut 1L", 12000, "Pastörizatsiya qilingan", "Ichimliklar"),
                 ("Non", 4000, "Yangi non", "Oziq-ovqat"),
+                ("Coca Cola 0.5L", 8000, "Gazli ichimlik", "Ichimliklar"),
                 ("Coca-Cola 1.5L", 14000, "Gazli ichimlik", "Ichimliklar"),
+                ("Coca Cola 2L", 18000, "Gazli ichimlik", "Ichimliklar"),
                 ("Yog‘ 1L", 22000, "O‘simlik yog‘i", "Oziq-ovqat"),
+                ("Shakar 500g", 8000, "Oq shakar", "Oziq-ovqat"),
                 ("Shakar 1kg", 15000, "Oq shakar", "Oziq-ovqat"),
                 ("Sovun", 8000, "Hojatxona sovuni", "Uy-ro‘zg‘or"),
                 ("Nam salfetka", 10000, "120 donalik", "Uy-ro‘zg‘or"),
@@ -102,6 +108,65 @@ def init_db() -> None:
                     """,
                     (name, price, desc, cat, _now()),
                 )
+        # Mavjud DB ga ham hajm variantlarini qo‘shish (yo‘q bo‘lsa)
+        _ensure_size_variants(conn)
+
+
+def _ensure_size_variants(conn: sqlite3.Connection) -> None:
+    """Guruch/shakar/sut/cola uchun barcha hajmlar bo‘lsin (250g, 500g, 1kg, …)."""
+    families = [
+        (
+            "guruch",
+            [
+                ("Guruch 250g", 5500, "Oq guruch — 250 gramm", "Oziq-ovqat"),
+                ("Guruch 500g", 10000, "Oq guruch — 500 gramm", "Oziq-ovqat"),
+                ("Guruch 1kg", 18000, "Oq guruch — 1 kilogram", "Oziq-ovqat"),
+            ],
+        ),
+        (
+            "shakar",
+            [
+                ("Shakar 250g", 4000, "Oq shakar — 250 gramm", "Oziq-ovqat"),
+                ("Shakar 500g", 8000, "Oq shakar — 500 gramm", "Oziq-ovqat"),
+                ("Shakar 1kg", 15000, "Oq shakar — 1 kilogram", "Oziq-ovqat"),
+            ],
+        ),
+        (
+            "sut",
+            [
+                ("Sut 0.5L", 7000, "Pastörizatsiya qilingan — 0.5 litr", "Ichimliklar"),
+                ("Sut 1L", 12000, "Pastörizatsiya qilingan — 1 litr", "Ichimliklar"),
+            ],
+        ),
+        (
+            "cola",
+            [
+                ("Coca Cola 0.5L", 8000, "Gazli ichimlik — 0.5 litr", "Ichimliklar"),
+                ("Coca-Cola 1.5L", 14000, "Gazli ichimlik — 1.5 litr", "Ichimliklar"),
+                ("Coca Cola 2L", 18000, "Gazli ichimlik — 2 litr", "Ichimliklar"),
+            ],
+        ),
+    ]
+    for stem, variants in families:
+        existing = {
+            str(r["name"]).casefold()
+            for r in conn.execute(
+                "SELECT name FROM products WHERE is_active = 1 AND lower(name) LIKE ?",
+                (f"%{stem}%",),
+            ).fetchall()
+        }
+        for name, price, desc, cat in variants:
+            if name.casefold() in existing:
+                continue
+            # Coca Cola / Coca-Cola nomlari bir xil deb hisoblanmasin — har birini alohida
+            # Lekin «Coca Cola 0.5L» va mavjud «Coca Cola 0.5L» bir xil
+            conn.execute(
+                """
+                INSERT INTO products (name, price, description, category, is_active, created_at)
+                VALUES (?, ?, ?, ?, 1, ?)
+                """,
+                (name, price, desc, cat, _now()),
+            )
 
 
 def list_products(active_only: bool = True) -> list[sqlite3.Row]:
