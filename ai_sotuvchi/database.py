@@ -146,6 +146,40 @@ def add_product(name: str, price: int, description: str = "", category: str = "U
         return int(cur.lastrowid)
 
 
+def set_product_active(product_id: int, active: bool) -> bool:
+    with get_connection() as conn:
+        cur = conn.execute(
+            "UPDATE products SET is_active = ? WHERE id = ?",
+            (1 if active else 0, int(product_id)),
+        )
+        return cur.rowcount > 0
+
+
+def list_categories() -> list[str]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT category FROM products
+            WHERE is_active = 1
+            ORDER BY category COLLATE NOCASE
+            """
+        ).fetchall()
+    return [str(r["category"]) for r in rows if r["category"]]
+
+
+def list_products_by_category(category: str) -> list[sqlite3.Row]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM products
+            WHERE is_active = 1 AND category = ?
+            ORDER BY name COLLATE NOCASE
+            """,
+            (category,),
+        ).fetchall()
+    return list(rows)
+
+
 def cart_add(user_id: int, product_id: int, qty: int = 1) -> None:
     qty = max(1, int(qty))
     with get_connection() as conn:
@@ -163,6 +197,39 @@ def cart_add(user_id: int, product_id: int, qty: int = 1) -> None:
                 "INSERT INTO cart (user_id, product_id, quantity) VALUES (?, ?, ?)",
                 (user_id, product_id, qty),
             )
+
+
+def cart_set_qty(user_id: int, product_id: int, qty: int) -> None:
+    qty = int(qty)
+    with get_connection() as conn:
+        if qty <= 0:
+            conn.execute(
+                "DELETE FROM cart WHERE user_id = ? AND product_id = ?",
+                (user_id, product_id),
+            )
+            return
+        row = conn.execute(
+            "SELECT quantity FROM cart WHERE user_id = ? AND product_id = ?",
+            (user_id, product_id),
+        ).fetchone()
+        if row:
+            conn.execute(
+                "UPDATE cart SET quantity = ? WHERE user_id = ? AND product_id = ?",
+                (qty, user_id, product_id),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO cart (user_id, product_id, quantity) VALUES (?, ?, ?)",
+                (user_id, product_id, qty),
+            )
+
+
+def cart_delta(user_id: int, product_id: int, delta: int) -> int:
+    """Miqdorni o‘zgartiradi; yangi quantity qaytaradi (0 = o‘chirilgan)."""
+    items = {i["product_id"]: i["quantity"] for i in get_cart(user_id)}
+    cur = int(items.get(int(product_id), 0)) + int(delta)
+    cart_set_qty(user_id, product_id, cur)
+    return max(0, cur)
 
 
 def cart_clear(user_id: int) -> None:
@@ -263,6 +330,69 @@ def list_new_orders(limit: int = 20) -> list[sqlite3.Row]:
             (limit,),
         ).fetchall()
     return list(rows)
+
+
+def list_orders_by_user(user_id: int, limit: int = 10) -> list[sqlite3.Row]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM orders
+            WHERE user_id = ?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (user_id, limit),
+        ).fetchall()
+    return list(rows)
+
+
+def list_orders(status: str | None = None, limit: int = 20) -> list[sqlite3.Row]:
+    with get_connection() as conn:
+        if status:
+            rows = conn.execute(
+                """
+                SELECT * FROM orders WHERE status = ?
+                ORDER BY id DESC LIMIT ?
+                """,
+                (status, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM orders ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+    return list(rows)
+
+
+def admin_stats() -> dict[str, int]:
+    with get_connection() as conn:
+        products = conn.execute(
+            "SELECT COUNT(*) AS c FROM products WHERE is_active = 1"
+        ).fetchone()["c"]
+        orders = conn.execute("SELECT COUNT(*) AS c FROM orders").fetchone()["c"]
+        new = conn.execute(
+            "SELECT COUNT(*) AS c FROM orders WHERE status = 'new'"
+        ).fetchone()["c"]
+        accepted = conn.execute(
+            "SELECT COUNT(*) AS c FROM orders WHERE status = 'accepted'"
+        ).fetchone()["c"]
+        delivered = conn.execute(
+            "SELECT COUNT(*) AS c FROM orders WHERE status = 'delivered'"
+        ).fetchone()["c"]
+        revenue = conn.execute(
+            """
+            SELECT COALESCE(SUM(total), 0) AS s FROM orders
+            WHERE status IN ('accepted', 'delivered')
+            """
+        ).fetchone()["s"]
+    return {
+        "products": int(products or 0),
+        "orders": int(orders or 0),
+        "new": int(new or 0),
+        "accepted": int(accepted or 0),
+        "delivered": int(delivered or 0),
+        "revenue": int(revenue or 0),
+    }
 
 
 def get_memory(user_id: int) -> list[dict[str, str]]:

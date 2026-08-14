@@ -21,8 +21,11 @@ from ai_sotuvchi.handlers import (
     WAIT_NAME,
     WAIT_PHONE,
     admin_add_cmd,
+    admin_off_cmd,
+    admin_on_cmd,
     admin_orders_cmd,
     admin_panel,
+    admin_stats_cmd,
     callback_router,
     cancel_order_flow,
     on_text,
@@ -32,6 +35,7 @@ from ai_sotuvchi.handlers import (
     shop_info,
     show_cart,
     show_catalog,
+    show_my_orders,
     start,
     start_order,
 )
@@ -81,10 +85,15 @@ def main() -> None:
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("katalog", show_catalog))
     app.add_handler(CommandHandler("cart", show_cart))
+    app.add_handler(CommandHandler("orders_mine", show_my_orders))
+    app.add_handler(CommandHandler("myorders", show_my_orders))
     app.add_handler(CommandHandler("info", shop_info))
     app.add_handler(CommandHandler("admin", admin_panel))
     app.add_handler(CommandHandler("orders", admin_orders_cmd))
+    app.add_handler(CommandHandler("stats", admin_stats_cmd))
     app.add_handler(CommandHandler("add", admin_add_cmd))
+    app.add_handler(CommandHandler("off", admin_off_cmd))
+    app.add_handler(CommandHandler("on", admin_on_cmd))
     app.add_handler(order_conv)
     app.add_handler(CallbackQueryHandler(callback_router))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))

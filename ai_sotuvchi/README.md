@@ -3,13 +3,15 @@
 Do‘kon uchun **sun’iy sotuvchi** Telegram bot:
 mijoz yozadi → bot javob beradi / mahsulot topadi → savat → buyurtma → admin tasdiq.
 
-## Imkoniyatlar (MVP)
+## Imkoniyatlar
 
 - 💬 AI suhbat (OpenAI yoki mahalliy qidiruv)
-- 📦 Katalog + tugma bilan savatga qo‘shish
-- 🛒 Savat va minimal summa
+- 📦 Katalog kategoriyalar bilan
+- 🛒 Savat (+/− miqdor)
+- Tezkor qo‘shish: `2 ta sut` / `cola qo‘sh`
 - ✅ Buyurtma (telefon, manzil, ism)
-- 🛠 Admin: `/add`, `/orders`, qabul/bekor
+- 📋 Mening buyurtmalarim + status
+- 🛠 Admin: `/add`, `/off`, `/on`, `/orders`, `/stats`
 
 ## Tezkor start
 
@@ -18,7 +20,7 @@ mijoz yozadi → bot javob beradi / mahsulot topadi → savat → buyurtma → a
 
 ```bash
 cd /path/to/yetkazib-berish-bot
-cp ai_sotuvchi/.env.example ai_sotuvchi/.env
+cp ai_sotuvchi/.env.example .env   # yoki ai_sotuvchi/.env
 # AI_SOTUVCHI_BOT_TOKEN va AI_SOTUVCHI_ADMIN_IDS ni to‘ldiring
 ```
 
@@ -31,8 +33,6 @@ python -m ai_sotuvchi
 
 ## AI yoqish (ixtiyoriy)
 
-`.env` ga qo‘ying:
-
 ```
 OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-4o-mini
@@ -44,11 +44,15 @@ Kalit bo‘lmasa ham bot ishlaydi: mahsulot nomidan qidiradi.
 
 | Buyruq | Vazifa |
 |--------|--------|
-| `/admin` | Panel |
+| `/admin` | Panel + statistika |
+| `/stats` | Tushum / buyurtmalar |
 | `/orders` | Yangi buyurtmalar |
+| `/orders accepted` | Qabul qilinganlar |
 | `/add Nom \| 12000 \| Kategoriya` | Mahsulot qo‘shish |
+| `/off 3` | Mahsulotni yashirish |
+| `/on 3` | Qayta yoqish |
 
 ## Baraka Market bilan
 
-Bu loyiha **alohida** DB va token ishlatadi (`data/ai_sotuvchi.db`).
+Alohida DB va token: `data/ai_sotuvchi.db`, `AI_SOTUVCHI_BOT_TOKEN`.
 Asosiy yetkazib berish botiga tegmaydi.
