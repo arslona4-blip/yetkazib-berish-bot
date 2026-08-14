@@ -27,7 +27,6 @@ from bot.config import (
     CARD_HOLDER,
     CARD_NUMBER,
     COURIER_IDS,
-    DELIVERY_PRICE,
     MIN_ORDER_AMOUNT,
     MINIAPP_URL,
     PAYMENT_PROVIDER_TOKEN,
@@ -171,14 +170,22 @@ def menu_for(user_id: int):
     )
 
 
-def _order_delivery_fee(order_data: dict | None) -> tuple[int, str]:
+def _order_delivery_fee(
+    order_data: dict | None, subtotal: int | None = None
+) -> tuple[int, str]:
+    if subtotal is None:
+        if order_data and order_data.get("subtotal") is not None:
+            subtotal = int(order_data.get("subtotal") or 0)
+        else:
+            subtotal = 0
     if not order_data:
-        return DELIVERY_PRICE, "Standart"
+        return get_delivery_fee(subtotal=int(subtotal or 0))
     address = str(order_data.get("delivery_address") or "")
     return get_delivery_fee(
         address,
         order_data.get("latitude"),
         order_data.get("longitude"),
+        subtotal=int(subtotal or 0),
     )
 
 
@@ -939,7 +946,7 @@ async def start_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         "pickup_address": SHOP_ADDRESS,
         "from_cart": True,
         "subtotal": subtotal,
-        "price": subtotal + DELIVERY_PRICE,
+        "price": subtotal + get_delivery_fee(subtotal=subtotal)[0],
         "discount": 0,
         "promo_code": "",
         "bonus_spent": 0,
@@ -1115,7 +1122,9 @@ async def receive_bonus_callback(
     discount = context.user_data["order"].get("discount", 0)
     if query.data == "bonus:use":
         bonus = get_bonus(user_id)
-        delivery_fee, _ = _order_delivery_fee(context.user_data.get("order"))
+        delivery_fee, _ = _order_delivery_fee(
+            context.user_data.get("order"), subtotal=subtotal
+        )
         max_use = max(0, subtotal + delivery_fee - discount - 1000)
         use = min(bonus, max_use)
         context.user_data["order"]["bonus_spent"] = use
@@ -1141,8 +1150,12 @@ async def receive_delivery(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         context.user_data["order"]["latitude"] = lat
         context.user_data["order"]["longitude"] = lon
         context.user_data["order"]["delivery_address"] = "Lokatsiya"
-        fee, _label = _order_delivery_fee(context.user_data["order"])
+        _, subtotal = get_cart_totals(update.effective_user.id)
+        fee, _label = _order_delivery_fee(
+            context.user_data["order"], subtotal=subtotal
+        )
         context.user_data["order"]["delivery_fee"] = fee
+        context.user_data["order"]["subtotal"] = subtotal
         await update.message.reply_text(
             f"✅ Joylashuv qabul qilindi.\n🚚 Yetkazish: {fee:,} so'm"
         )
@@ -1161,8 +1174,12 @@ async def receive_delivery(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         context.user_data["order"]["latitude"] = None
         context.user_data["order"]["longitude"] = None
         context.user_data["order"]["delivery_address"] = text
-        fee, _label = _order_delivery_fee(context.user_data["order"])
+        _, subtotal = get_cart_totals(update.effective_user.id)
+        fee, _label = _order_delivery_fee(
+            context.user_data["order"], subtotal=subtotal
+        )
         context.user_data["order"]["delivery_fee"] = fee
+        context.user_data["order"]["subtotal"] = subtotal
         await update.message.reply_text(
             f"✅ Manzil qabul qilindi.\n🚚 Yetkazish: {fee:,} so'm"
         )
@@ -1256,7 +1273,7 @@ async def show_order_summary_message(message, user, context: ContextTypes.DEFAUL
     _, subtotal = get_cart_totals(user_id)
     discount = order.get("discount", 0)
     bonus_spent = order.get("bonus_spent", 0)
-    delivery_fee, _label = _order_delivery_fee(order)
+    delivery_fee, _label = _order_delivery_fee(order, subtotal=subtotal)
     order["delivery_fee"] = delivery_fee
     total = max(0, subtotal + delivery_fee - discount - bonus_spent)
     order["subtotal"] = subtotal
@@ -1337,7 +1354,7 @@ async def confirm_order_callback(
     _, subtotal = get_cart_totals(user_id)
     discount = int(order_data.get("discount") or 0)
     bonus_spent = int(order_data.get("bonus_spent") or 0)
-    delivery_fee, _zone = _order_delivery_fee(order_data)
+    delivery_fee, _zone = _order_delivery_fee(order_data, subtotal=subtotal)
     total = max(0, subtotal + delivery_fee - discount - bonus_spent)
 
     if bonus_spent and not spend_bonus(user_id, bonus_spent):

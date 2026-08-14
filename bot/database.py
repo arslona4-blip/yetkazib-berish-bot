@@ -904,10 +904,11 @@ def format_cart(user_id: int) -> str:
             f"{money_html(line_total, with_emoji=False)}"
         )
     _, subtotal = get_cart_totals(user_id)
-    total = subtotal + DELIVERY_PRICE
+    delivery_fee, _ = get_delivery_fee(subtotal=subtotal)
+    total = subtotal + delivery_fee
     lines.append("┄┄┄┄┄┄┄┄┄┄┄┄")
     lines.append(f"🛍 Mahsulotlar: {money_html(subtotal, with_emoji=False)}")
-    lines.append(f"🚚 Yetkazish: {money_html(DELIVERY_PRICE, with_emoji=False)}")
+    lines.append(f"🚚 Yetkazish: {money_html(delivery_fee, with_emoji=False)}")
     lines.append(f"✨ {money_html(total)} <b>← JAMI</b> ✨")
     return "\n".join(lines)
 
@@ -2502,11 +2503,27 @@ def set_user_language(user_id: int, lang: str) -> None:
 
 
 def get_delivery_fee(
-    address: str = "", lat: float | None = None, lon: float | None = None
+    address: str = "",
+    lat: float | None = None,
+    lon: float | None = None,
+    *,
+    subtotal: int = 0,
 ) -> tuple[int, str]:
-    """Doimiy yetkazish narxi (zona yo'q)."""
+    """Mahsulot summasiga qarab yetkazish narxi.
+
+    ≤ 50 000 → 5 000; undan yuqori → 10 000.
+    """
+    from bot.config import (
+        DELIVERY_FEE_HIGH,
+        DELIVERY_FEE_LOW,
+        DELIVERY_FEE_THRESHOLD,
+    )
+
     _ = (address, lat, lon)
-    return DELIVERY_PRICE, "Yetkazish"
+    amount = max(0, int(subtotal or 0))
+    if amount <= DELIVERY_FEE_THRESHOLD:
+        return DELIVERY_FEE_LOW, "Yetkazish"
+    return DELIVERY_FEE_HIGH, "Yetkazish"
 
 
 def list_delivery_zones(active_only: bool = False) -> list[sqlite3.Row]:

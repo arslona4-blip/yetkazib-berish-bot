@@ -43,7 +43,13 @@ PAYMENT_STATUS_LABELS = {
     "rejected": "❌ Rad etildi",
 }
 
-DELIVERY_PRICE = int(os.getenv("DELIVERY_PRICE", "10000"))
+DELIVERY_FEE_THRESHOLD = int(os.getenv("DELIVERY_FEE_THRESHOLD", "50000"))
+DELIVERY_FEE_LOW = int(os.getenv("DELIVERY_FEE_LOW", "5000"))
+DELIVERY_FEE_HIGH = int(
+    os.getenv("DELIVERY_FEE_HIGH") or os.getenv("DELIVERY_PRICE", "10000")
+)
+# Eski kod / Railway DELIVERY_PRICE — yuqori stavka
+DELIVERY_PRICE = DELIVERY_FEE_HIGH
 MIN_ORDER_AMOUNT = int(os.getenv("MIN_ORDER_AMOUNT", "30000"))
 BONUS_PERCENT = int(os.getenv("BONUS_PERCENT", "2"))
 BONUS_RATE = int(os.getenv("BONUS_RATE", "100"))  # 100 so'm = 1 ball
