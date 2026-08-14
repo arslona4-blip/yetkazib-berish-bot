@@ -792,7 +792,10 @@ def admin_category_products_list_keyboard(
 ) -> InlineKeyboardMarkup:
     """Toifa ichidagi mahsulotlar — bitta spiska."""
     rows = []
-    for product in products:
+    for product in sorted(
+        products,
+        key=lambda p: ((p["name"] or "").casefold(), int(p["id"])),
+    ):
         mark = "✅" if product["is_active"] else "🚫"
         rows.append(
             [

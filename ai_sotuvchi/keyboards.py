@@ -132,6 +132,33 @@ def admin_product_keyboard(product_id: int, active: bool = True) -> InlineKeyboa
     )
 
 
+def admin_products_grouped_keyboard(groups: list[tuple[str, list]]) -> InlineKeyboardMarkup:
+    """Toifa sarlavhasi + mahsulotlar (alifbo) — tanlash uchun."""
+    rows: list[list[InlineKeyboardButton]] = []
+    for cat, items in groups:
+        header = f"📁 {cat} · {len(items)}"
+        if len(header) > 64:
+            header = header[:61] + "…"
+        rows.append(
+            [InlineKeyboardButton(header, callback_data="noop")]
+        )
+        for p in items:
+            mark = "✅" if p["is_active"] else "🚫"
+            label = f"{mark} {p['name']} — {money(int(p['price']))}"
+            if len(label) > 64:
+                label = label[:61] + "…"
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        label, callback_data=f"ap:item:{int(p['id'])}"
+                    )
+                ]
+            )
+    if not rows:
+        rows = [[InlineKeyboardButton("Bo‘sh", callback_data="noop")]]
+    return InlineKeyboardMarkup(rows)
+
+
 def my_order_keyboard(order_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [

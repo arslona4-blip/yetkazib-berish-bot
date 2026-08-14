@@ -456,10 +456,12 @@ def get_categories(active_only: bool = True) -> list[sqlite3.Row]:
     with get_connection() as conn:
         if active_only:
             rows = conn.execute(
-                "SELECT * FROM categories WHERE is_active = 1 ORDER BY id"
+                "SELECT * FROM categories WHERE is_active = 1 ORDER BY name COLLATE NOCASE, id"
             ).fetchall()
         else:
-            rows = conn.execute("SELECT * FROM categories ORDER BY id").fetchall()
+            rows = conn.execute(
+                "SELECT * FROM categories ORDER BY name COLLATE NOCASE, id"
+            ).fetchall()
     return list(rows)
 
 
@@ -530,7 +532,7 @@ def get_products(active_only: bool = True, category_id: int | None = None) -> li
         if category_id is not None:
             query += " AND p.category_id = ?"
             params.append(category_id)
-        query += " ORDER BY p.name COLLATE NOCASE, p.id"
+        query += " ORDER BY c.name COLLATE NOCASE, p.name COLLATE NOCASE, p.id"
         rows = conn.execute(query, params).fetchall()
     return list(rows)
 

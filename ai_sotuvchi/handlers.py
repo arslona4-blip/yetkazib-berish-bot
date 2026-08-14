@@ -20,6 +20,7 @@ from ai_sotuvchi import database as db
 from ai_sotuvchi.keyboards import (
     admin_order_keyboard,
     admin_product_keyboard,
+    admin_products_grouped_keyboard,
     cancel_keyboard,
     cart_keyboard,
     catalog_keyboard,
@@ -31,6 +32,7 @@ from ai_sotuvchi.keyboards import (
 )
 from ai_sotuvchi.texts import (
     admin_home,
+    admin_products_spiska,
     cart_text,
     order_receipt,
     shop_card,
@@ -384,17 +386,38 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     if data.startswith("ap:") and is_admin(uid):
         parts = data.split(":")
-        action, pid = parts[1], int(parts[2])
+        action = parts[1]
+        if len(parts) < 3:
+            return
+        pid = int(parts[2])
         product = db.get_product(pid)
         if not product:
             await query.answer("Topilmadi", show_alert=True)
+            return
+        if action == "item":
+            active = bool(product["is_active"])
+            mark = "" if active else " (yashirin)"
+            cat = product["category"] or "Umumiy"
+            await query.edit_message_text(
+                f"📁 {cat}\n"
+                f"<b>{product['name']}</b>{mark}\n"
+                f"{money(int(product['price']))} · #{product['id']}",
+                parse_mode="HTML",
+                reply_markup=admin_product_keyboard(pid, active),
+            )
             return
         if action == "toggle":
             new_active = not bool(product["is_active"])
             db.set_product_active(pid, new_active)
             await query.answer("Yoqildi" if new_active else "Yashirildi")
-            await query.edit_message_reply_markup(
-                reply_markup=admin_product_keyboard(pid, new_active)
+            mark = "" if new_active else " (yashirin)"
+            cat = product["category"] or "Umumiy"
+            await query.edit_message_text(
+                f"📁 {cat}\n"
+                f"<b>{product['name']}</b>{mark}\n"
+                f"{money(int(product['price']))} · #{product['id']}",
+                parse_mode="HTML",
+                reply_markup=admin_product_keyboard(pid, new_active),
             )
             return
         if action == "price":
@@ -651,16 +674,13 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         parse_mode="HTML",
         reply_markup=main_keyboard(True),
     )
-    # Oxirgi mahsulotlar
-    products = db.list_products(active_only=False)[:8]
-    for p in products:
-        active = bool(p["is_active"])
-        mark = "" if active else " (yashirin)"
-        await update.message.reply_text(
-            f"<b>{p['name']}</b>{mark}\n{money(int(p['price']))} · #{p['id']}",
-            parse_mode="HTML",
-            reply_markup=admin_product_keyboard(int(p["id"]), active),
-        )
+    # Toifa + alifbo tartibidagi to‘liq spiska
+    groups = db.products_by_category(active_only=False)
+    await update.message.reply_text(
+        admin_products_spiska(groups),
+        parse_mode="HTML",
+        reply_markup=admin_products_grouped_keyboard(groups),
+    )
 
 
 async def start_add_product(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
