@@ -400,8 +400,11 @@ async def webapp_scan_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             reply_markup=menu_for(user.id),
         )
         await msg.reply_text(
-            "To'lov usulini tanlang:",
+            "💵 <b>To‘lov faqat naqd</b>\n"
+            "🙏 Qarzga berilmaydi — tushunganingiz uchun rahmat.\n\n"
+            "To‘lov usulini tanlang:",
             reply_markup=payment_keyboard(order_id, amount=total),
+            parse_mode="HTML",
         )
         for admin_id in ADMIN_IDS:
             try:
@@ -1275,6 +1278,8 @@ async def show_order_summary_message(message, user, context: ContextTypes.DEFAUL
         f"🏁 Qayerga: {delivery}\n"
         f"📞 Telefon: {order['phone']}\n\n"
         f"✨ 💳 {money_html(total)} <b>← TO‘LOV</b> ✨\n\n"
+        f"💵 <b>To‘lov faqat naqd.</b>\n"
+        f"🙏 Qarzga berilmaydi — tushunganingiz uchun rahmat.\n\n"
         "Hammasi to‘g‘rimi? Tasdiqlang 👇"
     )
     await message.reply_text(
@@ -1364,8 +1369,11 @@ async def confirm_order_callback(
         f"💰 Jami: {total:,} so'm"
     )
     await query.message.reply_text(
-        "To'lov usulini tanlang:",
+        "💵 <b>To‘lov faqat naqd</b>\n"
+        "🙏 Qarzga berilmaydi — tushunganingiz uchun rahmat.\n\n"
+        "To‘lov usulini tanlang:",
         reply_markup=payment_keyboard(order_id),
+        parse_mode="HTML",
     )
 
     order = get_order(order_id)
@@ -2531,8 +2539,11 @@ async def payment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             return
         await query.edit_message_text(
             f"Buyurtma #{order_id}\n💰 Summa: {order['price']:,} so'm\n\n"
-            "To'lov usulini tanlang:",
+            "💵 <b>To‘lov faqat naqd</b>\n"
+            "🙏 Qarzga berilmaydi — tushunganingiz uchun rahmat.\n\n"
+            "To‘lov usulini tanlang:",
             reply_markup=payment_keyboard(order_id),
+            parse_mode="HTML",
         )
         return
 
