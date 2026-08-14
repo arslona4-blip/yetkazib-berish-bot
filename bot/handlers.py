@@ -2218,7 +2218,7 @@ async def admin_product_stock(
         return await cancel_product_admin(update, context)
 
     if _is_skip_text(text):
-        stock = 0
+        stock = 100
     else:
         digits = "".join(ch for ch in text if ch.isdigit())
         if not digits:
@@ -2235,13 +2235,13 @@ async def admin_product_stock(
 async def admin_product_description(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> int:
-    """Eski izoh bosqichi — endi to‘g‘ridan-to‘g‘ri saqlaydi (stock=0)."""
+    """Eski izoh bosqichi — endi to‘g‘ridan-to‘g‘ri saqlaydi (stock=100)."""
     text = (update.message.text or "").strip()
     if _is_cancel_text(text):
         return await cancel_product_admin(update, context)
     description = "" if _is_skip_text(text) else text
     context.user_data.setdefault("admin_product", {})["description"] = description
-    context.user_data["admin_product"].setdefault("stock", 0)
+    context.user_data["admin_product"].setdefault("stock", 100)
     return await _save_new_product(update, context)
 
 
@@ -2257,7 +2257,7 @@ async def _save_new_product(
         )
         return ConversationHandler.END
 
-    stock = int(data.get("stock") or 0)
+    stock = int(data["stock"]) if data.get("stock") is not None else 100
     description = str(data.get("description") or "")
     try:
         product_id = create_product(

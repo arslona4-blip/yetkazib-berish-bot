@@ -513,7 +513,7 @@ async def admin_product_create(request: web.Request) -> web.Response:
             raise web.HTTPBadRequest(
                 text=f"Barkod band: #{existing['id']} {existing['name']}"
             )
-    stock = 0
+    stock = 100
     stock_raw = body.get("stock")
     if stock_raw is not None and str(stock_raw).strip() != "":
         try:
@@ -629,11 +629,7 @@ async def admin_pos_sale(request: web.Request) -> web.Response:
         product = get_product_by_id(pid)
         if not product or not product["is_active"]:
             raise web.HTTPBadRequest(text=f"Mahsulot #{pid} topilmadi")
-        stock = int(product["stock"] or 0) if "stock" in product.keys() else 0
-        if stock < qty:
-            raise web.HTTPBadRequest(
-                text=f"{product['name']}: omborda faqat {stock} dona"
-            )
+        # Ombor nazorati yo'q — stock yetishmasligi buyurtmani to'xtatmaydi
         price = int(product["price"] or 0)
         lines.append(
             {
