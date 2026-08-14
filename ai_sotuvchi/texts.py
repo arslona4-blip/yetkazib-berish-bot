@@ -133,3 +133,26 @@ def admin_home(stats: dict) -> str:
         "➕ Mahsulot · /orders · /stats\n"
         "📢 Xabar — /broadcast"
     )
+
+
+def admin_products_spiska(groups: list[tuple[str, list]]) -> str:
+    """Toifa bo‘yicha alifbo tartibidagi mahsulotlar spiskasi."""
+    if not groups:
+        return "<b>Mahsulotlar</b>\nHozircha mahsulot yo‘q."
+    total = sum(len(items) for _, items in groups)
+    lines = [
+        f"<b>Mahsulotlar spiskasi</b> · {total} ta",
+        f"Toifa: <b>{len(groups)}</b> ta · alifbo tartibida",
+        "————————————",
+    ]
+    for cat, items in groups:
+        lines.append(f"\n📁 <b>{cat}</b> ({len(items)})")
+        for p in items:
+            mark = "✅" if p["is_active"] else "🚫"
+            lines.append(
+                f"{mark} {p['name']} — {money(int(p['price']))} "
+                f"<code>#{p['id']}</code>"
+            )
+    lines.append("\n————————————")
+    lines.append("<i>Pastda har bir mahsulot uchun tugmalar.</i>")
+    return "\n".join(lines)

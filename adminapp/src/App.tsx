@@ -133,7 +133,18 @@ export default function App() {
 
   const kassaFiltered = useMemo(() => {
     const q = kassaSearch.trim().toLowerCase()
-    const list = catalog.filter((p) => p.is_active && p.stock > 0)
+    const list = catalog
+      .filter((p) => p.is_active && p.stock > 0)
+      .slice()
+      .sort((a, b) => {
+        const ca = (a.category_name || '').localeCompare(
+          b.category_name || '',
+          'uz',
+          { sensitivity: 'base' },
+        )
+        if (ca !== 0) return ca
+        return a.name.localeCompare(b.name, 'uz', { sensitivity: 'base' })
+      })
     if (!q) return list.slice(0, 40)
     return list
       .filter(
@@ -144,6 +155,27 @@ export default function App() {
       )
       .slice(0, 40)
   }, [catalog, kassaSearch])
+
+  /** Admin mahsulotlar: toifa (A→Z) ichida nom (A→Z) */
+  const catalogByCategory = useMemo(() => {
+    const map = new Map<string, Product[]>()
+    for (const p of catalog) {
+      const cat = (p.category_name || 'Toifasiz').trim() || 'Toifasiz'
+      const arr = map.get(cat) || []
+      arr.push(p)
+      map.set(cat, arr)
+    }
+    return [...map.entries()]
+      .sort(([a], [b]) => a.localeCompare(b, 'uz', { sensitivity: 'base' }))
+      .map(([cat, items]) => [
+        cat,
+        items
+          .slice()
+          .sort((a, b) =>
+            a.name.localeCompare(b.name, 'uz', { sensitivity: 'base' }),
+          ),
+      ] as const)
+  }, [catalog])
 
   const initials = useMemo(() => {
     const raw = (shop || 'AD').trim()
@@ -1788,46 +1820,63 @@ export default function App() {
             </div>
           ) : null}
           <div className="list">
-            {catalog.map((p) => (
-              <div key={p.id} className="item">
-                <div className="row-between">
-                  <div>
-                    <h3>
-                      {p.is_active ? '✅' : '🚫'} {p.name}
-                    </h3>
-                    <p>
-                      {p.category_name} · {p.stock} dona
-                    </p>
+            {catalogByCategory.length === 0 ? (
+              <div className="empty">Mahsulot yo‘q</div>
+            ) : (
+              catalogByCategory.map(([cat, items]) => (
+                <div key={cat} className="cat-block">
+                  <div className="cat-head">
+                    <h2>
+                      📁 {cat}{' '}
+                      <span className="muted-sm">({items.length})</span>
+                    </h2>
                   </div>
-                  <div className="mono">{money(p.price)}</div>
+                  {items.map((p) => (
+                    <div key={p.id} className="item">
+                      <div className="row-between">
+                        <div>
+                          <h3>
+                            {p.is_active ? '✅' : '🚫'} {p.name}
+                          </h3>
+                          <p>
+                            {p.category_name} · {p.stock} dona
+                          </p>
+                        </div>
+                        <div className="mono">{money(p.price)}</div>
+                      </div>
+                      <div className="actions">
+                        <input
+                          className="price-input"
+                          type="number"
+                          min={0}
+                          value={priceEdit[p.id] ?? String(p.price)}
+                          onChange={(e) =>
+                            setPriceEdit((s) => ({
+                              ...s,
+                              [p.id]: e.target.value,
+                            }))
+                          }
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          onClick={() => void savePrice(p)}
+                        >
+                          Narx
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          onClick={() => void toggleProduct(p)}
+                        >
+                          {p.is_active ? 'Yashirish' : 'Ko‘rsatish'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className="actions">
-                  <input
-                    className="price-input"
-                    type="number"
-                    min={0}
-                    value={priceEdit[p.id] ?? String(p.price)}
-                    onChange={(e) =>
-                      setPriceEdit((s) => ({ ...s, [p.id]: e.target.value }))
-                    }
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    onClick={() => void savePrice(p)}
-                  >
-                    Narx
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    onClick={() => void toggleProduct(p)}
-                  >
-                    {p.is_active ? 'Yashirish' : 'Ko‘rsatish'}
-                  </button>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </section>
       ) : null}

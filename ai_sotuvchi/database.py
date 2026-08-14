@@ -105,19 +105,33 @@ def init_db() -> None:
 
 
 def list_products(active_only: bool = True) -> list[sqlite3.Row]:
+    """Mahsulotlar: toifa (A→Z), keyin nom (A→Z)."""
     with get_connection() as conn:
         if active_only:
             rows = conn.execute(
                 """
                 SELECT * FROM products WHERE is_active = 1
-                ORDER BY category, name COLLATE NOCASE
+                ORDER BY category COLLATE NOCASE, name COLLATE NOCASE, id
                 """
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT * FROM products ORDER BY id DESC"
+                """
+                SELECT * FROM products
+                ORDER BY category COLLATE NOCASE, name COLLATE NOCASE, id
+                """
             ).fetchall()
     return list(rows)
+
+
+def products_by_category(active_only: bool = False) -> list[tuple[str, list[sqlite3.Row]]]:
+    """[(toifa, [mahsulot…]), …] — toifa va nom alifbo tartibida."""
+    products = list_products(active_only=active_only)
+    grouped: dict[str, list[sqlite3.Row]] = {}
+    for p in products:
+        cat = (str(p["category"] or "").strip() or "Umumiy")
+        grouped.setdefault(cat, []).append(p)
+    return sorted(grouped.items(), key=lambda x: x[0].casefold())
 
 
 def get_product(product_id: int) -> sqlite3.Row | None:
