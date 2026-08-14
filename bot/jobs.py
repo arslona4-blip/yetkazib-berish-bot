@@ -7,11 +7,10 @@ from datetime import time, timedelta
 
 from telegram.ext import Application, ContextTypes
 
-from bot.config import ADMIN_IDS, DAILY_REPORT_HOUR, LOW_STOCK_THRESHOLD
+from bot.config import ADMIN_IDS, DAILY_REPORT_HOUR
 from bot.database import (
     get_daily_report,
     get_due_recurring_orders,
-    get_low_stock_products,
     mark_recurring_run,
     refill_cart_from_order,
 )
@@ -48,23 +47,6 @@ async def daily_admin_report(context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception:
         logger.exception("daily_admin_report failed")
 
-
-async def low_stock_check(context: ContextTypes.DEFAULT_TYPE) -> None:
-    try:
-        products = get_low_stock_products(LOW_STOCK_THRESHOLD)
-        if not products:
-            return
-        items = "\n".join(
-            f"• {p['name']} — {p['stock']} dona" for p in products[:20]
-        )
-        text = t("low_stock_alert", "uz", items=items)
-        for admin_id in ADMIN_IDS:
-            try:
-                await context.bot.send_message(admin_id, text)
-            except Exception as exc:
-                logger.warning("Low stock admin=%s: %s", admin_id, exc)
-    except Exception:
-        logger.exception("low_stock_check failed")
 
 
 async def recurring_orders_job(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -103,18 +85,12 @@ def setup_jobs(application: Application) -> None:
     report_time = time(hour=int(DAILY_REPORT_HOUR) % 24, minute=0, tzinfo=TZ)
     jq.run_daily(daily_admin_report, time=report_time, name="daily_admin_report")
     jq.run_repeating(
-        low_stock_check,
-        interval=3600,
-        first=90,
-        name="low_stock_check",
-    )
-    jq.run_repeating(
         recurring_orders_job,
         interval=1800,
         first=120,
         name="recurring_orders",
     )
     logger.info(
-        "Jobs registered: daily@%s, low_stock=60m, recurring=30m",
+        "Jobs registered: daily@%s, recurring=30m",
         report_time.strftime("%H:%M"),
     )

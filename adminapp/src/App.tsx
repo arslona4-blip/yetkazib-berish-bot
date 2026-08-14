@@ -1177,7 +1177,7 @@ export default function App() {
                   <span className="mono">{money(p.price)}</span>
                 </div>
                 <p>
-                  Omborda {p.stock}
+                  Qoldiq: {p.stock}
                   {p.barcode ? ` · ${p.barcode}` : ''}
                 </p>
               </button>
