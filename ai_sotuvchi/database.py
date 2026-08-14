@@ -67,6 +67,12 @@ def init_db() -> None:
             );
             """
         )
+        # Rasm ustuni (professional katalog)
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(products)").fetchall()}
+        if "image_file_id" not in cols:
+            conn.execute(
+                "ALTER TABLE products ADD COLUMN image_file_id TEXT"
+            )
         count = conn.execute("SELECT COUNT(*) AS c FROM products").fetchone()["c"]
         if count == 0:
             seed = [
@@ -134,16 +140,49 @@ def search_products(query: str, limit: int = 8) -> list[sqlite3.Row]:
     return list(rows)
 
 
-def add_product(name: str, price: int, description: str = "", category: str = "Umumiy") -> int:
+def add_product(
+    name: str,
+    price: int,
+    description: str = "",
+    category: str = "Umumiy",
+    image_file_id: str | None = None,
+) -> int:
     with get_connection() as conn:
         cur = conn.execute(
             """
-            INSERT INTO products (name, price, description, category, is_active, created_at)
-            VALUES (?, ?, ?, ?, 1, ?)
+            INSERT INTO products (
+                name, price, description, category, is_active, created_at, image_file_id
+            )
+            VALUES (?, ?, ?, ?, 1, ?, ?)
             """,
-            (name.strip(), int(price), description.strip(), category.strip() or "Umumiy", _now()),
+            (
+                name.strip(),
+                int(price),
+                description.strip(),
+                category.strip() or "Umumiy",
+                _now(),
+                image_file_id,
+            ),
         )
         return int(cur.lastrowid)
+
+
+def set_product_image(product_id: int, file_id: str) -> bool:
+    with get_connection() as conn:
+        cur = conn.execute(
+            "UPDATE products SET image_file_id = ? WHERE id = ?",
+            (file_id, int(product_id)),
+        )
+        return cur.rowcount > 0
+
+
+def set_product_price(product_id: int, price: int) -> bool:
+    with get_connection() as conn:
+        cur = conn.execute(
+            "UPDATE products SET price = ? WHERE id = ?",
+            (max(0, int(price)), int(product_id)),
+        )
+        return cur.rowcount > 0
 
 
 def set_product_active(product_id: int, active: bool) -> bool:
@@ -376,13 +415,16 @@ def admin_stats() -> dict[str, int]:
         accepted = conn.execute(
             "SELECT COUNT(*) AS c FROM orders WHERE status = 'accepted'"
         ).fetchone()["c"]
+        delivering = conn.execute(
+            "SELECT COUNT(*) AS c FROM orders WHERE status = 'delivering'"
+        ).fetchone()["c"]
         delivered = conn.execute(
             "SELECT COUNT(*) AS c FROM orders WHERE status = 'delivered'"
         ).fetchone()["c"]
         revenue = conn.execute(
             """
             SELECT COALESCE(SUM(total), 0) AS s FROM orders
-            WHERE status IN ('accepted', 'delivered')
+            WHERE status IN ('accepted', 'delivering', 'delivered')
             """
         ).fetchone()["s"]
     return {
@@ -390,6 +432,7 @@ def admin_stats() -> dict[str, int]:
         "orders": int(orders or 0),
         "new": int(new or 0),
         "accepted": int(accepted or 0),
+        "delivering": int(delivering or 0),
         "delivered": int(delivered or 0),
         "revenue": int(revenue or 0),
     }

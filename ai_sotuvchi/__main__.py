@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import sys
 
+from telegram import BotCommandScopeChat
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -14,17 +15,18 @@ from telegram.ext import (
     filters,
 )
 
-from ai_sotuvchi.config import BOT_TOKEN
+from ai_sotuvchi.config import ADMIN_IDS, BOT_TOKEN, is_admin
 from ai_sotuvchi.database import init_db
 from ai_sotuvchi.handlers import (
     WAIT_ADDRESS,
     WAIT_NAME,
     WAIT_PHONE,
     WAIT_PROD_NAME,
+    WAIT_PROD_PHOTO,
     WAIT_PROD_PRICE,
     add_product_name,
+    add_product_photo,
     add_product_price,
-    admin_add_cmd,
     admin_off_cmd,
     admin_on_cmd,
     admin_orders_cmd,
@@ -45,6 +47,7 @@ from ai_sotuvchi.handlers import (
     start_add_product,
     start_order,
 )
+from ai_sotuvchi.keyboards import bot_commands
 
 
 logging.basicConfig(
@@ -54,23 +57,40 @@ logging.basicConfig(
 logger = logging.getLogger("ai_sotuvchi")
 
 
+async def _post_init(application: Application) -> None:
+    try:
+        await application.bot.set_my_commands(bot_commands(is_admin=False))
+        for admin_id in ADMIN_IDS:
+            try:
+                await application.bot.set_my_commands(
+                    bot_commands(is_admin=True),
+                    scope=BotCommandScopeChat(chat_id=admin_id),
+                )
+            except Exception:
+                logger.warning("Admin commands o‘rnatilmadi: %s", admin_id)
+    except Exception as exc:
+        logger.warning("Bot commands: %s", exc)
+
+
 def main() -> None:
     if not BOT_TOKEN:
         logger.error(
             "AI_SOTUVCHI_BOT_TOKEN o‘rnatilmagan.\n"
-            "1) BotFather → /newbot\n"
-            "2) Token ni .env yoki Railway Variables ga yozing:\n"
-            "   AI_SOTUVCHI_BOT_TOKEN=...\n"
-            "   AI_SOTUVCHI_ADMIN_IDS=telegram_id\n"
-            "3) python -m ai_sotuvchi"
+            "BotFather tokenini .env ga yozing, so‘ng: python -m ai_sotuvchi"
         )
         sys.exit(1)
 
     init_db()
-    app = Application.builder().token(BOT_TOKEN).build()
+    app = (
+        Application.builder()
+        .token(BOT_TOKEN)
+        .post_init(_post_init)
+        .build()
+    )
 
     order_conv = ConversationHandler(
         entry_points=[
+            MessageHandler(filters.Regex(r"^Buyurtma berish$"), start_order),
             MessageHandler(filters.Regex(r"^✅ Buyurtma$"), start_order),
             MessageHandler(filters.Regex(r"^Buyurtma$"), start_order),
         ],
@@ -105,10 +125,14 @@ def main() -> None:
             WAIT_PROD_PRICE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, add_product_price)
             ],
+            WAIT_PROD_PHOTO: [
+                MessageHandler(filters.PHOTO, add_product_photo),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, add_product_photo),
+            ],
         },
         fallbacks=[
             CommandHandler("cancel", cancel_add_product),
-            MessageHandler(filters.Regex(r"^❌ Bekor$"), cancel_add_product),
+            MessageHandler(filters.Regex(r"^Bekor qilish$"), cancel_add_product),
             MessageHandler(filters.Regex(r"(?i)^bekor"), cancel_add_product),
         ],
         allow_reentry=True,
@@ -125,14 +149,12 @@ def main() -> None:
     app.add_handler(CommandHandler("stats", admin_stats_cmd))
     app.add_handler(CommandHandler("off", admin_off_cmd))
     app.add_handler(CommandHandler("on", admin_on_cmd))
-    # Eski /add Nom|narx saqlanadi, lekin asosiy — suhbat orqali
     app.add_handler(add_product_conv)
-    app.add_handler(CommandHandler("add_old", admin_add_cmd))
     app.add_handler(order_conv)
     app.add_handler(CallbackQueryHandler(callback_router))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
 
-    logger.info("AI Sotuvchi ishga tushdi (polling)")
+    logger.info("AI Sotuvchi (pro) ishga tushdi")
     app.run_polling(allowed_updates=["message", "callback_query"])
 
 

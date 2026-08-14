@@ -48,10 +48,18 @@ Token qo‘yilmasa faqat Baraka ishlayveradi.
 - ✅ Buyurtma · 📋 Mening buyurtmalarim
 - 🛠 `/add` `/off` `/on` `/orders` `/stats`
 
-## Mahsulot qo‘shish (oddiy)
+## Professional oqim
 
-1. **➕ Mahsulot** tugmasini bosing  
-2. Nom yozing (`Sut 1L`)  
-3. Narx yozing (`12000`)  
+- Salomlashuv va chek ko‘rinishidagi buyurtma
+- Katalog → savat → buyurtma
+- Status: Yangi → Qabul → Yetkazilmoqda → Yetkazildi
+- Mahsulot: nom → narx → (ixtiyoriy) rasm
+- Admin: narx o‘zgartirish, yashirish/yoqish
 
-Tayyor. `/add` ham shu oqimni ochadi.
+## Mahsulot qo‘shish
+
+1. **➕ Mahsulot**
+2. Nom
+3. Narx
+4. Rasm yoki **O‘tkazib yuborish**
+

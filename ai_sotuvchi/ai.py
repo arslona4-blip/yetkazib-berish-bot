@@ -104,9 +104,9 @@ def _local_reply(user_text: str) -> tuple[str, list[Any]]:
 
     if any(w in text for w in ("salom", "assalom", "hello", "hi")):
         return (
-            f"Assalomu alaykum! Men {SHOP_NAME} AI sotuvchisiman.\n"
+            f"Assalomu alaykum! {SHOP_NAME} xizmatidaman.\n"
             f"⏰ {SHOP_HOURS} · 📞 {SHOP_PHONE}\n\n"
-            "Nima kerakligini yozing yoki «katalog» deb yozing.",
+            "Nima kerakligini yozing yoki «Katalog» ni oching.",
             [],
         )
 
@@ -137,12 +137,11 @@ def _openai_reply(user_id: int, user_text: str) -> str | None:
 
     history = db.get_memory(user_id)
     system = (
-        f"Sen «{SHOP_NAME}» do‘konining o‘zbek tilidagi AI sotuvchisisan. "
+        f"Sen «{SHOP_NAME}» do‘konining professional o‘zbek tilidagi AI sotuvchisisan. "
         f"Telefon: {SHOP_PHONE}. Ish vaqti: {SHOP_HOURS}. "
-        "Qisqa, do‘stona javob ber. Faqat berilgan katalogdan foydalan. "
+        "Odobli, qisqa va aniq gapir. Faqat berilgan katalogdan foydalan. "
         "Yo‘q mahsulotni o‘ylab topma. Narxlarni so‘mda ayt. "
-        "Buyurtma uchun savatga qo‘shishni taklif qil. "
-        "Mahsulot topilsa ID raqamini (#123) ko‘rsat.\n\n"
+        "Mahsulot topsang ID ni (#123) ko‘rsat va savatga taklif qil.\n\n"
         f"KATALOG:\n{catalog_text()}"
     )
     messages = [{"role": "system", "content": system}]

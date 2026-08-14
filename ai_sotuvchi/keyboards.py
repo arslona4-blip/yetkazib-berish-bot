@@ -1,32 +1,30 @@
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
+from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 
-STATUS_LABELS = {
-    "new": "🆕 Yangi",
-    "accepted": "✅ Qabul",
-    "delivered": "📦 Yetkazildi",
-    "cancelled": "❌ Bekor",
-}
+from ai_sotuvchi.config import money
+from ai_sotuvchi.texts import STATUS_LABELS
 
 
 def main_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
     rows = [
-        ["💬 AI suhbat", "📦 Katalog"],
-        ["🛒 Savat", "✅ Buyurtma"],
-        ["📋 Mening buyurtmalarim", "ℹ️ Do‘kon"],
+        ["Katalog", "Savat"],
+        ["Buyurtma berish", "Mening buyurtmalarim"],
+        ["Do‘kon haqida"],
     ]
     if is_admin:
-        rows.append(["🛠 Admin", "➕ Mahsulot"])
+        rows.append(["Admin", "➕ Mahsulot"])
     return ReplyKeyboardMarkup(rows, resize_keyboard=True)
 
 
 def cancel_keyboard() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup([["❌ Bekor"]], resize_keyboard=True)
+    return ReplyKeyboardMarkup([["Bekor qilish"]], resize_keyboard=True)
+
+
+def skip_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup([["O‘tkazib yuborish"], ["Bekor qilish"]], resize_keyboard=True)
 
 
 def categories_keyboard(categories: list[str]) -> InlineKeyboardMarkup:
-    buttons = [
-        [InlineKeyboardButton("📋 Hammasi", callback_data="cat:all")]
-    ]
+    buttons = [[InlineKeyboardButton("Barchasi", callback_data="cat:all")]]
     row: list[InlineKeyboardButton] = []
     for cat in categories:
         row.append(InlineKeyboardButton(cat, callback_data=f"cat:{cat}"))
@@ -41,19 +39,18 @@ def categories_keyboard(categories: list[str]) -> InlineKeyboardMarkup:
 def catalog_keyboard(products: list) -> InlineKeyboardMarkup:
     buttons = []
     for p in products[:20]:
+        price = money(int(p["price"])).replace(" so‘m", "")
         buttons.append(
             [
                 InlineKeyboardButton(
-                    f"➕ {p['name']} · {int(p['price']):,}".replace(",", " "),
+                    f"{p['name']} — {price}",
                     callback_data=f"add:{p['id']}",
                 )
             ]
         )
     if not buttons:
-        buttons = [[InlineKeyboardButton("Mahsulot yo‘q", callback_data="noop")]]
-    buttons.append(
-        [InlineKeyboardButton("◀️ Kategoriyalar", callback_data="cat:menu")]
-    )
+        buttons = [[InlineKeyboardButton("Bo‘sh", callback_data="noop")]]
+    buttons.append([InlineKeyboardButton("← Kategoriyalar", callback_data="cat:menu")])
     return InlineKeyboardMarkup(buttons)
 
 
@@ -63,7 +60,7 @@ def search_results_keyboard(products: list) -> InlineKeyboardMarkup:
         buttons.append(
             [
                 InlineKeyboardButton(
-                    f"➕ {p['name']}",
+                    f"Savatga · {p['name']}",
                     callback_data=f"add:{p['id']}",
                 )
             ]
@@ -77,37 +74,82 @@ def cart_keyboard(items: list | None = None) -> InlineKeyboardMarkup:
         pid = it["product_id"]
         buttons.append(
             [
-                InlineKeyboardButton("➖", callback_data=f"qty:-:{pid}"),
+                InlineKeyboardButton("−", callback_data=f"qty:-:{pid}"),
                 InlineKeyboardButton(
-                    f"{it['name'][:18]} ×{it['quantity']}",
+                    f"{it['name'][:16]} ×{it['quantity']}",
                     callback_data="noop",
                 ),
-                InlineKeyboardButton("➕", callback_data=f"qty:+:{pid}"),
+                InlineKeyboardButton("+", callback_data=f"qty:+:{pid}"),
             ]
         )
     buttons.append(
         [
-            InlineKeyboardButton("🗑 Tozalash", callback_data="cart:clear"),
-            InlineKeyboardButton("✅ Buyurtma", callback_data="cart:order"),
+            InlineKeyboardButton("Tozalash", callback_data="cart:clear"),
+            InlineKeyboardButton("Buyurtma berish", callback_data="cart:order"),
         ]
     )
     return InlineKeyboardMarkup(buttons)
 
 
 def admin_order_keyboard(order_id: int, status: str = "new") -> InlineKeyboardMarkup:
-    row = []
     if status == "new":
         row = [
-            InlineKeyboardButton("✅ Qabul", callback_data=f"ord:ok:{order_id}"),
-            InlineKeyboardButton("❌ Bekor", callback_data=f"ord:no:{order_id}"),
+            InlineKeyboardButton("Qabul qilish", callback_data=f"ord:ok:{order_id}"),
+            InlineKeyboardButton("Bekor", callback_data=f"ord:no:{order_id}"),
         ]
     elif status == "accepted":
         row = [
-            InlineKeyboardButton(
-                "📦 Yetkazildi", callback_data=f"ord:done:{order_id}"
-            ),
-            InlineKeyboardButton("❌ Bekor", callback_data=f"ord:no:{order_id}"),
+            InlineKeyboardButton("Yetkazishga", callback_data=f"ord:go:{order_id}"),
+            InlineKeyboardButton("Bekor", callback_data=f"ord:no:{order_id}"),
+        ]
+    elif status == "delivering":
+        row = [
+            InlineKeyboardButton("Yetkazildi", callback_data=f"ord:done:{order_id}"),
         ]
     else:
-        row = [InlineKeyboardButton("—", callback_data="noop")]
+        row = [
+            InlineKeyboardButton(
+                STATUS_LABELS.get(status, status), callback_data="noop"
+            )
+        ]
     return InlineKeyboardMarkup([row])
+
+
+def admin_product_keyboard(product_id: int, active: bool = True) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "Narxni o‘zgartirish", callback_data=f"ap:price:{product_id}"
+                ),
+                InlineKeyboardButton(
+                    "Yashirish" if active else "Yoqish",
+                    callback_data=f"ap:toggle:{product_id}",
+                ),
+            ]
+        ]
+    )
+
+
+def bot_commands(is_admin: bool = False) -> list[BotCommand]:
+    cmds = [
+        BotCommand("start", "Bosh menyu"),
+        BotCommand("katalog", "Mahsulotlar"),
+        BotCommand("cart", "Savat"),
+        BotCommand("myorders", "Mening buyurtmalarim"),
+        BotCommand("info", "Do‘kon haqida"),
+    ]
+    if is_admin:
+        cmds.extend(
+            [
+                BotCommand("admin", "Boshqaruv"),
+                BotCommand("orders", "Buyurtmalar"),
+                BotCommand("stats", "Statistika"),
+                BotCommand("add", "Mahsulot qo‘shish"),
+            ]
+        )
+    return cmds
+
+
+# re-export
+__all__ = ["STATUS_LABELS"]
