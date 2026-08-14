@@ -518,10 +518,25 @@
     if (checkoutViaSendData(payload)) {
       state.cart = [];
       state.discount = 0;
+      if (els.bonus) els.bonus.value = "";
       saveCart();
       updateBadge();
+      renderCart();
       els.status.hidden = false;
+      els.status.classList.remove("error");
       els.status.textContent = "Buyurtma botga yuborildi…";
+      els.submit.disabled = true;
+      els.submit.textContent = "Yuborildi ✓";
+      if (tg) {
+        try {
+          tg.HapticFeedback && tg.HapticFeedback.notificationOccurred("success");
+        } catch (_) {}
+        setTimeout(() => {
+          try {
+            tg.close();
+          } catch (_) {}
+        }, 1200);
+      }
       return;
     }
 
