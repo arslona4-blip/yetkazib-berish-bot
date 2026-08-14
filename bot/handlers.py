@@ -1416,14 +1416,20 @@ async def confirm_order_callback(
     clear_cart(user_id)
     context.user_data.pop("order", None)
 
+    gift_line = ""
+    admin_extra = ""
+    if subtotal >= GIFT_DRINK_THRESHOLD:
+        gift_line = (
+            "\n\n🎉 Sovg‘angiz: 🥤 Coca-Cola / 🔵 Pepsi / 🧡 Fanta 1L "
+            "— yetkazishda tanlaysiz!"
+        )
+        admin_extra = (
+            "\n\n🎁 SOVG‘A: 1L Coca-Cola / Pepsi / Fanta "
+            "(mijoz yetkazishda tanlaydi)"
+        )
     await query.edit_message_text(
         f"✅ Buyurtma qabul qilindi!\nBuyurtma raqami: #{order_id}\n"
-        f"💰 Jami: {total:,} so'm"
-        + (
-            "\n\n🎉 Sovg‘angiz: 🥤 Coca-Cola / 🔵 Pepsi / 🧡 Fanta 1L — yetkazishda tanlaysiz!"
-            if subtotal >= __import__("bot.config", fromlist=["GIFT_DRINK_THRESHOLD"]).GIFT_DRINK_THRESHOLD
-            else ""
-        )
+        f"💰 Jami: {total:,} so'm{gift_line}"
     )
     await query.message.reply_text(
         "💵 <b>To‘lov faqat naqd</b>\n"
@@ -1438,7 +1444,7 @@ async def confirm_order_callback(
         try:
             await context.bot.send_message(
                 chat_id=admin_id,
-                text=f"🆕 Yangi buyurtma #{order_id}\n\n{format_order(order)}",
+                text=f"🆕 Yangi buyurtma #{order_id}\n\n{format_order(order)}{admin_extra}",
                 reply_markup=admin_order_keyboard(order_id),
             )
             if order["latitude"] is not None and order["longitude"] is not None:
