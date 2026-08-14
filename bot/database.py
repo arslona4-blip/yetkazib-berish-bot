@@ -186,6 +186,15 @@ def _migrate_features(conn: sqlite3.Connection) -> None:
     product_cols = {r[1] for r in conn.execute("PRAGMA table_info(products)").fetchall()}
     if "stock" not in product_cols:
         conn.execute("ALTER TABLE products ADD COLUMN stock INTEGER NOT NULL DEFAULT 100")
+    # Ombor UI olib tashlangach stock=0 mahsulotlar katalogdan yo'qolgan edi —
+    # faol va 0 qoldiqli mahsulotlarga boshlang'ich 100 beramiz.
+    conn.execute(
+        """
+        UPDATE products
+        SET stock = 100
+        WHERE is_active = 1 AND COALESCE(stock, 0) <= 0
+        """
+    )
     if "image_file_id" not in product_cols:
         conn.execute("ALTER TABLE products ADD COLUMN image_file_id TEXT")
     if "barcode" not in product_cols:
@@ -516,7 +525,8 @@ def get_products(active_only: bool = True, category_id: int | None = None) -> li
         """
         params: list[Any] = []
         if active_only:
-            query += " AND p.is_active = 1 AND COALESCE(p.stock, 0) > 0"
+            # Ombor yo'q: katalogda faqat faol mahsulotlar (stock=0 ham ko'rinadi)
+            query += " AND p.is_active = 1"
         if category_id is not None:
             query += " AND p.category_id = ?"
             params.append(category_id)
@@ -559,10 +569,10 @@ def create_product(
     description: str = "",
     category_id: int | None = None,
     barcode: str | None = None,
-    stock: int | None = 0,
+    stock: int | None = 100,
 ) -> int:
     code = (barcode or "").strip() or None
-    initial_stock = max(0, int(stock if stock is not None else 0))
+    initial_stock = max(0, int(stock if stock is not None else 100))
     with get_connection() as conn:
         cursor = conn.execute(
             """
@@ -1301,7 +1311,7 @@ def search_products(query: str, limit: int = 20) -> list[sqlite3.Row]:
             SELECT p.*, c.name AS category_name
             FROM products p
             LEFT JOIN categories c ON c.id = p.category_id
-            WHERE p.is_active = 1 AND p.stock > 0
+            WHERE p.is_active = 1
               AND (p.name LIKE ? OR IFNULL(p.description, '') LIKE ?)
             ORDER BY p.name
             LIMIT ?
@@ -2609,7 +2619,6 @@ def get_recommended_products(user_id: int, limit: int = 6) -> list[sqlite3.Row]:
                   AND oi.product_id IS NOT NULL
                   AND oi.product_id NOT IN ({placeholders})
                   AND p.is_active = 1
-                  AND COALESCE(p.stock, 0) > 0
                   AND o.id IN (
                     SELECT DISTINCT o2.id
                     FROM orders o2
@@ -2634,7 +2643,7 @@ def get_recommended_products(user_id: int, limit: int = 6) -> list[sqlite3.Row]:
             LEFT JOIN orders o ON o.id = oi.order_id
               AND o.status != 'cancelled'
               AND date(o.created_at) >= date('now', '-30 day', 'localtime')
-            WHERE p.is_active = 1 AND COALESCE(p.stock, 0) > 0
+            WHERE p.is_active = 1
             GROUP BY p.id
             ORDER BY score DESC, p.name COLLATE NOCASE
             LIMIT ?
