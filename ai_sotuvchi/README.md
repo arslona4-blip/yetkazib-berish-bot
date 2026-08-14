@@ -48,12 +48,10 @@ Token qo‘yilmasa faqat Baraka ishlayveradi.
 - ✅ Buyurtma · 📋 Mening buyurtmalarim
 - 🛠 `/add` `/off` `/on` `/orders` `/stats`
 
-## Admin
+## Mahsulot qo‘shish (oddiy)
 
-| Buyruq | Vazifa |
-|--------|--------|
-| `/admin` | Panel |
-| `/stats` | Statistika |
-| `/orders` | Yangi buyurtmalar |
-| `/add Nom \| 12000 \| Kategoriya` | Mahsulot |
-| `/off 3` / `/on 3` | Yashirish / yoqish |
+1. **➕ Mahsulot** tugmasini bosing  
+2. Nom yozing (`Sut 1L`)  
+3. Narx yozing (`12000`)  
+
+Tayyor. `/add` ham shu oqimni ochadi.

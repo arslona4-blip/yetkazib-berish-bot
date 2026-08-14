@@ -15,8 +15,12 @@ def main_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
         ["📋 Mening buyurtmalarim", "ℹ️ Do‘kon"],
     ]
     if is_admin:
-        rows.append(["🛠 Admin"])
+        rows.append(["🛠 Admin", "➕ Mahsulot"])
     return ReplyKeyboardMarkup(rows, resize_keyboard=True)
+
+
+def cancel_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup([["❌ Bekor"]], resize_keyboard=True)
 
 
 def categories_keyboard(categories: list[str]) -> InlineKeyboardMarkup:
