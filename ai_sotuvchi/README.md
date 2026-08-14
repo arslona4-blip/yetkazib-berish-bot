@@ -1,58 +1,59 @@
 # AI Sotuvchi — Baraka Marketdan alohida loyiha
 
-Do‘kon uchun **sun’iy sotuvchi** Telegram bot:
-mijoz yozadi → bot javob beradi / mahsulot topadi → savat → buyurtma → admin tasdiq.
+Do‘kon uchun **sun’iy sotuvchi** Telegram bot.
+
+## 1) Token olish
+
+1. Telegramda [@BotFather](https://t.me/BotFather) → `/newbot`
+2. Nom bering (masalan: `AI Sotuvchi`)
+3. Berilgan token ni saqlang — bu `AI_SOTUVCHI_BOT_TOKEN`
+
+> Baraka Market `BOT_TOKEN`idan **boshqa** bo‘lishi shart.
+
+## 2) Lokal ishga tushirish
+
+```bash
+# repo ildizida
+cp ai_sotuvchi/.env.example ai_sotuvchi/.env
+# .env ichida:
+# AI_SOTUVCHI_BOT_TOKEN=123456:ABC...
+# AI_SOTUVCHI_ADMIN_IDS=sizning_telegram_id
+
+pip install -r requirements.txt
+python -m ai_sotuvchi
+```
+
+Telegram ID: botga `/start` → yoki `@userinfobot`.
+
+## 3) Railway (Baraka bilan birga)
+
+Deploy allaqachon `python -m run_bots` ishlatadi.
+
+Railway → Variables:
+
+| Key | Qiymat |
+|-----|--------|
+| `AI_SOTUVCHI_BOT_TOKEN` | yangi bot tokeni |
+| `AI_SOTUVCHI_ADMIN_IDS` | admin Telegram ID |
+| `AI_SOTUVCHI_SHOP_NAME` | do‘kon nomi (ixtiyoriy) |
+| `OPENAI_API_KEY` | ixtiyoriy |
+
+Token qo‘yilmasa faqat Baraka ishlayveradi.
 
 ## Imkoniyatlar
 
 - 💬 AI suhbat (OpenAI yoki mahalliy qidiruv)
 - 📦 Katalog kategoriyalar bilan
-- 🛒 Savat (+/− miqdor)
-- Tezkor qo‘shish: `2 ta sut` / `cola qo‘sh`
-- ✅ Buyurtma (telefon, manzil, ism)
-- 📋 Mening buyurtmalarim + status
-- 🛠 Admin: `/add`, `/off`, `/on`, `/orders`, `/stats`
+- 🛒 Savat (+/−) · tezkor: `2 ta sut`
+- ✅ Buyurtma · 📋 Mening buyurtmalarim
+- 🛠 `/add` `/off` `/on` `/orders` `/stats`
 
-## Tezkor start
-
-1. [@BotFather](https://t.me/BotFather) dan **yangi** bot oling (Baraka tokenidan boshqa).
-2. Sozlamalar:
-
-```bash
-cd /path/to/yetkazib-berish-bot
-cp ai_sotuvchi/.env.example .env   # yoki ai_sotuvchi/.env
-# AI_SOTUVCHI_BOT_TOKEN va AI_SOTUVCHI_ADMIN_IDS ni to‘ldiring
-```
-
-3. Ishga tushirish (repo ildizidan):
-
-```bash
-pip install -r requirements.txt
-python -m ai_sotuvchi
-```
-
-## AI yoqish (ixtiyoriy)
-
-```
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4o-mini
-```
-
-Kalit bo‘lmasa ham bot ishlaydi: mahsulot nomidan qidiradi.
-
-## Admin buyruqlari
+## Admin
 
 | Buyruq | Vazifa |
 |--------|--------|
-| `/admin` | Panel + statistika |
-| `/stats` | Tushum / buyurtmalar |
+| `/admin` | Panel |
+| `/stats` | Statistika |
 | `/orders` | Yangi buyurtmalar |
-| `/orders accepted` | Qabul qilinganlar |
-| `/add Nom \| 12000 \| Kategoriya` | Mahsulot qo‘shish |
-| `/off 3` | Mahsulotni yashirish |
-| `/on 3` | Qayta yoqish |
-
-## Baraka Market bilan
-
-Alohida DB va token: `data/ai_sotuvchi.db`, `AI_SOTUVCHI_BOT_TOKEN`.
-Asosiy yetkazib berish botiga tegmaydi.
+| `/add Nom \| 12000 \| Kategoriya` | Mahsulot |
+| `/off 3` / `/on 3` | Yashirish / yoqish |

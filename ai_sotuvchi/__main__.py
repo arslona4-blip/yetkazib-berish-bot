@@ -51,8 +51,12 @@ logger = logging.getLogger("ai_sotuvchi")
 def main() -> None:
     if not BOT_TOKEN:
         logger.error(
-            "AI_SOTUVCHI_BOT_TOKEN (yoki BOT_TOKEN) o‘rnatilmagan. "
-            ".env faylini to‘ldiring."
+            "AI_SOTUVCHI_BOT_TOKEN o‘rnatilmagan.\n"
+            "1) BotFather → /newbot\n"
+            "2) Token ni .env yoki Railway Variables ga yozing:\n"
+            "   AI_SOTUVCHI_BOT_TOKEN=...\n"
+            "   AI_SOTUVCHI_ADMIN_IDS=telegram_id\n"
+            "3) python -m ai_sotuvchi"
         )
         sys.exit(1)
 
