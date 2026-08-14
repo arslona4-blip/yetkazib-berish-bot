@@ -25,8 +25,8 @@ DATABASE_PATH = os.getenv(
     "AI_SOTUVCHI_DB", str(DATA_DIR / "ai_sotuvchi.db")
 )
 
-SHOP_NAME = os.getenv("AI_SOTUVCHI_SHOP_NAME", "AI Sotuvchi Demo Do‘kon")
-SHOP_PHONE = os.getenv("AI_SOTUVCHI_SHOP_PHONE", "+998 99 000 00 00")
+SHOP_NAME = os.getenv("AI_SOTUVCHI_SHOP_NAME", "AI Sotuvchi")
+SHOP_PHONE = os.getenv("AI_SOTUVCHI_SHOP_PHONE", "+998 99 819 34 37")
 SHOP_HOURS = os.getenv("AI_SOTUVCHI_SHOP_HOURS", "09:00 - 21:00")
 MIN_ORDER_AMOUNT = int(os.getenv("AI_SOTUVCHI_MIN_ORDER", "10000"))
 
