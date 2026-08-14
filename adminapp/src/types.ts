@@ -3,13 +3,12 @@ export type Tab =
   | 'kassa'
   | 'orders'
   | 'payments'
-  | 'warehouse'
   | 'products'
   | 'reports'
   | 'promos'
   | 'more'
 
-export type MorePanel = 'moves' | 'broadcast' | 'csv' | 'contacts'
+export type MorePanel = 'broadcast' | 'csv' | 'contacts'
 
 export type Order = {
   id: number
@@ -48,33 +47,11 @@ export type Product = {
   description?: string
 }
 
-export type Category = {
-  category_id: number
-  category_name: string
-  emoji?: string
-  product_count: number
-  low_count: number
-  stock_sum: number
-}
-
 export type CatalogCategory = {
   id: number
   name: string
   emoji?: string
   is_active: boolean
-}
-
-export type Movement = {
-  id: number
-  product_id: number
-  product_name: string
-  delta: number
-  stock_after: number
-  reason: string
-  note: string
-  order_id: number | null
-  admin_id: number | null
-  created_at: string
 }
 
 export type Contact = {
@@ -142,15 +119,6 @@ export type StatsPayload = {
     today_orders: number
     today_sum: number
   }
-  warehouse: {
-    products: number
-    units: number
-    zero_stock: number
-    low_stock: number
-    today_in: number
-    today_out: number
-    today_moves: number
-  }
   daily: {
     orders_count: number
     revenue: number
@@ -162,5 +130,4 @@ export type StatsPayload = {
     top: { product_name: string; qty: number }[]
   }
   payments_waiting: number
-  low_stock_threshold: number
 }

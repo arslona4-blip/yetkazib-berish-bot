@@ -100,10 +100,6 @@ from bot.keyboards import (
     admin_category_products_list_keyboard,
     admin_menu_keyboard,
     admin_orders_keyboard,
-    admin_stock_keyboard,
-    admin_stock_categories_keyboard,
-    admin_stock_list_keyboard,
-    admin_stock_item_keyboard,
     admin_delete_order_confirm_keyboard,
     admin_order_keyboard,
     admin_payment_keyboard,
@@ -1568,12 +1564,6 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await contacts_home(update, context)
         return
 
-    if action in {"stock", "stock_low", "stock_all", "stock_cats"} or action.startswith(
-        ("stock_cat:", "stock_zero:", "stock_zero_ok:")
-    ):
-        await show_admin_stock_panel(update, context, action)
-        return
-
     if action == "new":
         orders = get_queue_orders(["new"], limit=30)
         title = "🆕 Yangi buyurtmalar"
@@ -1619,194 +1609,6 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             reply_markup=admin_order_keyboard(order["id"]),
         )
 
-
-async def show_admin_stock_panel(
-    update: Update, context: ContextTypes.DEFAULT_TYPE, action: str
-) -> None:
-    """Ombor: professional home / toifalar / spiska."""
-    query = update.callback_query
-    from bot.config import LOW_STOCK_THRESHOLD
-    from bot.database import get_inventory_categories, get_inventory_products
-
-    if action == "stock":
-        from bot.warehouse import show_warehouse_home
-
-        await show_warehouse_home(update, context)
-        return
-
-    low_only = action == "stock_low"
-
-    if action in {"stock_cats", "stock_low"}:
-        cats = get_inventory_categories(low_only=low_only)
-        title = "⚠️ Kam qoldiq — toifalar" if low_only else "📦 Ombor — toifalar"
-        if not cats:
-            await query.edit_message_text(
-                f"{title}\n\nMahsulot topilmadi.",
-                reply_markup=admin_stock_keyboard(low_only=low_only),
-            )
-            return
-        total_products = sum(int(c["product_count"]) for c in cats)
-        total_low = sum(int(c["low_count"]) for c in cats)
-        text = (
-            f"<b>{title}</b>\n"
-            f"{format_now_html()}\n\n"
-            f"📁 Toifa: <b>{len(cats)}</b> · 📦 Mahsulot: <b>{total_products}</b>\n"
-            f"⚠️ Kam qoldiq: <b>{total_low}</b> (≤ {LOW_STOCK_THRESHOLD})\n\n"
-            "Toifani tanlang yoki umumiy spiskani oching:"
-        )
-        await query.edit_message_text(
-            text,
-            reply_markup=admin_stock_categories_keyboard(cats, low_only=low_only),
-            parse_mode="HTML",
-        )
-        return
-
-    if action == "stock_all":
-        products = get_inventory_products(low_only=False, limit=80)
-        if not products:
-            await query.edit_message_text(
-                "📦 Ombor\n\nMahsulot topilmadi.",
-                reply_markup=admin_stock_keyboard(),
-            )
-            return
-        text = (
-            f"<b>📦 Ombor spiska</b>\n"
-            f"{format_now_html()}\n\n"
-            f"Toifa bo‘yicha · {len(products)} ta mahsulot\n"
-            f"⚠️ ≤ {LOW_STOCK_THRESHOLD} dona — kam qoldiq\n\n"
-            "Mahsulotni bosing — qoldiqni o‘zgartirasiz."
-        )
-        await query.edit_message_text(
-            text,
-            reply_markup=admin_stock_list_keyboard(
-                products, low_only=False, back_callback="admin:stock"
-            ),
-            parse_mode="HTML",
-        )
-        return
-
-    if action.startswith("stock_cat:"):
-        try:
-            cat_id = int(action.split(":", 1)[1])
-        except ValueError:
-            await query.edit_message_text(
-                "Toifa topilmadi.", reply_markup=admin_stock_keyboard()
-            )
-            return
-        products = get_inventory_products(
-            category_id=cat_id, low_only=False, limit=200
-        )
-        if cat_id == 0:
-            cat_name = "📦 Toifasiz"
-        else:
-            cat = get_category(cat_id)
-            cat_name = category_label(cat) if cat else f"#{cat_id}"
-        if not products:
-            await query.edit_message_text(
-                f"📁 {cat_name}\n\nMahsulot yo‘q.",
-                reply_markup=admin_stock_keyboard(),
-            )
-            return
-        nonzero = sum(1 for p in products if int(p["stock"] or 0) > 0)
-        text = (
-            f"<b>📦 {cat_name}</b>\n"
-            f"{format_now_html()}\n\n"
-            f"{len(products)} ta mahsulot · zaxirasi bor: <b>{nonzero}</b>\n"
-            "Mahsulotni bosing — qoldiqni o‘zgartirasiz.\n"
-            "Yoki pastdagi tugma bilan <b>hammasini 0</b> qiling."
-        )
-        await query.edit_message_text(
-            text,
-            reply_markup=admin_stock_list_keyboard(
-                products,
-                back_callback="admin:stock_cats",
-                category_id=cat_id,
-            ),
-            parse_mode="HTML",
-        )
-        return
-
-    if action.startswith("stock_zero:"):
-        try:
-            cat_id = int(action.split(":", 1)[1])
-        except ValueError:
-            await query.answer("Toifa xato", show_alert=True)
-            return
-        from bot.database import get_category, get_inventory_products
-
-        products = get_inventory_products(
-            category_id=cat_id, low_only=False, limit=500
-        )
-        if cat_id == 0:
-            cat_name = "📦 Toifasiz"
-        else:
-            cat = get_category(cat_id)
-            cat_name = category_label(cat) if cat else f"#{cat_id}"
-        nonzero = sum(1 for p in products if int(p["stock"] or 0) > 0)
-        if nonzero == 0:
-            await query.answer("Hammasi allaqachon 0", show_alert=True)
-            return
-        await query.edit_message_text(
-            f"⚠️ <b>«{cat_name}» — hammasini 0?</b>\n"
-            f"{format_now_html()}\n\n"
-            f"📦 {len(products)} ta mahsulot\n"
-            f"🔄 Zaxirasi 0 bo‘ladigan: <b>{nonzero}</b> ta\n\n"
-            "Bu amalni qaytarib bo‘lmaydi (jurnalga yoziladi).",
-            reply_markup=InlineKeyboardMarkup(
-                [
-                    [
-                        InlineKeyboardButton(
-                            "✅ Ha, hammasini 0 qil",
-                            callback_data=f"admin:stock_zero_ok:{cat_id}",
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "❌ Bekor",
-                            callback_data=f"admin:stock_cat:{cat_id}",
-                        )
-                    ],
-                ]
-            ),
-            parse_mode="HTML",
-        )
-        return
-
-    if action.startswith("stock_zero_ok:"):
-        try:
-            cat_id = int(action.split(":", 1)[1])
-        except ValueError:
-            await query.answer("Toifa xato", show_alert=True)
-            return
-        from bot.database import get_category, zero_category_stock
-
-        if cat_id == 0:
-            cat_name = "📦 Toifasiz"
-        else:
-            cat = get_category(cat_id)
-            cat_name = category_label(cat) if cat else f"#{cat_id}"
-        result = zero_category_stock(
-            cat_id,
-            admin_id=query.from_user.id,
-            note=f"Toifa «{cat_name}» — hammasi 0",
-        )
-        products = get_inventory_products(
-            category_id=cat_id, low_only=False, limit=200
-        )
-        await query.edit_message_text(
-            f"✅ <b>«{cat_name}» — 0 qilindi</b>\n"
-            f"{format_now_html()}\n\n"
-            f"🔄 Yangilandi: <b>{result['updated']}</b>\n"
-            f"⏭ Allaqachon 0: <b>{result['skipped']}</b>\n"
-            f"📦 Jami: <b>{result['total']}</b>",
-            reply_markup=admin_stock_list_keyboard(
-                products,
-                back_callback="admin:stock_cats",
-                category_id=cat_id,
-            ),
-            parse_mode="HTML",
-        )
-        return
 
 
 async def show_admin_products_list(
@@ -2327,7 +2129,7 @@ async def admin_product_price(
     stock_step = "⑤" if context.user_data["admin_product"].get("_picked_category") else "④"
     await update.message.reply_text(
         f"✅ Narx: {price:,} so‘m\n\n"
-        f"{stock_step} Ombor sonini yozing (nechta bor?)\n"
+        f"{stock_step} Boshlang‘ich sonini yozing (nechta bor?)\n"
         "Yoki «⏭ O'tkazib yuborish» → 0",
         reply_markup=ReplyKeyboardMarkup(
             [["⏭ O'tkazib yuborish"], ["❌ Bekor qilish"]],
@@ -2398,7 +2200,7 @@ async def _save_new_product(
     except Exception as exc:
         context.user_data["awaiting_admin"] = "product_stock"
         await update.message.reply_text(
-            f"❌ Saqlanmadi: {exc}\nOmbor sonini qayta yozing yoki o‘tkazing:"
+            f"❌ Saqlanmadi: {exc}\nSonini qayta yozing yoki o‘tkazing:"
         )
         return ProductAdminState.STOCK
 
@@ -2439,10 +2241,6 @@ async def _save_new_product(
                     InlineKeyboardButton(
                         "🖼 Rasm",
                         callback_data=f"admin_prod:photo:{product_id}",
-                    ),
-                    InlineKeyboardButton(
-                        "📦 Ombor",
-                        callback_data=f"admin_prod:stock:{product_id}",
                     ),
                     InlineKeyboardButton(
                         "📐 O‘lcham",
@@ -2604,61 +2402,6 @@ async def cancel_product_admin(
     )
     return ConversationHandler.END
 
-
-async def admin_stock_callback(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> None:
-    """Ombor: mahsulot ochish / +1 / -1 / +10."""
-    query = update.callback_query
-    await query.answer()
-    if not is_admin(query.from_user.id):
-        await query.edit_message_text("Ruxsat yo'q.")
-        return
-    parts = (query.data or "").split(":")
-    if len(parts) < 3:
-        return
-    action, pid_s = parts[1], parts[2]
-    try:
-        product_id = int(pid_s)
-    except ValueError:
-        return
-    from bot.database import adjust_product_stock, get_product_by_id
-
-    product = get_product_by_id(product_id)
-    if not product:
-        await query.edit_message_text("Mahsulot topilmadi.")
-        return
-
-    if action == "item":
-        stock = 0
-        try:
-            stock = int(product["stock"] or 0)
-        except (KeyError, IndexError, TypeError, ValueError):
-            stock = 0
-        await query.edit_message_text(
-            f"📦 <b>{product['name']}</b>\nQoldiq: <b>{stock}</b> dona",
-            reply_markup=admin_stock_item_keyboard(product_id),
-            parse_mode="HTML",
-        )
-        return
-
-    delta = 0
-    if action == "inc":
-        delta = 1
-    elif action == "dec":
-        delta = -1
-    elif action == "add10":
-        delta = 10
-    else:
-        return
-    stock = adjust_product_stock(
-        product_id, delta, reason="adjust", admin_id=query.from_user.id
-    )
-    await query.edit_message_text(
-        f"📦 <b>{product['name']}</b>\nQoldiq: <b>{stock}</b> dona",
-        reply_markup=admin_stock_item_keyboard(product_id),
-        parse_mode="HTML",
-    )
 
 
 async def admin_status_callback(

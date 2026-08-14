@@ -32,7 +32,6 @@ from bot.database import (
     set_product_barcode,
     set_product_image,
     set_product_sale,
-    set_product_stock,
     update_order_status,
 )
 from bot.keyboards import (
@@ -49,7 +48,6 @@ class ExtraState(IntEnum):
     SEARCH = 1
     BROADCAST = 2
     IMPORT_CSV = 3
-    STOCK = 4
     PHOTO = 5
     BARCODE = 6
     SALE = 7
@@ -282,38 +280,6 @@ async def do_import(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return ConversationHandler.END
 
 
-async def start_stock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.callback_query
-    await query.answer()
-    product_id = int(query.data.split(":")[2])
-    context.user_data["stock_product_id"] = product_id
-    await query.message.reply_text(
-        f"Ombor sonini yozing (mahsulot #{product_id}):",
-        reply_markup=cancel_keyboard(),
-    )
-    return ExtraState.STOCK
-
-
-async def do_stock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    text = (update.message.text or "").strip()
-    if text == "❌ Bekor qilish":
-        return await cancel_extra(update, context)
-    if not text.isdigit():
-        await update.message.reply_text("Raqam yozing.")
-        return ExtraState.STOCK
-    pid = context.user_data.get("stock_product_id")
-    set_product_stock(
-        pid,
-        int(text),
-        reason="inventory",
-        note="Qo'lda son yozish",
-        admin_id=update.effective_user.id,
-    )
-    await update.message.reply_text(
-        f"✅ Ombor yangilandi: {text}",
-        reply_markup=menu_kb(update.effective_user.id),
-    )
-    return ConversationHandler.END
 
 
 async def start_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -608,20 +574,7 @@ def build_extra_conversations() -> list:
             ],
             allow_reentry=True,
         ),
-        ConversationHandler(
-            entry_points=[
-                CallbackQueryHandler(start_stock, pattern=r"^admin_prod:stock:\d+$")
-            ],
-            states={
-                ExtraState.STOCK: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, do_stock)
-                ]
-            },
-            fallbacks=[
-                MessageHandler(filters.Regex("^❌ Bekor qilish$"), cancel_extra),
-            ],
-            allow_reentry=True,
-        ),
+
         ConversationHandler(
             entry_points=[
                 CallbackQueryHandler(start_photo, pattern=r"^admin_prod:photo:\d+$")
