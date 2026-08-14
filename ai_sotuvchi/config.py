@@ -3,17 +3,21 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
-
 BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "data"
-DATA_DIR.mkdir(exist_ok=True)
+# Avval repo ildizi, keyin ai_sotuvchi/.env
+load_dotenv(BASE_DIR / ".env")
+load_dotenv(BASE_DIR / "ai_sotuvchi" / ".env", override=True)
 
-# Alohida bot token (Baraka Market BOT_TOKEN dan farq qiladi)
-BOT_TOKEN = os.getenv("AI_SOTUVCHI_BOT_TOKEN") or os.getenv("BOT_TOKEN", "")
+DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR / "data")))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+# Faqat alohida token — Baraka BOT_TOKEN bilan aralashmasin
+BOT_TOKEN = os.getenv("AI_SOTUVCHI_BOT_TOKEN", "").strip()
 ADMIN_IDS = {
     int(x.strip())
-    for x in os.getenv("AI_SOTUVCHI_ADMIN_IDS", os.getenv("ADMIN_IDS", "")).split(",")
+    for x in os.getenv(
+        "AI_SOTUVCHI_ADMIN_IDS", os.getenv("ADMIN_IDS", "")
+    ).split(",")
     if x.strip().isdigit()
 }
 
@@ -26,7 +30,6 @@ SHOP_PHONE = os.getenv("AI_SOTUVCHI_SHOP_PHONE", "+998 99 000 00 00")
 SHOP_HOURS = os.getenv("AI_SOTUVCHI_SHOP_HOURS", "09:00 - 21:00")
 MIN_ORDER_AMOUNT = int(os.getenv("AI_SOTUVCHI_MIN_ORDER", "10000"))
 
-# OpenAI-compatible API (bo‘sh bo‘lsa — mahalliy qidiruv ishlaydi)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 OPENAI_BASE_URL = os.getenv(
     "OPENAI_BASE_URL", "https://api.openai.com/v1"
