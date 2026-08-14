@@ -39,6 +39,9 @@ from bot.config import (
     WELCOME_PHOTO_PATH,
     card_payment_enabled,
     delivery_rates_html,
+    gift_drink_progress_html,
+    gift_drink_promo_html,
+    GIFT_DRINK_THRESHOLD,
     online_payment_enabled,
 )
 from bot.database import (
@@ -268,6 +271,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     welcome_caption = (
         f"✨ <b>Assalomu alaykum, {name}!</b>\n"
         f"{delivery_rates_html()}\n"
+        f"🎁 <b>100 000+</b> → BEPUL 🥤 Coca-Cola / 🔵 Pepsi / 🧡 Fanta 1L!\n"
         f"👇 Pastdagi <b>🛒 Do'kon</b> tugmasini bosing!"
     )
     # Rasm yo‘q bo‘lsa — to‘liq matn
@@ -282,6 +286,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"│ 📞 {SHOP_PHONE}\n"
         f"└──────────────┘\n\n"
         f"{delivery_rates_html()}\n\n"
+        f"{gift_drink_promo_html()}\n\n"
         f"👇 Pastdagi <b>🛒 Do'kon</b> tugmasini bosing!"
     )
     markup = menu_for(user.id)
@@ -333,6 +338,29 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         reply_markup=InlineKeyboardMarkup(start_rows),
     )
 
+    # E’tiborni tortadigan aksiya banneri
+    from bot.config import BASE_DIR
+
+    promo_img = BASE_DIR / "bot" / "assets" / "bonus-aksiya.jpg"
+    if promo_img.is_file():
+        try:
+            with promo_img.open("rb") as photo:
+                await update.message.reply_photo(
+                    photo=photo,
+                    caption=gift_drink_promo_html(),
+                    parse_mode="HTML",
+                )
+        except Exception:
+            await update.message.reply_text(
+                gift_drink_promo_html(),
+                parse_mode="HTML",
+            )
+    else:
+        await update.message.reply_text(
+            gift_drink_promo_html(),
+            parse_mode="HTML",
+        )
+
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     shop_line = (
@@ -355,6 +383,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "3️⃣ <b>Buyurtma berish</b> — manzil + vaqt\n"
         "4️⃣ Tasdiqlang va to‘lovni tanlang\n\n"
         f"{delivery_rates_html()}\n\n"
+        f"{gift_drink_promo_html()}\n\n"
         f"👥 Do‘st taklif qilsangiz — +{REFERRAL_BONUS:,} bonus\n"
         "   («⋯ Ko‘proq» → «👥 Ulashish»)\n\n"
         "Savol bo‘lsa — «📞 Aloqa» ni bosing.",
@@ -1294,6 +1323,7 @@ async def show_order_summary_message(message, user, context: ContextTypes.DEFAUL
         f"🕒 Yetkazish: <b><u>{order.get('delivery_slot') or '—'}</u></b>\n"
         f"🚚 Yetkazish narxi: {delivery_fee:,} so'm\n"
         f"{delivery_rates_html()}\n"
+        f"{gift_drink_progress_html(subtotal)}\n"
         f"{discount_line}"
         f"🎁 Bonus: −{bonus_spent:,}\n"
         f"📍 Qayerdan: {order['pickup_address']}\n"
@@ -1389,6 +1419,11 @@ async def confirm_order_callback(
     await query.edit_message_text(
         f"✅ Buyurtma qabul qilindi!\nBuyurtma raqami: #{order_id}\n"
         f"💰 Jami: {total:,} so'm"
+        + (
+            "\n\n🎉 Sovg‘angiz: 🥤 Coca-Cola / 🔵 Pepsi / 🧡 Fanta 1L — yetkazishda tanlaysiz!"
+            if subtotal >= __import__("bot.config", fromlist=["GIFT_DRINK_THRESHOLD"]).GIFT_DRINK_THRESHOLD
+            else ""
+        )
     )
     await query.message.reply_text(
         "💵 <b>To‘lov faqat naqd</b>\n"

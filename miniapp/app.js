@@ -25,6 +25,9 @@
   const els = {
     shopName: document.getElementById("shopName"),
     shopMeta: document.getElementById("shopMeta"),
+    giftPromo: document.getElementById("giftPromo"),
+    giftPromoText: document.getElementById("giftPromoText"),
+    giftProgress: document.getElementById("giftProgress"),
     categories: document.getElementById("categories"),
     products: document.getElementById("products"),
     cartList: document.getElementById("cartList"),
@@ -97,6 +100,29 @@
     return (
       `Yetkazish narxi: ${fmt(thr)} so‘mgacha — ${fmt(low)} so‘m; ` +
       `${fmt(thr)} so‘mdan yuqori — ${fmt(high)} so‘m`
+    );
+  }
+
+  function giftThreshold() {
+    return Number((state.config || {}).gift_drink_threshold) || 100000;
+  }
+
+  function giftPromoText() {
+    const thr = formatMoney(giftThreshold()).replace(" so'm", "");
+    return (
+      `🎁 SUPER AKSIYA! ${thr} so‘m+ buyurtmaga BEPUL 1L ichimlik: ` +
+      `🥤 Coca-Cola · 🔵 Pepsi · 🧡 Fanta`
+    );
+  }
+
+  function giftProgressText(subtotal) {
+    const thr = giftThreshold();
+    if (subtotal >= thr) {
+      return "🎉 Tabriklaymiz! Sovg‘angiz tayyor — tanlang: 🥤 Coca-Cola · 🔵 Pepsi · 🧡 Fanta (1L)";
+    }
+    const left = thr - subtotal;
+    return (
+      `🎁 Yana ${formatMoney(left)} qo‘shsangiz — BEPUL 🥤 Coca-Cola / 🔵 Pepsi / 🧡 Fanta 1L!`
     );
   }
 
@@ -316,6 +342,15 @@
     if (els.deliveryRates) {
       els.deliveryRates.textContent = deliveryRatesText();
     }
+    if (els.giftProgress) {
+      if (subtotal > 0) {
+        els.giftProgress.hidden = false;
+        els.giftProgress.textContent = giftProgressText(subtotal);
+        els.giftProgress.classList.toggle("earned", subtotal >= giftThreshold());
+      } else {
+        els.giftProgress.hidden = true;
+      }
+    }
     if (els.discountLabel) {
       const off = discount + bonus;
       els.discountLabel.textContent =
@@ -444,6 +479,10 @@
     els.shopName.textContent = config.shop_name || "Do'kon";
     const metaParts = [config.shop_hours, config.shop_phone].filter(Boolean);
     els.shopMeta.textContent = metaParts.join(" · ");
+    if (els.giftPromo) {
+      els.giftPromo.hidden = false;
+      if (els.giftPromoText) els.giftPromoText.textContent = giftPromoText();
+    }
     renderCart();
 
     if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {

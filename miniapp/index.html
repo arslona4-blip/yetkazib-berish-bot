@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>Do'kon</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <link rel="stylesheet" href="styles.css?v=4" />
+  <link rel="stylesheet" href="styles.css?v=5" />
 </head>
 <body>
   <header class="topbar">
@@ -17,11 +17,16 @@
 
   <main>
     <section id="viewCatalog" class="view active">
+      <div id="giftPromo" class="gift-promo" hidden>
+        <img src="bonus-aksiya.jpg" alt="Super aksiya" width="640" height="360" />
+        <p id="giftPromoText"></p>
+      </div>
       <div id="categories" class="chips"></div>
       <div id="products" class="products"></div>
     </section>
 
     <section id="viewCart" class="view">
+      <div id="giftProgress" class="gift-progress" hidden></div>
       <div id="cartList" class="cart-list"></div>
       <div class="cart-summary">
         <div class="row"><span>Mahsulotlar</span><strong id="subtotalLabel">0 so'm</strong></div>

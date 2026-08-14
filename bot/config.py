@@ -54,6 +54,14 @@ MIN_ORDER_AMOUNT = int(os.getenv("MIN_ORDER_AMOUNT", "30000"))
 BONUS_PERCENT = int(os.getenv("BONUS_PERCENT", "2"))
 BONUS_RATE = int(os.getenv("BONUS_RATE", "100"))  # 100 so'm = 1 ball
 
+# 100 000+ buyurtmaga bepul 1L ichimlik
+GIFT_DRINK_THRESHOLD = int(os.getenv("GIFT_DRINK_THRESHOLD", "100000"))
+GIFT_DRINK_OPTIONS = (
+    "🥤 Coca-Cola 1L",
+    "🔵 Pepsi 1L",
+    "🧡 Fanta 1L",
+)
+
 
 def _som(amount: int) -> str:
     return f"{int(amount):,}".replace(",", " ")
@@ -79,6 +87,47 @@ def delivery_rates_plain() -> str:
         f"🚚 Yetkazish narxi\n"
         f"• {thr} so‘mgacha — {low} so‘m\n"
         f"• {thr} so‘mdan yuqori — {high} so‘m"
+    )
+
+
+def gift_drink_promo_html() -> str:
+    """E’tiborni tortadigan bepul ichimlik aksiyasi."""
+    thr = _som(GIFT_DRINK_THRESHOLD)
+    return (
+        f"🎁 <b>SUPER AKSIYA!</b>\n"
+        f"━━━━━━━━━━━━━━\n"
+        f"🛒 Buyurtma <b>{thr} so‘m</b> va undan yuqori bo‘lsa —\n"
+        f"<b>BEPUL 1 litr ichimlik</b> tanlaysiz:\n\n"
+        f"🥤 <b>Coca-Cola</b> 1L\n"
+        f"🔵 <b>Pepsi</b> 1L\n"
+        f"🧡 <b>Fanta</b> 1L\n"
+        f"━━━━━━━━━━━━━━\n"
+        f"✨ Tanlov — o‘zingizniki!"
+    )
+
+
+def gift_drink_promo_plain() -> str:
+    thr = _som(GIFT_DRINK_THRESHOLD)
+    return (
+        f"🎁 SUPER AKSIYA!\n"
+        f"Buyurtma {thr} so‘m+ bo‘lsa — BEPUL 1L ichimlik:\n"
+        f"🥤 Coca-Cola · 🔵 Pepsi · 🧡 Fanta"
+    )
+
+
+def gift_drink_progress_html(subtotal: int) -> str:
+    """Savat summasi bo‘yicha aksiya holati."""
+    amount = max(0, int(subtotal or 0))
+    thr = GIFT_DRINK_THRESHOLD
+    if amount >= thr:
+        return (
+            f"🎉 <b>Tabriklaymiz!</b> Sovg‘angiz tayyor!\n"
+            f"Tanlang: 🥤 Coca-Cola · 🔵 Pepsi · 🧡 Fanta (1L)"
+        )
+    left = thr - amount
+    return (
+        f"🎁 Yana <b>{_som(left)} so‘m</b> qo‘shsangiz —\n"
+        f"BEPUL 🥤 Coca-Cola / 🔵 Pepsi / 🧡 Fanta 1L!"
     )
 
 

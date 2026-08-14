@@ -890,12 +890,13 @@ def format_cart(user_id: int) -> str:
 
     items = get_cart(user_id)
     if not items:
-        from bot.config import delivery_rates_html
+        from bot.config import delivery_rates_html, gift_drink_promo_html
 
         return (
             "🛒 Savatchangiz bo'sh\n\n"
             "🛍 Katalogdan mahsulot tanlang — bir bosishda qo'shiladi!\n\n"
-            f"{delivery_rates_html()}"
+            f"{delivery_rates_html()}\n\n"
+            f"{gift_drink_promo_html()}"
         )
 
     lines = ["🛒 <b>Sizning savatchangiz</b>", "┄┄┄┄┄┄┄┄┄┄┄┄"]
@@ -912,9 +913,10 @@ def format_cart(user_id: int) -> str:
     lines.append("┄┄┄┄┄┄┄┄┄┄┄┄")
     lines.append(f"🛍 Mahsulotlar: {money_html(subtotal, with_emoji=False)}")
     lines.append(f"🚚 Yetkazish: {money_html(delivery_fee, with_emoji=False)}")
-    from bot.config import delivery_rates_html
+    from bot.config import delivery_rates_html, gift_drink_progress_html, gift_drink_promo_html
 
     lines.append(delivery_rates_html())
+    lines.append(gift_drink_progress_html(subtotal))
     lines.append(f"✨ {money_html(total)} <b>← JAMI</b> ✨")
     return "\n".join(lines)
 
