@@ -86,12 +86,21 @@
     return Math.min(Math.floor(raw), state.bonusPoints || 0);
   }
 
+  function deliveryFeeFor(subtotal) {
+    const cfg = state.config || {};
+    const thr = Number(cfg.delivery_fee_threshold) || 50000;
+    const low = Number(cfg.delivery_fee_low) || 5000;
+    const high =
+      Number(cfg.delivery_fee_high) || Number(cfg.delivery_price) || 10000;
+    if (!(subtotal > 0)) return 0;
+    return subtotal <= thr ? low : high;
+  }
+
   function calcTotals() {
-    const delivery = state.config ? Number(state.config.delivery_price) || 0 : 0;
     const subtotal = cartSubtotal();
     const discount = Math.max(0, Number(state.discount) || 0);
     const bonus = subtotal > 0 ? bonusSpentValue() : 0;
-    const deliveryFee = subtotal > 0 ? delivery : 0;
+    const deliveryFee = deliveryFeeFor(subtotal);
     const total = Math.max(0, subtotal + deliveryFee - discount - bonus);
     return { subtotal, delivery: deliveryFee, discount, bonus, total };
   }

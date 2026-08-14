@@ -22,6 +22,9 @@ from bot.config import (
     CARD_NUMBER,
     CLICK_LINK,
     DATABASE_PATH,
+    DELIVERY_FEE_HIGH,
+    DELIVERY_FEE_LOW,
+    DELIVERY_FEE_THRESHOLD,
     DELIVERY_PRICE,
     MIN_ORDER_AMOUNT,
     PAYME_LINK,
@@ -286,7 +289,7 @@ def place_miniapp_order(
             raise ValueError(msg or "Promo kod yaroqsiz")
         promo_code = promo_code.upper()
 
-    delivery_fee, _zone = get_delivery_fee(address)
+    delivery_fee, _zone = get_delivery_fee(address, subtotal=subtotal)
     try:
         bonus_spent = max(0, int(bonus_spent or 0))
     except (TypeError, ValueError) as exc:
@@ -428,6 +431,9 @@ async def api_config(_request: web.Request) -> web.Response:
             "shop_telegram": SHOP_TELEGRAM,
             "shop_hours": SHOP_HOURS,
             "delivery_price": DELIVERY_PRICE,
+            "delivery_fee_threshold": DELIVERY_FEE_THRESHOLD,
+            "delivery_fee_low": DELIVERY_FEE_LOW,
+            "delivery_fee_high": DELIVERY_FEE_HIGH,
             "min_order": MIN_ORDER_AMOUNT,
             "slots": get_delivery_slots(),
             "payme_link": PAYME_LINK or payment_link_with_amount("", 0, 0),
