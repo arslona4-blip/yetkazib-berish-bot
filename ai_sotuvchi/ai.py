@@ -46,12 +46,23 @@ _STOP = {
     "x",
     "ta",
     "dona",
+    "bitta",
+    "bittasini",
     "kg",
     "l",
     "lt",
     "litr",
     "gr",
     "g",
+}
+
+# Qisqa nom → qidiruv kaliti
+_ALIASES = {
+    "cola": "cola",
+    "kola": "cola",
+    "coca": "cola",
+    "fanta": "fanta",
+    "pepsi": "pepsi",
 }
 
 
@@ -139,23 +150,73 @@ def _score_product(query: str, product: Any, want_size: float | None, want_unit:
 
 
 def _best_product(query: str, want_size: float | None = None, want_unit: str | None = None):
-    q = query.strip()
-    if len(q) < 2:
-        return None
-    candidates = db.search_products(q, limit=8)
-    if not candidates and len(q) >= 4:
-        candidates = find_products(q, limit=8)
-    if not candidates:
+    variants = find_variants(query, limit=12)
+    if not variants:
         return None
     ranked = sorted(
-        candidates,
-        key=lambda p: _score_product(q, p, want_size, want_unit),
+        variants,
+        key=lambda p: _score_product(query, p, want_size, want_unit),
         reverse=True,
     )
     best = ranked[0]
-    if _score_product(q, best, want_size, want_unit) <= 0:
+    if _score_product(query, best, want_size, want_unit) <= 0:
         return None
     return best
+
+
+def find_variants(query: str, limit: int = 12) -> list[Any]:
+    """Bir xil mahsulotning barcha hajm/variantlarini topadi (cola → 0.5/1.5/2L)."""
+    q = _norm(query).strip()
+    if len(q) < 2:
+        return []
+    # alias
+    for tok in re.split(r"\W+", q):
+        if tok in _ALIASES:
+            q = _ALIASES[tok]
+            break
+    # to‘g‘ridan-to‘g‘ri qidiruv
+    rows = db.search_products(q, limit=20)
+    # qo‘shimcha: cola ↔ coca
+    extra_keys = []
+    if "cola" in q or q == "cola":
+        extra_keys.extend(["coca", "cola", "coca-cola"])
+    if "coca" in q:
+        extra_keys.extend(["cola", "coca"])
+    seen: set[int] = set()
+    out: list[Any] = []
+    for p in rows:
+        pid = int(p["id"])
+        if pid not in seen and _score_product(q, p, None, None) > 0:
+            seen.add(pid)
+            out.append(p)
+    for key in extra_keys:
+        for p in db.search_products(key, limit=20):
+            pid = int(p["id"])
+            if pid not in seen and (
+                "cola" in _norm(str(p["name"])) or "coca" in _norm(str(p["name"]))
+            ):
+                seen.add(pid)
+                out.append(p)
+    # hajm bo‘yicha tartib
+    def sort_key(p: Any) -> tuple:
+        size, unit = _pack_size_from_name(str(p["name"]))
+        unit_rank = {"l": 0, "lt": 0, "litr": 0, "kg": 1, "g": 2, "gr": 2}.get(unit or "", 9)
+        return (unit_rank, size if size is not None else 999, _norm(str(p["name"])))
+
+    out.sort(key=sort_key)
+    return out[:limit]
+
+
+def format_variants(query: str, products: list[Any]) -> str:
+    title = query.strip().title() if query else "Mahsulot"
+    lines = [
+        f"<b>{title}</b> — qaysi hajmni olasiz?",
+        "————————————",
+    ]
+    for p in products:
+        lines.append(f"• {p['name']} — {money(int(p['price']))} (#{p['id']})")
+    lines.append("\nPastdagi tugmadan keraklisini tanlang.")
+    return "\n".join(lines)
 
 
 def _parse_segment(seg: str) -> dict[str, Any] | None:
@@ -229,13 +290,14 @@ def parse_order_segments(user_text: str) -> list[dict[str, Any]]:
 
 
 def try_multi_add(user_id: int, user_text: str) -> tuple[str, list[Any]] | None:
-    """Bir nechta mahsulotli so‘rovni savatga yig‘adi."""
+    """Bir nechta mahsulotli so‘rovni savatga yig‘adi.
+
+    Hajmsiz so‘rovda (masalan «cola») — barcha variantlarni ko‘rsatadi, avto-qo‘shmaydi.
+    """
     text = _norm(user_text)
-    # savolga o‘xshasa (faqat «bormi?») — multi-add qilmaymiz
     if text.endswith("?") and not any(
         w in text for w in ("kerak", "bering", "yuboring", "olaman", "zakaz")
     ):
-        # lekin ro‘yxat bo‘lsa ham qo‘shish mumkin
         if "," not in user_text and " va " not in text:
             return None
 
@@ -243,30 +305,40 @@ def try_multi_add(user_id: int, user_text: str) -> tuple[str, list[Any]] | None:
     if len(segments) < 1:
         return None
 
-    # faqat bitta oddiy qidiruv so‘zi bo‘lsa — multi emas
-    if len(segments) == 1 and segments[0]["want_size"] is None and segments[0]["qty"] == 1:
-        # «2 ta sut» ni try_quick_add ushlaydi; «guruch» ni local topadi
+    # Bitta so‘rov, hajmsiz → variantlar ro‘yxati (avto-savat yo‘q)
+    if len(segments) == 1 and segments[0]["want_size"] is None:
+        variants = find_variants(segments[0]["query"])
+        if len(variants) > 1:
+            return format_variants(segments[0]["query"], variants), variants
+        # bitta variant bo‘lsa va «kerak/2 ta» bo‘lsa — qo‘shish mumkin (pastda)
         if not any(w in text for w in ("kerak", "bering", "yuboring", "olaman", "zakaz", ",")):
-            return None
+            if segments[0]["qty"] == 1 and len(variants) <= 1:
+                return None
 
     added_lines: list[str] = []
     missing: list[str] = []
     notes: list[str] = []
     products: list[Any] = []
+    choose_blocks: list[tuple[str, list[Any]]] = []
 
     for seg in segments:
-        product = _best_product(seg["query"], seg["want_size"], seg["want_unit"])
+        variants = find_variants(seg["query"])
+        want_size = seg["want_size"]
+        want_unit = seg["want_unit"]
+        qty = int(seg["qty"] or 1)
+
+        # Hajm aytilmagan va bir nechta variant → tanlash
+        if want_size is None and len(variants) > 1:
+            choose_blocks.append((seg["query"], variants))
+            continue
+
+        product = _best_product(seg["query"], want_size, want_unit)
         if not product:
             missing.append(seg["query"])
             continue
 
-        qty = int(seg["qty"] or 1)
-        want_size = seg["want_size"]
-        want_unit = seg["want_unit"]
         psize, punit = _pack_size_from_name(str(product["name"]))
-
         if want_size is not None and psize:
-            # bir xil o‘lchov oilasi
             wu = want_unit or ""
             pu = punit or ""
             if wu in {"l", "lt", "litr"}:
@@ -293,10 +365,22 @@ def try_multi_add(user_id: int, user_text: str) -> tuple[str, list[Any]] | None:
         )
         products.append(product)
 
+    # Faqat tanlash kerak bo‘lgan holat
+    if not added_lines and choose_blocks:
+        q, vars_ = choose_blocks[0]
+        # bir nechta oila bo‘lsa birlashtiramiz
+        if len(choose_blocks) == 1:
+            return format_variants(q, vars_), vars_
+        lines = ["Bir nechta mahsulotda hajm tanlang:"]
+        all_p: list[Any] = []
+        for q2, vars2 in choose_blocks:
+            lines.append("")
+            lines.append(format_variants(q2, vars2))
+            all_p.extend(vars2)
+        return "\n".join(lines), all_p
+
     if not added_lines:
         return None
-
-    from ai_sotuvchi.config import DELIVERY_FEE
 
     subtotal = db.cart_total(user_id)
     lines = ["✅ Savatga qo‘shildi:", *added_lines, "————————————"]
@@ -304,6 +388,11 @@ def try_multi_add(user_id: int, user_text: str) -> tuple[str, list[Any]] | None:
         lines.extend([f"ℹ️ {n}" for n in notes])
     if missing:
         lines.append("Topilmadi: " + ", ".join(missing))
+    if choose_blocks:
+        lines.append("")
+        for q2, vars2 in choose_blocks:
+            lines.append(format_variants(q2, vars2))
+            products.extend(vars2)
     lines.append(f"Mahsulotlar: {money(subtotal)}")
     lines.append(f"Yetkazish: {money(DELIVERY_FEE)}")
     lines.append(f"<b>Jami: {money(subtotal + DELIVERY_FEE)}</b>")
@@ -440,8 +529,19 @@ def _local_reply(user_text: str) -> tuple[str, list[Any]]:
     if faq:
         return faq, []
 
+    segments = parse_order_segments(user_text)
+    if len(segments) == 1 and segments[0]["want_size"] is None:
+        variants = find_variants(segments[0]["query"])
+        if len(variants) > 1:
+            return format_variants(segments[0]["query"], variants), variants
+
     found = find_products(user_text)
     if found:
+        if len(found) > 1:
+            q = segments[0]["query"] if segments else user_text
+            variants = find_variants(q)
+            if len(variants) > 1:
+                return format_variants(q, variants), variants
         lines = ["Topdim:"]
         for p in found[:6]:
             lines.append(f"• {p['name']} — {money(int(p['price']))} (#{p['id']})")
@@ -486,6 +586,8 @@ def _openai_reply(user_id: int, user_text: str) -> str | None:
         f"Minimal: {MIN_ORDER_AMOUNT}. Yetkazish: {DELIVERY_FEE}.\n"
         "Har qanday savolga odobli va foydali javob ber (do‘kon, hayot, umumiy).\n"
         "Do‘kon savollarida katalogdan foydalan. Yo‘q mahsulotni o‘ylab topma.\n"
+        "Agar mijoz hajmsiz yozsa (masalan faqat «cola»), ADD qilma — "
+        "barcha hajm variantlarini (#ID bilan) ro‘yxatlab, tanlashni so‘ra.\n"
         "Agar mijoz bir nechta mahsulot so‘rasa (masalan: guruch 2kg, cola 1.5l x2), "
         "mos mahsulotlarni tanla va HAR BIR uchun alohida qator yoz:\n"
         "ADD:#ID:QTY\n"
@@ -529,6 +631,13 @@ def _openai_reply(user_id: int, user_text: str) -> str | None:
 
 
 def reply_to_user(user_id: int, user_text: str) -> tuple[str, list[Any]]:
+    # Hajmsiz oila so‘rovi: «cola», «bitta cola», «cola kerak»
+    segments = parse_order_segments(user_text)
+    if len(segments) == 1 and segments[0]["want_size"] is None and "," not in user_text:
+        variants = find_variants(segments[0]["query"])
+        if len(variants) > 1:
+            return format_variants(segments[0]["query"], variants), variants
+
     multi = try_multi_add(user_id, user_text)
     if multi:
         return multi
@@ -546,7 +655,7 @@ def reply_to_user(user_id: int, user_text: str) -> tuple[str, list[Any]]:
             if p and p["is_active"]:
                 products.append(p)
         if not products:
-            products = find_products(user_text)
+            products = find_variants(user_text) or find_products(user_text)
         return ai, products
 
     return _local_reply(user_text)
