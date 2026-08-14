@@ -20,6 +20,10 @@ from ai_sotuvchi.handlers import (
     WAIT_ADDRESS,
     WAIT_NAME,
     WAIT_PHONE,
+    WAIT_PROD_NAME,
+    WAIT_PROD_PRICE,
+    add_product_name,
+    add_product_price,
     admin_add_cmd,
     admin_off_cmd,
     admin_on_cmd,
@@ -27,6 +31,7 @@ from ai_sotuvchi.handlers import (
     admin_panel,
     admin_stats_cmd,
     callback_router,
+    cancel_add_product,
     cancel_order_flow,
     on_text,
     order_address,
@@ -37,6 +42,7 @@ from ai_sotuvchi.handlers import (
     show_catalog,
     show_my_orders,
     start,
+    start_add_product,
     start_order,
 )
 
@@ -86,6 +92,28 @@ def main() -> None:
         allow_reentry=True,
     )
 
+    add_product_conv = ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.Regex(r"^➕ Mahsulot$"), start_add_product),
+            MessageHandler(filters.Regex(r"^Mahsulot$"), start_add_product),
+            CommandHandler("add", start_add_product),
+        ],
+        states={
+            WAIT_PROD_NAME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, add_product_name)
+            ],
+            WAIT_PROD_PRICE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, add_product_price)
+            ],
+        },
+        fallbacks=[
+            CommandHandler("cancel", cancel_add_product),
+            MessageHandler(filters.Regex(r"^❌ Bekor$"), cancel_add_product),
+            MessageHandler(filters.Regex(r"(?i)^bekor"), cancel_add_product),
+        ],
+        allow_reentry=True,
+    )
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("katalog", show_catalog))
     app.add_handler(CommandHandler("cart", show_cart))
@@ -95,9 +123,11 @@ def main() -> None:
     app.add_handler(CommandHandler("admin", admin_panel))
     app.add_handler(CommandHandler("orders", admin_orders_cmd))
     app.add_handler(CommandHandler("stats", admin_stats_cmd))
-    app.add_handler(CommandHandler("add", admin_add_cmd))
     app.add_handler(CommandHandler("off", admin_off_cmd))
     app.add_handler(CommandHandler("on", admin_on_cmd))
+    # Eski /add Nom|narx saqlanadi, lekin asosiy — suhbat orqali
+    app.add_handler(add_product_conv)
+    app.add_handler(CommandHandler("add_old", admin_add_cmd))
     app.add_handler(order_conv)
     app.add_handler(CallbackQueryHandler(callback_router))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))

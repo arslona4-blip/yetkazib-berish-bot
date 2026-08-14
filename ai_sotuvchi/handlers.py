@@ -21,6 +21,7 @@ from ai_sotuvchi import database as db
 from ai_sotuvchi.keyboards import (
     STATUS_LABELS,
     admin_order_keyboard,
+    cancel_keyboard,
     cart_keyboard,
     catalog_keyboard,
     categories_keyboard,
@@ -31,6 +32,7 @@ from ai_sotuvchi.keyboards import (
 logger = logging.getLogger(__name__)
 
 WAIT_PHONE, WAIT_ADDRESS, WAIT_NAME = range(3)
+WAIT_PROD_NAME, WAIT_PROD_PRICE = range(10, 12)
 
 
 def _cart_message(uid: int) -> tuple[str, object]:
@@ -139,6 +141,8 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int | N
     if text in {"🛠 Admin", "Admin"} and is_admin(uid):
         await admin_panel(update, context)
         return ConversationHandler.END
+    if text in {"➕ Mahsulot", "Mahsulot"} and is_admin(uid):
+        return await start_add_product(update, context)
     if text in {"✅ Buyurtma", "Buyurtma"}:
         return await start_order(update, context)
 
@@ -373,15 +377,78 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     text = (
         "🛠 <b>Admin</b>\n"
         f"Mahsulotlar: {st['products']}\n"
-        f"Buyurtmalar: {st['orders']} (yangi: {st['new']})\n"
-        f"Qabul: {st['accepted']} · Yetkazilgan: {st['delivered']}\n"
+        f"Yangi buyurtmalar: {st['new']}\n"
         f"Tushum: {money(st['revenue'])}\n\n"
-        "<code>/add Nom | 12000 | Kategoriya</code>\n"
-        "<code>/off 3</code> — mahsulotni o‘chirish\n"
-        "<code>/on 3</code> — qayta yoqish\n"
-        "/orders — yangi · /stats — statistika"
+        "➕ <b>Mahsulot</b> tugmasini bosing — faqat nom va narx.\n"
+        "/orders · /stats"
     )
-    await update.message.reply_text(text, parse_mode="HTML")
+    await update.message.reply_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=main_keyboard(True),
+    )
+
+
+async def start_add_product(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("Faqat admin.")
+        return ConversationHandler.END
+    context.user_data["new_product"] = {}
+    await update.message.reply_text(
+        "Mahsulot nomini yozing:\n(masalan: Sut 1L)",
+        reply_markup=cancel_keyboard(),
+    )
+    return WAIT_PROD_NAME
+
+
+async def add_product_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    text = (update.message.text or "").strip()
+    if text in {"❌ Bekor", "Bekor", "/cancel"}:
+        return await cancel_add_product(update, context)
+    if len(text) < 2:
+        await update.message.reply_text("Nomni yozing:")
+        return WAIT_PROD_NAME
+    context.user_data.setdefault("new_product", {})["name"] = text
+    await update.message.reply_text(
+        "Narxini yozing (so‘m):\n(masalan: 12000)",
+        reply_markup=cancel_keyboard(),
+    )
+    return WAIT_PROD_PRICE
+
+
+async def add_product_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    text = (update.message.text or "").strip()
+    if text in {"❌ Bekor", "Bekor", "/cancel"}:
+        return await cancel_add_product(update, context)
+    digits = re.sub(r"\D", "", text)
+    if not digits:
+        await update.message.reply_text("Faqat raqam yozing, masalan: 12000")
+        return WAIT_PROD_PRICE
+    price = int(digits)
+    if price <= 0:
+        await update.message.reply_text("Narx 0 dan katta bo‘lsin:")
+        return WAIT_PROD_PRICE
+    data = context.user_data.get("new_product") or {}
+    name = str(data.get("name") or "").strip()
+    if not name:
+        await update.message.reply_text("Avval nom yozing:")
+        return WAIT_PROD_NAME
+    pid = db.add_product(name, price, category="Umumiy")
+    context.user_data.pop("new_product", None)
+    await update.message.reply_text(
+        f"✅ Qo‘shildi!\n{name} — {money(price)}\n(#{pid})",
+        reply_markup=main_keyboard(True),
+    )
+    return ConversationHandler.END
+
+
+async def cancel_add_product(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data.pop("new_product", None)
+    await update.message.reply_text(
+        "Bekor qilindi.",
+        reply_markup=main_keyboard(is_admin(update.effective_user.id)),
+    )
+    return ConversationHandler.END
 
 
 async def admin_orders_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
