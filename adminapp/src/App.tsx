@@ -9,10 +9,8 @@ import {
 import type {
   CartLine,
   CatalogCategory,
-  Category,
   Contact,
   MorePanel,
-  Movement,
   Order,
   OrderItem,
   Product,
@@ -52,14 +50,6 @@ function readTgInitData(): string {
   return (window.Telegram?.WebApp?.initData || '').trim()
 }
 
-const REASON: Record<string, string> = {
-  sale: '🛒 Sotuv',
-  in: '📥 Kirim',
-  out: '📤 Chiqim',
-  inventory: '📋 Inventar',
-  adjust: '✏️ Tuzatish',
-}
-
 const ORDER_FILTERS: [string, string][] = [
   ['new', 'Yangi'],
   ['active', 'Faol'],
@@ -85,18 +75,7 @@ export default function App() {
   const [payments, setPayments] = useState<Order[]>([])
   const [openOrderId, setOpenOrderId] = useState<number | null>(null)
   const [orderItems, setOrderItems] = useState<OrderItem[]>([])
-  const [categories, setCategories] = useState<Category[]>([])
-  const [products, setProducts] = useState<Product[]>([])
   const [catalog, setCatalog] = useState<Product[]>([])
-  const [selectedCat, setSelectedCat] = useState<number | 'all'>('all')
-  const [lowOnly, setLowOnly] = useState(false)
-  const [moves, setMoves] = useState<Movement[]>([])
-  const [stockForm, setStockForm] = useState({
-    product_id: 0,
-    mode: 'in',
-    qty: 1,
-    note: '',
-  })
   const [pinForm, setPinForm] = useState({ adminId: '', pin: '', code: '' })
   const [priceEdit, setPriceEdit] = useState<Record<number, string>>({})
   const [morePanel, setMorePanel] = useState<MorePanel>('broadcast')
@@ -262,21 +241,15 @@ export default function App() {
     if (!silent) setBusy(true)
     setError('')
     try {
-      const [st, or, pay, cats, prods, mv, cat] = await Promise.all([
+      const [st, or, pay, cat] = await Promise.all([
         api.stats(a),
         api.orders(a, orderStatus, orderQuery),
         api.orders(a, 'payments'),
-        api.whCategories(a, lowOnly),
-        api.whProducts(a, selectedCat === 'all' ? undefined : selectedCat, lowOnly),
-        api.whMoves(a),
         api.products(a),
       ])
       setStats(st)
       setOrders(or.orders)
       setPayments(pay.orders)
-      setCategories(cats.categories)
-      setProducts(prods.products)
-      setMoves(mv.movements)
       setCatalog(cat.products)
       setLastSync(new Date().toLocaleTimeString('uz-UZ'))
     } catch (e) {
@@ -293,7 +266,7 @@ export default function App() {
     }, 20000)
     return () => window.clearInterval(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auth, orderStatus, orderQuery, lowOnly, selectedCat])
+  }, [auth, orderStatus, orderQuery])
 
   useEffect(() => {
     if (!auth) return
@@ -306,28 +279,6 @@ export default function App() {
       }
     })()
   }, [orderStatus, orderQuery, auth])
-
-  useEffect(() => {
-    if (!auth) return
-    void (async () => {
-      try {
-        const [cats, prods] = await Promise.all([
-          api.whCategories(auth, lowOnly),
-          api.whProducts(
-            auth,
-            selectedCat === 'all' ? undefined : selectedCat,
-            lowOnly,
-          ),
-        ])
-        setCategories(cats.categories)
-        setProducts(prods.products)
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Ombor xato')
-      }
-    })()
-  }, [lowOnly, selectedCat, auth])
-
-  const filteredProducts = useMemo(() => products, [products])
 
   async function changeStatus(orderId: number, status: string) {
     if (!auth) return
@@ -383,43 +334,6 @@ export default function App() {
       setOrderItems(detail.items)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Tafsilot xato')
-    }
-  }
-
-  async function submitStock() {
-    if (!auth || !stockForm.product_id) return
-    setBusy(true)
-    try {
-      await api.whStock(auth, {
-        product_id: stockForm.product_id,
-        mode: stockForm.mode,
-        qty: Number(stockForm.qty),
-        note: stockForm.note,
-      })
-      setStockForm((s) => ({ ...s, qty: 1, note: '' }))
-      await refreshAll(auth, true)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ombor xato')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function quickIn(productId: number, qty: number) {
-    if (!auth) return
-    setBusy(true)
-    try {
-      await api.whStock(auth, {
-        product_id: productId,
-        mode: 'in',
-        qty,
-        note: 'Tezkor kirim',
-      })
-      await refreshAll(auth, true)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Kirim xato')
-    } finally {
-      setBusy(false)
     }
   }
 
@@ -1069,20 +983,6 @@ export default function App() {
               <span className="val">{stats.payments_waiting}</span>
               <span className="sub">{money(stats.daily.waiting_sum)}</span>
             </button>
-            <button
-              type="button"
-              className="pos-kpi ok"
-              onClick={() => {
-                setLowOnly(true)
-                setTab('warehouse')
-              }}
-            >
-              <span className="lab">Kam qoldiq</span>
-              <span className="val">{stats.warehouse.low_stock}</span>
-              <span className="sub">
-                {stats.warehouse.units.toLocaleString()} dona
-              </span>
-            </button>
           </div>
 
           <div className="pos-sec">
@@ -1125,14 +1025,6 @@ export default function App() {
               ) : null}
               <span className="pos-mod-ico amber">💳</span>
               <strong>To‘lovlar</strong>
-            </button>
-            <button
-              type="button"
-              className="pos-mod"
-              onClick={() => setTab('warehouse')}
-            >
-              <span className="pos-mod-ico green">🏭</span>
-              <strong>Ombor</strong>
             </button>
             <button
               type="button"
@@ -1220,12 +1112,6 @@ export default function App() {
               <div className="card">
                 <div className="label">To‘langan</div>
                 <div className="value accent">{money(stats.daily.paid_sum)}</div>
-              </div>
-              <div className="card">
-                <div className="label">Ombor kirim/chiqim</div>
-                <div className="value">
-                  +{stats.warehouse.today_in} / −{stats.warehouse.today_out}
-                </div>
               </div>
             </div>
           </section>
@@ -1616,163 +1502,12 @@ export default function App() {
         </section>
       ) : null}
 
-      {tab === 'warehouse' ? (
-        <section className="section">
-          <div className="page-h">
-            <div>
-              <h1>Ombor</h1>
-              <p>Kirim, chiqim va qoldiq</p>
-            </div>
-            <button
-              type="button"
-              className={`chip${lowOnly ? ' active' : ''}`}
-              onClick={() => setLowOnly((v) => !v)}
-            >
-              Kam qoldiq
-            </button>
-          </div>
-          <div className="card" style={{ marginBottom: 12 }}>
-            <div className="field">
-              <label>Amal</label>
-              <select
-                value={stockForm.mode}
-                onChange={(e) =>
-                  setStockForm((s) => ({ ...s, mode: e.target.value }))
-                }
-              >
-                <option value="in">📥 Kirim</option>
-                <option value="out">📤 Chiqim</option>
-                <option value="inventory">📋 Inventar</option>
-              </select>
-            </div>
-            <div className="field">
-              <label>Mahsulot</label>
-              <select
-                value={stockForm.product_id || ''}
-                onChange={(e) =>
-                  setStockForm((s) => ({
-                    ...s,
-                    product_id: Number(e.target.value),
-                  }))
-                }
-              >
-                <option value="">Tanlang</option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.category_name} · {p.name} ({p.stock})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label>Miqdor</label>
-              <input
-                type="number"
-                min={0}
-                value={stockForm.qty}
-                onChange={(e) =>
-                  setStockForm((s) => ({ ...s, qty: Number(e.target.value) }))
-                }
-              />
-            </div>
-            <div className="field">
-              <label>Izoh</label>
-              <input
-                value={stockForm.note}
-                onChange={(e) =>
-                  setStockForm((s) => ({ ...s, note: e.target.value }))
-                }
-                placeholder="ixtiyoriy"
-              />
-            </div>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => void submitStock()}
-            >
-              Saqlash
-            </button>
-          </div>
-
-          <div className="tabs-inline">
-            <button
-              type="button"
-              className={`chip${selectedCat === 'all' ? ' active' : ''}`}
-              onClick={() => setSelectedCat('all')}
-            >
-              Hammasi
-            </button>
-            {categories.map((c) => (
-              <button
-                key={c.category_id}
-                type="button"
-                className={`chip${selectedCat === c.category_id ? ' active' : ''}`}
-                onClick={() => setSelectedCat(c.category_id)}
-              >
-                {categoryChipLabel(c.category_name, c.emoji)}
-                {c.low_count ? ` · ${c.low_count}` : ''}
-              </button>
-            ))}
-          </div>
-          <div className="list">
-            {filteredProducts.map((p) => (
-              <div key={p.id} className="item">
-                <div className="row-between">
-                  <div>
-                    <h3>{p.name}</h3>
-                    <p>
-                      {p.category_name} · {money(p.price)}
-                    </p>
-                  </div>
-                  <div className="mono value" style={{ fontSize: '1.1rem' }}>
-                    {p.stock}
-                  </div>
-                </div>
-                <div className="actions">
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    onClick={() => void quickIn(p.id, 1)}
-                  >
-                    +1
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    onClick={() => void quickIn(p.id, 10)}
-                  >
-                    +10
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    onClick={() =>
-                      setStockForm({
-                        product_id: p.id,
-                        mode: 'in',
-                        qty: 1,
-                        note: '',
-                      })
-                    }
-                  >
-                    Forma
-                  </button>
-                </div>
-              </div>
-            ))}
-            {filteredProducts.length === 0 ? (
-              <div className="empty">Mahsulot yo‘q</div>
-            ) : null}
-          </div>
-        </section>
-      ) : null}
-
       {tab === 'more' ? (
         <section className="section">
           <div className="page-h">
             <div>
               <h1>Ko‘proq</h1>
-              <p>Broadcast, kontakt, CSV, jurnal</p>
+              <p>Broadcast, kontakt, CSV</p>
             </div>
             <button
               type="button"
@@ -1792,7 +1527,6 @@ export default function App() {
                 ['broadcast', 'Broadcast'],
                 ['contacts', 'Kontaktlar'],
                 ['csv', 'CSV'],
-                ['moves', 'Jurnal'],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -1937,30 +1671,6 @@ export default function App() {
               >
                 Import qilish
               </button>
-            </div>
-          ) : null}
-
-          {morePanel === 'moves' ? (
-            <div className="list" style={{ marginTop: 12 }}>
-              {moves.length === 0 ? (
-                <div className="empty">Harakat yo‘q</div>
-              ) : (
-                moves.map((m) => (
-                  <div key={m.id} className="item">
-                    <div className="row-between">
-                      <h3>{m.product_name}</h3>
-                      <span className="badge">
-                        {REASON[m.reason] || m.reason}
-                      </span>
-                    </div>
-                    <p className="mono">
-                      {m.delta > 0 ? `+${m.delta}` : m.delta} → {m.stock_after}
-                      {m.note ? ` · ${m.note}` : ''}
-                    </p>
-                    <p>{m.created_at}</p>
-                  </div>
-                ))
-              )}
             </div>
           ) : null}
         </section>
@@ -2140,7 +1850,6 @@ export default function App() {
                   ['kassa', '🖥', 'Kassa'],
                   ['orders', '📦', 'Buyurtma'],
                   ['payments', '💳', 'To‘lov'],
-                  ['warehouse', '🏭', 'Ombor'],
                   ['products', '🛍', 'Tovar'],
                   ['reports', '📊', 'Hisobot'],
                   ['promos', '🏷', 'Promo'],
@@ -2227,14 +1936,15 @@ export default function App() {
           </button>
           <button
             type="button"
-            className={`nav-btn${tab === 'warehouse' ? ' active' : ''}`}
-            onClick={() => setTab('warehouse')}
+            className={`nav-btn${tab === 'more' ? ' active' : ''}`}
+            onClick={() => setTab('more')}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M4 20V9l8-5 8 5v11" />
-              <path d="M9 20v-6h6v6" />
+              <circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none" />
+              <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+              <circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none" />
             </svg>
-            Ombor
+            Ko‘proq
           </button>
         </div>
       </nav>
