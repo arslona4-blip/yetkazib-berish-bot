@@ -111,10 +111,32 @@ def _norm(s: str) -> str:
 
 
 def _pack_size_from_name(name: str) -> tuple[float | None, str | None]:
-    m = re.search(r"(\d+(?:\.\d+)?)\s*(kg|l|lt|litr|gr|g)\b", _norm(name))
+    n = _norm(name)
+    n = n.replace("gramm", "g").replace("грамм", "g")
+    m = re.search(r"(\d+(?:\.\d+)?)\s*(kg|l|lt|litr|gr|g|ml)\b", n)
     if not m:
         return None, None
-    return float(m.group(1)), m.group(2)
+    size = float(m.group(1))
+    unit = m.group(2)
+    if unit == "gr":
+        unit = "g"
+    return size, unit
+
+
+def _size_sort_value(name: str) -> tuple[int, float]:
+    """Og‘irlik/hajm bo‘yicha tartib: 250g, 500g, 1kg."""
+    size, unit = _pack_size_from_name(name)
+    if size is None or not unit:
+        return (9, 999999.0)
+    if unit in {"g", "gr"}:
+        return (1, size)  # gramm
+    if unit == "kg":
+        return (1, size * 1000.0)
+    if unit == "ml":
+        return (0, size)
+    if unit in {"l", "lt", "litr"}:
+        return (0, size * 1000.0)
+    return (9, size)
 
 
 def _score_product(query: str, product: Any, want_size: float | None, want_unit: str | None) -> int:
@@ -150,8 +172,9 @@ def _score_product(query: str, product: Any, want_size: float | None, want_unit:
 
 
 def _base_name(name: str) -> str:
-    """«Coca-Cola 1.5L» → «coca cola»; «Guruch 1kg» → «guruch»."""
+    """«Coca-Cola 1.5L» → «coca cola»; «Guruch 250g» → «guruch»."""
     n = _norm(name)
+    n = n.replace("gramm", "g").replace("грамм", "g")
     n = re.sub(r"\d+(?:\.\d+)?\s*(kg|l|lt|litr|gr|g|ml|dona|ta)\b", " ", n)
     n = re.sub(r"[-_/]+", " ", n)
     n = re.sub(r"\s+", " ", n).strip()
@@ -250,14 +273,31 @@ def find_variants(query: str, limit: int = 20) -> list[Any]:
                 family.append(p)
 
     def sort_key(p: Any) -> tuple:
-        size, unit = _pack_size_from_name(str(p["name"]))
-        unit_rank = {"l": 0, "lt": 0, "litr": 0, "ml": 0, "kg": 1, "g": 2, "gr": 2}.get(
-            unit or "", 9
-        )
-        return (unit_rank, size if size is not None else 999, _norm(str(p["name"])))
+        fam, val = _size_sort_value(str(p["name"]))
+        return (fam, val, _norm(str(p["name"])))
 
     family.sort(key=sort_key)
     return family[:limit]
+
+
+def _human_pack_label(name: str) -> str:
+    """«Guruch 250g» → «250 gramm»; «Guruch 1kg» → «1 kg»."""
+    size, unit = _pack_size_from_name(name)
+    if size is None or not unit:
+        return str(name)
+    if abs(size - int(size)) < 0.001:
+        size_s = str(int(size))
+    else:
+        size_s = str(size).rstrip("0").rstrip(".")
+    if unit in {"g", "gr"}:
+        return f"{size_s} gramm"
+    if unit == "kg":
+        return f"{size_s} kg"
+    if unit == "ml":
+        return f"{size_s} ml"
+    if unit in {"l", "lt", "litr"}:
+        return f"{size_s} litr"
+    return str(name)
 
 
 def format_variants(query: str, products: list[Any]) -> str:
@@ -269,11 +309,14 @@ def format_variants(query: str, products: list[Any]) -> str:
             "Savatga qo‘shish: pastdagi tugma."
         )
     lines = [
-        f"<b>{title}</b> — mavjud variantlar (hajm/tur):",
+        f"<b>{title}</b> — mavjud hajmlar:",
         "————————————",
     ]
     for p in products:
-        lines.append(f"• {p['name']} — {money(int(p['price']))} (#{p['id']})")
+        label = _human_pack_label(str(p["name"]))
+        # Agar hajm o‘qilmasa — to‘liq nom
+        show = label if label != str(p["name"]) else str(p["name"])
+        lines.append(f"• <b>{show}</b> — {money(int(p['price']))} (#{p['id']})")
     lines.append("\nKeraklisini tugmadan tanlang.")
     return "\n".join(lines)
 
@@ -314,8 +357,9 @@ def _parse_segment(seg: str) -> dict[str, Any] | None:
         qty = max(1, int(m.group(1)))
         raw = (raw[: m.start()] + " " + raw[m.end() :]).strip()
 
-    # 2kg / 1.5 l / 0.5 kg
-    m = re.search(r"(\d+(?:\.\d+)?)\s*(kg|l|lt|litr|gr|g)\b", raw)
+    # 2kg / 1.5 l / 0.5 kg / 250g / 250 gramm
+    raw = raw.replace("gramm", "g").replace("грамм", "g")
+    m = re.search(r"(\d+(?:\.\d+)?)\s*(kg|l|lt|litr|gr|g|ml)\b", raw)
     if m:
         want_size = float(m.group(1))
         want_unit = m.group(2)
