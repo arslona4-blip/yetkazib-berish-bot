@@ -2257,7 +2257,7 @@ async def _save_new_product(
         )
         return ConversationHandler.END
 
-    stock = int(data.get("stock") or 0)
+    stock = int(data["stock"]) if data.get("stock") is not None else 100
     description = str(data.get("description") or "")
     try:
         product_id = create_product(
