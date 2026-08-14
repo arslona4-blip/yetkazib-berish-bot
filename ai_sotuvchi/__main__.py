@@ -53,6 +53,7 @@ from ai_sotuvchi.handlers import (
     start_add_product,
     start_broadcast,
     start_order,
+    start_order_callback,
 )
 from ai_sotuvchi.keyboards import bot_commands
 
@@ -100,6 +101,7 @@ def main() -> None:
             MessageHandler(filters.Regex(r"^Buyurtma berish$"), start_order),
             MessageHandler(filters.Regex(r"^✅ Buyurtma$"), start_order),
             MessageHandler(filters.Regex(r"^Buyurtma$"), start_order),
+            CallbackQueryHandler(start_order_callback, pattern=r"^cart:order$"),
         ],
         states={
             WAIT_PHONE: [
