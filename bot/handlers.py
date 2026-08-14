@@ -38,6 +38,7 @@ from bot.config import (
     SHOP_TELEGRAM,
     WELCOME_PHOTO_PATH,
     card_payment_enabled,
+    delivery_rates_html,
     online_payment_enabled,
 )
 from bot.database import (
@@ -266,6 +267,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     welcome_caption = (
         f"✨ <b>Assalomu alaykum, {name}!</b>\n"
+        f"{delivery_rates_html()}\n"
         f"👇 Pastdagi <b>🛒 Do'kon</b> tugmasini bosing!"
     )
     # Rasm yo‘q bo‘lsa — to‘liq matn
@@ -279,6 +281,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"│ 🕐 {SHOP_HOURS}\n"
         f"│ 📞 {SHOP_PHONE}\n"
         f"└──────────────┘\n\n"
+        f"{delivery_rates_html()}\n\n"
         f"👇 Pastdagi <b>🛒 Do'kon</b> tugmasini bosing!"
     )
     markup = menu_for(user.id)
@@ -351,6 +354,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "2️⃣ <b>Savatcha</b> — miqdorni sozlang\n"
         "3️⃣ <b>Buyurtma berish</b> — manzil + vaqt\n"
         "4️⃣ Tasdiqlang va to‘lovni tanlang\n\n"
+        f"{delivery_rates_html()}\n\n"
         f"👥 Do‘st taklif qilsangiz — +{REFERRAL_BONUS:,} bonus\n"
         "   («⋯ Ko‘proq» → «👥 Ulashish»)\n\n"
         "Savol bo‘lsa — «📞 Aloqa» ni bosing.",
@@ -1289,6 +1293,7 @@ async def show_order_summary_message(message, user, context: ContextTypes.DEFAUL
         f"{cart_text}\n\n"
         f"🕒 Yetkazish: <b><u>{order.get('delivery_slot') or '—'}</u></b>\n"
         f"🚚 Yetkazish narxi: {delivery_fee:,} so'm\n"
+        f"{delivery_rates_html()}\n"
         f"{discount_line}"
         f"🎁 Bonus: −{bonus_spent:,}\n"
         f"📍 Qayerdan: {order['pickup_address']}\n"
