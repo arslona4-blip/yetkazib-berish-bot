@@ -72,8 +72,20 @@
     localStorage.setItem(CART_KEY, JSON.stringify(state.cart));
   }
 
-  function cartKey(productId, variantId) {
-    return `${productId}:${variantId || 0}`;
+  function cartKey(item) {
+    const productId = item.product_id;
+    const variantId = item.variant_id || 0;
+    const grams = item.pack_grams || 0;
+    const amount = item.pack_amount || 0;
+    return `${productId}:${variantId}:${grams}:${amount}`;
+  }
+
+  function hasSizeChoice(product) {
+    return (
+      (product.variants && product.variants.length > 0) ||
+      (product.kg_packs && product.kg_packs.length > 0) ||
+      (product.kg_money && product.kg_money.length > 0)
+    );
   }
 
   function cartCount() {
@@ -245,11 +257,17 @@
       body.querySelector(".card-title").textContent = product.name;
       body.querySelector(".card-price").textContent =
         product.display_price || formatMoney(product.price);
+      if (product.kg_packs && product.kg_packs.length) {
+        const hint = document.createElement("p");
+        hint.className = "card-packs muted";
+        hint.textContent = product.kg_packs.map((p) => p.label).join(" · ");
+        body.appendChild(hint);
+      }
 
       const addBtn = document.createElement("button");
       addBtn.type = "button";
       addBtn.className = "btn add";
-      addBtn.textContent = "Qo'shish";
+      addBtn.textContent = hasSizeChoice(product) ? "Hajm tanlash" : "Qo'shish";
       addBtn.addEventListener("click", () => addProduct(product));
       body.appendChild(addBtn);
 
@@ -260,8 +278,14 @@
 
   function addProduct(product) {
     const variants = product.variants || [];
+    const packs = product.kg_packs || [];
+    const money = product.kg_money || [];
     if (variants.length) {
       openVariantPicker(product);
+      return;
+    }
+    if (packs.length || money.length) {
+      openKgPicker(product);
       return;
     }
     upsertCartItem({
@@ -273,14 +297,22 @@
     });
   }
 
+  function addOptionButton(text, onPick) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = text;
+    btn.addEventListener("click", () => {
+      onPick();
+      els.variantDialog.close();
+    });
+    els.variantOptions.appendChild(btn);
+  }
+
   function openVariantPicker(product) {
     els.variantTitle.textContent = product.name;
     els.variantOptions.innerHTML = "";
     (product.variants || []).forEach((v) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.textContent = `${v.name} — ${formatMoney(v.price)}`;
-      btn.addEventListener("click", () => {
+      addOptionButton(`${v.name} — ${formatMoney(v.price)}`, () => {
         upsertCartItem({
           product_id: product.id,
           variant_id: v.id,
@@ -288,18 +320,56 @@
           price: v.price,
           quantity: 1,
         });
-        els.variantDialog.close();
       });
-      els.variantOptions.appendChild(btn);
+    });
+    els.variantDialog.showModal();
+  }
+
+  function productStem(name) {
+    return String(name || "")
+      .replace(/\d+(?:\.\d+)?\s*(kg|g|gr|gramm)\b/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function openKgPicker(product) {
+    els.variantTitle.textContent = `${product.name} — hajm tanlang`;
+    els.variantOptions.innerHTML = "";
+    const stem = productStem(product.name) || product.name;
+    (product.kg_packs || []).forEach((pack) => {
+      addOptionButton(`${pack.label} — ${formatMoney(pack.price)}`, () => {
+        const useReal = !pack.virtual;
+        upsertCartItem({
+          product_id: pack.product_id || product.id,
+          variant_id: 0,
+          pack_grams: useReal ? 0 : pack.grams,
+          name: useReal && product.id === pack.product_id
+            ? product.name
+            : `${stem} ${pack.label}`.trim(),
+          price: pack.price,
+          quantity: 1,
+        });
+      });
+    });
+    (product.kg_money || []).forEach((opt) => {
+      const detail = opt.detail ? ` (${opt.detail})` : "";
+      addOptionButton(`${opt.label}${detail} — ${formatMoney(opt.amount)}`, () => {
+        upsertCartItem({
+          product_id: opt.product_id || product.id,
+          variant_id: 0,
+          pack_amount: opt.amount,
+          name: `${stem} ${opt.label}${detail}`.trim(),
+          price: opt.amount,
+          quantity: 1,
+        });
+      });
     });
     els.variantDialog.showModal();
   }
 
   function upsertCartItem(item) {
-    const key = cartKey(item.product_id, item.variant_id);
-    const existing = state.cart.find(
-      (c) => cartKey(c.product_id, c.variant_id) === key
-    );
+    const key = cartKey(item);
+    const existing = state.cart.find((c) => cartKey(c) === key);
     if (existing) {
       existing.quantity += item.quantity;
     } else {
@@ -312,15 +382,13 @@
     }
   }
 
-  function setQty(productId, variantId, delta) {
-    const key = cartKey(productId, variantId);
-    const item = state.cart.find((c) => cartKey(c.product_id, c.variant_id) === key);
-    if (!item) return;
-    item.quantity += delta;
-    if (item.quantity <= 0) {
-      state.cart = state.cart.filter(
-        (c) => cartKey(c.product_id, c.variant_id) !== key
-      );
+  function setQty(item, delta) {
+    const key = cartKey(item);
+    const found = state.cart.find((c) => cartKey(c) === key);
+    if (!found) return;
+    found.quantity += delta;
+    if (found.quantity <= 0) {
+      state.cart = state.cart.filter((c) => cartKey(c) !== key);
     }
     saveCart();
     updateBadge();
@@ -396,10 +464,10 @@
       row.querySelector("p").textContent = `${formatMoney(item.price)} × ${item.quantity}`;
       row.querySelector("span").textContent = String(item.quantity);
       row.querySelector('[data-act="dec"]').addEventListener("click", () =>
-        setQty(item.product_id, item.variant_id, -1)
+        setQty(item, -1)
       );
       row.querySelector('[data-act="inc"]').addEventListener("click", () =>
-        setQty(item.product_id, item.variant_id, 1)
+        setQty(item, 1)
       );
       els.cartList.appendChild(row);
     });
@@ -571,6 +639,8 @@
         product_id: item.product_id,
         quantity: item.quantity,
         variant_id: item.variant_id || undefined,
+        pack_grams: item.pack_grams || undefined,
+        pack_amount: item.pack_amount || undefined,
       })),
     };
     if (devUser && !payload.initData && !telegramUser) {

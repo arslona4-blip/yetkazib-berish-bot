@@ -7,6 +7,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import threading
 import time
 from pathlib import Path
@@ -213,6 +214,108 @@ def parse_init_data_user_fallback(init_data: str) -> dict[str, Any] | None:
     return user
 
 
+_MAX_PACK_GRAMS = 50_000
+_MAX_PACK_AMOUNT = 5_000_000
+
+
+def _int_field(raw: dict[str, Any], key: str) -> int:
+    value = raw.get(key)
+    if value in (None, "", 0, "0"):
+        return 0
+    return int(value)
+
+
+def _kg_line_from_pack(product: Any, pack_grams: int, pack_amount: int) -> tuple[str, int]:
+    """Kg mahsulot: 250g/500g yoki so‘mlik. Narxni server hisoblaydi."""
+    from bot.shop_ai import _money_label, _product_grams, grams_for_money
+
+    prod_grams = _product_grams(product)
+    if not prod_grams:
+        raise ValueError(f"'{product['name']}' uchun gramm/so'mlik yo'q")
+    price = int(effective_product_price(product))
+    price_kg = max(1, int(round(price * 1000.0 / prod_grams)))
+    if pack_amount:
+        grams = grams_for_money(price_kg, pack_amount)
+        if grams < 1:
+            raise ValueError("So'mlik hisoblanmadi")
+        return _money_label(str(product["name"]), grams, pack_amount), pack_amount
+    if pack_grams == prod_grams:
+        return str(product["name"]), price
+    unit_price = max(100, int(round(price_kg * pack_grams / 1000.0)))
+    stem = re.sub(
+        r"\d+(?:\.\d+)?\s*(kg|g|gr|gramm)\b",
+        "",
+        str(product["name"]),
+        flags=re.I,
+    )
+    stem = re.sub(r"\s+", " ", stem).strip() or str(product["name"])
+    if pack_grams >= 1000 and pack_grams % 1000 == 0:
+        label = f"{pack_grams // 1000} kg"
+    else:
+        label = f"{pack_grams} gramm"
+    return f"{stem} {label}".strip(), unit_price
+
+
+def _kg_api_fields(product: Any) -> dict[str, Any]:
+    from bot.shop_ai import expand_kg_packs, kg_family_for_product, kg_money_options
+
+    _query, family = kg_family_for_product(product)
+    packs = expand_kg_packs(family)
+    money_opts = kg_money_options(family)
+    return {
+        "kg_packs": [
+            {
+                "grams": int(opt["grams"]),
+                "price": int(opt["price"]),
+                "label": opt["label"],
+                "virtual": bool(opt["virtual"]),
+                "product_id": int(opt["product_id"]),
+                "kg_product_id": int(opt["kg_product_id"]),
+            }
+            for opt in packs
+        ],
+        "kg_money": [
+            {
+                "product_id": int(opt["product_id"]),
+                "amount": int(opt["amount"]),
+                "grams": int(opt["grams"]),
+                "label": opt["label"],
+                "detail": opt["detail"],
+            }
+            for opt in money_opts
+        ],
+    }
+
+
+def _product_api_payload(product: Any, *, extra: dict[str, Any] | None = None) -> dict[str, Any]:
+    variants = get_variants(int(product["id"]), active_only=True)
+    has_photo = bool(product["image_file_id"]) if "image_file_id" in product.keys() else False
+    payload: dict[str, Any] = {
+        "id": int(product["id"]),
+        "name": product["name"],
+        "price": int(product["price"]),
+        "display_price": product_display_price(product),
+        "description": product["description"] or "",
+        "category_id": product["category_id"],
+        "category_name": (
+            product["category_name"] if "category_name" in product.keys() else None
+        ),
+        "photo_url": f"/api/photo/{product['id']}" if has_photo else None,
+        "variants": [
+            {
+                "id": int(v["id"]),
+                "name": v["name"],
+                "price": int(v["price"]),
+            }
+            for v in variants
+        ],
+    }
+    payload.update(_kg_api_fields(product))
+    if extra:
+        payload.update(extra)
+    return payload
+
+
 def resolve_order_items(
     items_raw: list,
 ) -> tuple[list[dict[str, Any]], int]:
@@ -230,10 +333,20 @@ def resolve_order_items(
             if variant_id_raw not in (None, "", 0, "0")
             else 0
         )
+        pack_grams = _int_field(raw, "pack_grams")
+        pack_amount = _int_field(raw, "pack_amount")
+        if pack_grams < 0 or pack_amount < 0:
+            raise ValueError("Hajm noto'g'ri")
+        if pack_grams > _MAX_PACK_GRAMS:
+            raise ValueError("Hajm juda katta")
+        if pack_amount > _MAX_PACK_AMOUNT:
+            raise ValueError("Summa juda katta")
         product = get_product(product_id)
         if not product:
             raise ValueError(f"Mahsulot topilmadi: {product_id}")
-        if variant_id:
+        if pack_grams or pack_amount:
+            name, unit_price = _kg_line_from_pack(product, pack_grams, pack_amount)
+        elif variant_id:
             variant = get_variant(variant_id)
             if not variant or int(variant["product_id"]) != product_id:
                 raise ValueError(f"Variant topilmadi: {variant_id}")
@@ -518,30 +631,7 @@ async def api_products(request: web.Request) -> web.Response:
             raise web.HTTPBadRequest(text="category_id noto'g'ri")
 
     products = get_products(active_only=True, category_id=category_id)
-    payload = []
-    for p in products:
-        variants = get_variants(int(p["id"]), active_only=True)
-        has_photo = bool(p["image_file_id"]) if "image_file_id" in p.keys() else False
-        payload.append(
-            {
-                "id": int(p["id"]),
-                "name": p["name"],
-                "price": int(p["price"]),
-                "display_price": product_display_price(p),
-                "description": p["description"] or "",
-                "category_id": p["category_id"],
-                "category_name": p["category_name"] if "category_name" in p.keys() else None,
-                "photo_url": f"/api/photo/{p['id']}" if has_photo else None,
-                "variants": [
-                    {
-                        "id": int(v["id"]),
-                        "name": v["name"],
-                        "price": int(v["price"]),
-                    }
-                    for v in variants
-                ],
-            }
-        )
+    payload = [_product_api_payload(p) for p in products]
     return web.json_response(payload)
 
 
@@ -552,23 +642,8 @@ async def api_barcode(request: web.Request) -> web.Response:
     product = get_product_by_barcode(code)
     if not product:
         raise web.HTTPNotFound(text="Mahsulot topilmadi")
-    variants = get_variants(int(product["id"]), active_only=True)
     return web.json_response(
-        {
-            "id": int(product["id"]),
-            "name": product["name"],
-            "price": int(product["price"]),
-            "display_price": product_display_price(product),
-            "barcode": code,
-            "variants": [
-                {
-                    "id": int(v["id"]),
-                    "name": v["name"],
-                    "price": int(v["price"]),
-                }
-                for v in variants
-            ],
-        }
+        _product_api_payload(product, extra={"barcode": code})
     )
 
 
