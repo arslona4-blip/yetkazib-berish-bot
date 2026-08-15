@@ -343,18 +343,35 @@ def shop_ai_results_keyboard(products) -> InlineKeyboardMarkup | None:
     """AI qidiruv: qadoq + (kg bo‘lsa) so‘mlik tugmalar."""
     if not products:
         return None
-    from bot.shop_ai import _human_pack_label, kg_money_options, money
+    from bot.shop_ai import (
+        _human_pack_label,
+        expand_kg_packs,
+        kg_money_options,
+        money,
+    )
 
     buttons: list[list[InlineKeyboardButton]] = []
-    for p in products[:8]:
-        label = _human_pack_label(str(p["name"]))
-        show = label if label != str(p["name"]) else str(p["name"])
-        btn = f"{show} — {money(int(p['price']))}"
-        if len(btn) > 64:
-            btn = btn[:61] + "…"
-        buttons.append(
-            [InlineKeyboardButton(btn, callback_data=f"cart_add:{int(p['id'])}:0")]
-        )
+    packs = expand_kg_packs(products)
+    if packs:
+        for opt in packs:
+            btn = f"{opt['label']} — {money(int(opt['price']))}"
+            if len(btn) > 64:
+                btn = btn[:61] + "…"
+            if opt["virtual"]:
+                cb = f"ai_p:{opt['kg_product_id']}:{opt['grams']}"
+            else:
+                cb = f"cart_add:{opt['product_id']}:0"
+            buttons.append([InlineKeyboardButton(btn, callback_data=cb)])
+    else:
+        for p in products[:8]:
+            label = _human_pack_label(str(p["name"]))
+            show = label if label != str(p["name"]) else str(p["name"])
+            btn = f"{show} — {money(int(p['price']))}"
+            if len(btn) > 64:
+                btn = btn[:61] + "…"
+            buttons.append(
+                [InlineKeyboardButton(btn, callback_data=f"cart_add:{int(p['id'])}:0")]
+            )
     for opt in kg_money_options(products):
         btn = f"{opt['label']} · {opt['detail']}"
         if len(btn) > 64:

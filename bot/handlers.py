@@ -774,6 +774,11 @@ async def product_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await query.edit_message_text("Mahsulot topilmadi.")
         return
 
+    from bot.shop_ai_handlers import show_kg_product_options
+
+    if await show_kg_product_options(update, product):
+        return
+
     variants = get_variants(product_id)
 
     # O'lchamsiz mahsulot — rasm bo'lsa kartochka, yo'qsa tezkor savatga

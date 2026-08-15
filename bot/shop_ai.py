@@ -460,6 +460,82 @@ def grams_for_money(price_1kg: int, amount: int) -> int:
     return max(1, int(round(int(amount) * 1000.0 / int(price_1kg))))
 
 
+KG_PACK_GRAMS = (250, 500, 1000)
+
+
+def _product_grams(product: Any) -> int | None:
+    size, unit = _pack_size_from_name(str(product["name"]))
+    if not size or not unit:
+        return None
+    if unit in {"g", "gr"}:
+        return int(round(size))
+    if unit == "kg":
+        return int(round(size * 1000))
+    return None
+
+
+def expand_kg_packs(products: list[Any]) -> list[dict[str, Any]]:
+    """1kg (yoki boshqa kg) bor bo‘lsa — 250g / 500g / 1kg (va katalogdagi boshqa og‘irliklar)."""
+    if not products:
+        return []
+    kg = _find_1kg_product(products)
+    ref = kg
+    ref_grams = 1000
+    if ref is None:
+        for p in products:
+            grams = _product_grams(p)
+            if grams and grams >= 1000:
+                ref, ref_grams = p, grams
+                break
+    if ref is None:
+        return []
+    price_ref = int(ref["price"])
+    price_kg = max(1, int(round(price_ref * 1000.0 / ref_grams)))
+    by_grams: dict[int, Any] = {}
+    for p in products:
+        grams = _product_grams(p)
+        if grams:
+            by_grams[grams] = p
+    wanted = sorted(set(KG_PACK_GRAMS) | set(by_grams.keys()))
+    out: list[dict[str, Any]] = []
+    for grams in wanted:
+        if grams <= 0:
+            continue
+        real = by_grams.get(grams)
+        price = (
+            int(real["price"])
+            if real is not None
+            else max(100, int(round(price_kg * grams / 1000.0)))
+        )
+        if grams >= 1000 and grams % 1000 == 0:
+            label = f"{grams // 1000} kg"
+        else:
+            label = f"{grams} gramm"
+        out.append(
+            {
+                "grams": grams,
+                "price": price,
+                "label": label,
+                "product_id": int(real["id"]) if real is not None else int(ref["id"]),
+                "virtual": real is None,
+                "kg_product_id": int(ref["id"]),
+            }
+        )
+    return out
+
+
+def kg_family_for_product(product: Any) -> tuple[str, list[Any]]:
+    """Katalogdagi kg mahsulot uchun oila (guruch 1kg → 250g/500g/1kg)."""
+    raw_name = str(product["name"])
+    query = _base_name(raw_name) or raw_name
+    family = find_variants(query)
+    if not family:
+        family = [product]
+    elif not any(int(p["id"]) == int(product["id"]) for p in family):
+        family = [product, *family]
+    return query, family
+
+
 def kg_money_options(products: list[Any]) -> list[dict[str, Any]]:
     """1kg bor bo‘lsa — 5000 / 10000 so‘mlik variantlar."""
     kg = _find_1kg_product(products)
@@ -484,9 +560,10 @@ def kg_money_options(products: list[Any]) -> list[dict[str, Any]]:
 def format_variants(query: str, products: list[Any]) -> str:
     title = query.strip().title() if query else "Mahsulot"
     money_opts = kg_money_options(products)
+    packs = expand_kg_packs(products)
 
     # Bitta oddiy (kg emas) mahsulot
-    if len(products) == 1 and not money_opts:
+    if len(products) == 1 and not money_opts and not packs:
         p = products[0]
         return (
             f"Topdim: <b>{p['name']}</b> — {money(int(p['price']))}\n"
@@ -498,10 +575,14 @@ def format_variants(query: str, products: list[Any]) -> str:
         "————————————",
         "<b>Qadoq:</b>",
     ]
-    for p in products:
-        label = _human_pack_label(str(p["name"]))
-        show = label if label != str(p["name"]) else str(p["name"])
-        lines.append(f"• <b>{show}</b> — {money(int(p['price']))}")
+    if packs:
+        for opt in packs:
+            lines.append(f"• <b>{opt['label']}</b> — {money(int(opt['price']))}")
+    else:
+        for p in products:
+            label = _human_pack_label(str(p["name"]))
+            show = label if label != str(p["name"]) else str(p["name"])
+            lines.append(f"• <b>{show}</b> — {money(int(p['price']))}")
 
     if money_opts:
         lines.append("")
@@ -724,6 +805,48 @@ def try_multi_add(user_id: int, user_text: str) -> tuple[str, list[Any]] | None:
             line_total = amount * max(1, qty)
             added_lines.append(f"• {label} × {max(1, qty)} — {money(line_total)}")
             products.append(kg_product)
+            continue
+
+        grams_want = None
+        if want_size is not None:
+            wu = (want_unit or "").lower()
+            if wu in {"g", "gr"}:
+                grams_want = float(want_size)
+            elif wu == "kg":
+                grams_want = float(want_size) * 1000.0
+        kg_product = _find_1kg_product(variants)
+        if grams_want and kg_product:
+            grams_i = max(1, int(round(grams_want)))
+            exact = None
+            for p in variants:
+                g = _product_grams(p)
+                if g is not None and abs(g - grams_i) <= 1:
+                    exact = p
+                    break
+            if exact:
+                db.add_to_cart(user_id, int(exact["id"]), max(1, qty))
+                line_total = int(exact["price"]) * max(1, qty)
+                added_lines.append(
+                    f"• {exact['name']} × {max(1, qty)} — {money(line_total)}"
+                )
+                products.append(exact)
+            else:
+                price_kg = int(kg_product["price"])
+                amount = max(100, int(round(price_kg * grams_i / 1000.0)))
+                label = _money_label(str(kg_product["name"]), grams_i, amount)
+                for _ in range(max(1, qty)):
+                    db.add_money_to_cart(
+                        user_id,
+                        int(kg_product["id"]),
+                        amount=amount,
+                        grams=grams_i,
+                        label=label,
+                    )
+                line_total = amount * max(1, qty)
+                added_lines.append(
+                    f"• {label} × {max(1, qty)} — {money(line_total)}"
+                )
+                products.append(kg_product)
             continue
 
         if _should_list_variants(seg, variants):

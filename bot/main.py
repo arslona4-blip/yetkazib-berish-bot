@@ -70,7 +70,11 @@ from bot.handlers import (
     webapp_scan_data,
 )
 from bot.jobs import setup_jobs
-from bot.shop_ai_handlers import shop_ai_message, shop_ai_money_callback
+from bot.shop_ai_handlers import (
+    shop_ai_message,
+    shop_ai_money_callback,
+    shop_ai_pack_callback,
+)
 from bot.webapp import set_bot, start_webapp_server
 
 
@@ -243,6 +247,7 @@ def main() -> None:
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, webapp_scan_data))
     app.add_handler(CallbackQueryHandler(shop_ai_money_callback, pattern=r"^ai_m:"))
+    app.add_handler(CallbackQueryHandler(shop_ai_pack_callback, pattern=r"^ai_p:"))
     app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, shop_ai_message)
     )
