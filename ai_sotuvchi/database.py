@@ -5,7 +5,12 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any, Iterator
 
-from ai_sotuvchi.config import DATABASE_PATH
+from ai_sotuvchi import config
+from ai_sotuvchi.matching import (
+    grams_for_money,
+    pack_grams_from_name,
+    price_from_kg,
+)
 
 
 def _now() -> str:
@@ -14,7 +19,7 @@ def _now() -> str:
 
 @contextmanager
 def get_connection() -> Iterator[sqlite3.Connection]:
-    conn = sqlite3.connect(DATABASE_PATH)
+    conn = sqlite3.connect(config.DATABASE_PATH)
     conn.row_factory = sqlite3.Row
     try:
         yield conn
@@ -54,15 +59,26 @@ def init_db() -> None:
             );
 
             CREATE TABLE IF NOT EXISTS cart (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
                 product_id INTEGER NOT NULL,
                 quantity INTEGER NOT NULL DEFAULT 1,
-                PRIMARY KEY (user_id, product_id)
+                custom_price INTEGER,
+                custom_label TEXT NOT NULL DEFAULT '',
+                grams INTEGER NOT NULL DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS chat_memory (
                 user_id INTEGER PRIMARY KEY,
                 history_json TEXT NOT NULL DEFAULT '[]',
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS customers (
+                user_id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL DEFAULT '',
+                phone TEXT NOT NULL DEFAULT '',
+                address TEXT NOT NULL DEFAULT '',
                 updated_at TEXT NOT NULL
             );
             """
@@ -82,13 +98,28 @@ def init_db() -> None:
             conn.execute(
                 "ALTER TABLE orders ADD COLUMN subtotal INTEGER NOT NULL DEFAULT 0"
             )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS customers (
+                user_id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL DEFAULT '',
+                phone TEXT NOT NULL DEFAULT '',
+                address TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        _migrate_cart_table(conn)
         count = conn.execute("SELECT COUNT(*) AS c FROM products").fetchone()["c"]
         if count == 0:
             seed = [
                 ("Guruch 1kg", 18000, "Oq guruch, yumshoq", "Oziq-ovqat"),
+                ("Sut 0.5L", 7000, "Pastörizatsiya qilingan", "Ichimliklar"),
                 ("Sut 1L", 12000, "Pastörizatsiya qilingan", "Ichimliklar"),
                 ("Non", 4000, "Yangi non", "Oziq-ovqat"),
+                ("Coca Cola 0.5L", 8000, "Gazli ichimlik", "Ichimliklar"),
                 ("Coca-Cola 1.5L", 14000, "Gazli ichimlik", "Ichimliklar"),
+                ("Coca Cola 2L", 18000, "Gazli ichimlik", "Ichimliklar"),
                 ("Yog‘ 1L", 22000, "O‘simlik yog‘i", "Oziq-ovqat"),
                 ("Shakar 1kg", 15000, "Oq shakar", "Oziq-ovqat"),
                 ("Sovun", 8000, "Hojatxona sovuni", "Uy-ro‘zg‘or"),
@@ -102,6 +133,207 @@ def init_db() -> None:
                     """,
                     (name, price, desc, cat, _now()),
                 )
+        _ensure_size_variants(conn)
+        _sync_all_weight_pack_prices(conn)
+        _fix_common_product_spellings(conn)
+
+
+def _migrate_cart_table(conn: sqlite3.Connection) -> None:
+    """Eski (user_id, product_id) PK → id + so‘mlik ustunlari."""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(cart)").fetchall()}
+    if not cols:
+        return
+    need_rebuild = "id" not in cols
+    if need_rebuild:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS cart_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                product_id INTEGER NOT NULL,
+                quantity INTEGER NOT NULL DEFAULT 1,
+                custom_price INTEGER,
+                custom_label TEXT NOT NULL DEFAULT '',
+                grams INTEGER NOT NULL DEFAULT 0
+            );
+            INSERT INTO cart_new (user_id, product_id, quantity, custom_price, custom_label, grams)
+            SELECT user_id, product_id, quantity, NULL, '', 0 FROM cart;
+            DROP TABLE cart;
+            ALTER TABLE cart_new RENAME TO cart;
+            """
+        )
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(cart)").fetchall()}
+    if "custom_price" not in cols:
+        conn.execute("ALTER TABLE cart ADD COLUMN custom_price INTEGER")
+    if "custom_label" not in cols:
+        conn.execute(
+            "ALTER TABLE cart ADD COLUMN custom_label TEXT NOT NULL DEFAULT ''"
+        )
+    if "grams" not in cols:
+        conn.execute(
+            "ALTER TABLE cart ADD COLUMN grams INTEGER NOT NULL DEFAULT 0"
+        )
+
+
+def _fix_common_product_spellings(conn: sqlite3.Connection) -> None:
+    fixes = [
+        ("YUBILEYNI PECNENE  1 kg", "Yubileyniy Pechene 1kg"),
+        ("Yubileyni pecnene 250g", "Yubileyniy Pechene 250g"),
+        ("Yubileyni pecnene 500g", "Yubileyniy Pechene 500g"),
+        ("YUBILEYNI PECNENE 1 kg", "Yubileyniy Pechene 1kg"),
+        ("Yubileyni pecnene 1kg", "Yubileyniy Pechene 1kg"),
+    ]
+    for old, new in fixes:
+        conn.execute("UPDATE products SET name = ? WHERE name = ?", (new, old))
+        conn.execute(
+            "UPDATE products SET name = ? WHERE lower(name) = lower(?) AND name != ?",
+            (new, old, new),
+        )
+
+
+def _weight_family_stem(name: str) -> str | None:
+    import re
+
+    n = (name or "").casefold()
+    if not re.search(r"\d+(?:[.,]\d+)?\s*(kg|g|gr|gramm)\b", n):
+        return None
+    base = re.sub(r"\d+(?:[.,]\d+)?\s*(kg|g|gr|gramm)\b", " ", n)
+    base = re.sub(r"[-_/]+", " ", base)
+    base = re.sub(r"\s+", " ", base).strip()
+    return base or None
+
+
+def _sync_weight_pack_prices(conn: sqlite3.Connection, *, stem: str) -> None:
+    rows = conn.execute(
+        "SELECT id, name, price FROM products WHERE is_active = 1 AND lower(name) LIKE ?",
+        (f"%{stem}%",),
+    ).fetchall()
+    family = [
+        r
+        for r in rows
+        if _weight_family_stem(str(r["name"])) == stem.casefold().strip()
+    ]
+    kg_row = None
+    for r in family:
+        if pack_grams_from_name(str(r["name"])) == 1000:
+            kg_row = r
+            break
+    if not kg_row:
+        return
+    price_1kg = int(kg_row["price"])
+    for r in family:
+        grams = pack_grams_from_name(str(r["name"]))
+        if not grams or grams >= 1000:
+            continue
+        new_price = price_from_kg(price_1kg, grams)
+        if int(r["price"]) != new_price:
+            conn.execute(
+                "UPDATE products SET price = ? WHERE id = ?",
+                (new_price, int(r["id"])),
+            )
+
+
+def _ensure_weight_packs_for_stem(conn: sqlite3.Connection, stem: str) -> None:
+    rows = conn.execute(
+        "SELECT id, name, price, description, category FROM products "
+        "WHERE is_active = 1 AND lower(name) LIKE ?",
+        (f"%{stem}%",),
+    ).fetchall()
+    kg_row = None
+    existing_grams: set[int] = set()
+    for r in rows:
+        if _weight_family_stem(str(r["name"])) != stem.casefold().strip():
+            continue
+        grams = pack_grams_from_name(str(r["name"]))
+        if grams is None:
+            continue
+        existing_grams.add(grams)
+        if grams == 1000:
+            kg_row = r
+    if not kg_row:
+        return
+    price_1kg = int(kg_row["price"])
+    cat = str(kg_row["category"] or "Oziq-ovqat")
+    desc_base = str(kg_row["description"] or stem.title())
+    display = stem[:1].upper() + stem[1:] if stem else "Mahsulot"
+    for grams, label in ((250, "250g"), (500, "500g")):
+        if grams in existing_grams:
+            continue
+        conn.execute(
+            """
+            INSERT INTO products (name, price, description, category, is_active, created_at)
+            VALUES (?, ?, ?, ?, 1, ?)
+            """,
+            (
+                f"{display} {label}",
+                price_from_kg(price_1kg, grams),
+                f"{desc_base} — {grams} gramm",
+                cat,
+                _now(),
+            ),
+        )
+
+
+def _sync_all_weight_pack_prices(conn: sqlite3.Connection) -> None:
+    rows = conn.execute(
+        "SELECT id, name, price FROM products WHERE is_active = 1"
+    ).fetchall()
+    stems: set[str] = set()
+    for r in rows:
+        if pack_grams_from_name(str(r["name"])) != 1000:
+            continue
+        stem = _weight_family_stem(str(r["name"]))
+        if stem:
+            stems.add(stem)
+    for stem in sorted(stems):
+        _ensure_weight_packs_for_stem(conn, stem)
+        _sync_weight_pack_prices(conn, stem=stem)
+
+
+def _ensure_size_variants(conn: sqlite3.Connection) -> None:
+    families = [
+        (
+            "guruch",
+            [("Guruch 1kg", 18000, "Oq guruch — 1 kilogram", "Oziq-ovqat")],
+        ),
+        (
+            "shakar",
+            [("Shakar 1kg", 15000, "Oq shakar — 1 kilogram", "Oziq-ovqat")],
+        ),
+        (
+            "sut",
+            [
+                ("Sut 0.5L", 7000, "Pastörizatsiya qilingan — 0.5 litr", "Ichimliklar"),
+                ("Sut 1L", 12000, "Pastörizatsiya qilingan — 1 litr", "Ichimliklar"),
+            ],
+        ),
+        (
+            "cola",
+            [
+                ("Coca Cola 0.5L", 8000, "Gazli ichimlik — 0.5 litr", "Ichimliklar"),
+                ("Coca-Cola 1.5L", 14000, "Gazli ichimlik — 1.5 litr", "Ichimliklar"),
+                ("Coca Cola 2L", 18000, "Gazli ichimlik — 2 litr", "Ichimliklar"),
+            ],
+        ),
+    ]
+    for stem, variants in families:
+        existing = {
+            str(r["name"]).casefold()
+            for r in conn.execute(
+                "SELECT name FROM products WHERE is_active = 1 AND lower(name) LIKE ?",
+                (f"%{stem}%",),
+            ).fetchall()
+        }
+        for name, price, desc, cat in variants:
+            if name.casefold() in existing:
+                continue
+            conn.execute(
+                """
+                INSERT INTO products (name, price, description, category, is_active, created_at)
+                VALUES (?, ?, ?, ?, 1, ?)
+                """,
+                (name, price, desc, cat, _now()),
+            )
 
 
 def list_products(active_only: bool = True) -> list[sqlite3.Row]:
@@ -115,7 +347,10 @@ def list_products(active_only: bool = True) -> list[sqlite3.Row]:
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT * FROM products ORDER BY id DESC"
+                """
+                SELECT * FROM products
+                ORDER BY category COLLATE NOCASE, name COLLATE NOCASE
+                """
             ).fetchall()
     return list(rows)
 
@@ -191,7 +426,72 @@ def set_product_price(product_id: int, price: int) -> bool:
             "UPDATE products SET price = ? WHERE id = ?",
             (max(0, int(price)), int(product_id)),
         )
+        if cur.rowcount <= 0:
+            return False
+        row = conn.execute(
+            "SELECT name FROM products WHERE id = ?", (int(product_id),)
+        ).fetchone()
+        if row and pack_grams_from_name(str(row["name"])) == 1000:
+            stem = _weight_family_stem(str(row["name"]))
+            if stem:
+                _sync_weight_pack_prices(conn, stem=stem)
+        return True
+
+
+def set_product_name(product_id: int, name: str) -> bool:
+    with get_connection() as conn:
+        cur = conn.execute(
+            "UPDATE products SET name = ? WHERE id = ?",
+            (name.strip(), int(product_id)),
+        )
         return cur.rowcount > 0
+
+
+def set_product_category(product_id: int, category: str) -> bool:
+    with get_connection() as conn:
+        cur = conn.execute(
+            "UPDATE products SET category = ? WHERE id = ?",
+            ((category or "").strip() or "Umumiy", int(product_id)),
+        )
+        return cur.rowcount > 0
+
+
+def set_product_description(product_id: int, description: str) -> bool:
+    with get_connection() as conn:
+        cur = conn.execute(
+            "UPDATE products SET description = ? WHERE id = ?",
+            ((description or "").strip(), int(product_id)),
+        )
+        return cur.rowcount > 0
+
+
+def update_product(
+    product_id: int,
+    *,
+    name: str | None = None,
+    price: int | None = None,
+    category: str | None = None,
+    description: str | None = None,
+    image_file_id: str | None = None,
+    is_active: bool | None = None,
+) -> bool:
+    product = get_product(product_id)
+    if not product:
+        return False
+    changed = False
+    if name is not None and name.strip() and name.strip() != product["name"]:
+        changed = set_product_name(product_id, name) or changed
+    if price is not None and int(price) != int(product["price"]):
+        changed = set_product_price(product_id, int(price)) or changed
+    if category is not None and category.strip() != str(product["category"] or ""):
+        changed = set_product_category(product_id, category) or changed
+    if description is not None and description != str(product["description"] or ""):
+        changed = set_product_description(product_id, description) or changed
+    if image_file_id is not None:
+        changed = set_product_image(product_id, image_file_id) or changed
+    if is_active is not None and bool(is_active) != bool(product["is_active"]):
+        changed = set_product_active(product_id, bool(is_active)) or changed
+    return changed
 
 
 def set_product_active(product_id: int, active: bool) -> bool:
@@ -215,6 +515,16 @@ def list_categories() -> list[str]:
     return [str(r["category"]) for r in rows if r["category"]]
 
 
+def list_products_grouped(active_only: bool = False) -> list[tuple[str, list[sqlite3.Row]]]:
+    """Toifa → alifbo tartibidagi mahsulotlar."""
+    products = list_products(active_only=active_only)
+    grouped: dict[str, list[sqlite3.Row]] = {}
+    for p in products:
+        cat = str(p["category"] or "Umumiy")
+        grouped.setdefault(cat, []).append(p)
+    return sorted(grouped.items(), key=lambda kv: kv[0].casefold())
+
+
 def list_products_by_category(category: str) -> list[sqlite3.Row]:
     with get_connection() as conn:
         rows = conn.execute(
@@ -229,54 +539,109 @@ def list_products_by_category(category: str) -> list[sqlite3.Row]:
 
 
 def cart_add(user_id: int, product_id: int, qty: int = 1) -> None:
+    """Oddiy mahsulot (qadoq) — bir xil product_id qatoriga qo‘shiladi."""
     qty = max(1, int(qty))
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT quantity FROM cart WHERE user_id = ? AND product_id = ?",
+            """
+            SELECT id, quantity FROM cart
+            WHERE user_id = ? AND product_id = ?
+              AND custom_price IS NULL AND IFNULL(grams, 0) = 0
+            """,
             (user_id, product_id),
         ).fetchone()
         if row:
             conn.execute(
-                "UPDATE cart SET quantity = quantity + ? WHERE user_id = ? AND product_id = ?",
-                (qty, user_id, product_id),
+                "UPDATE cart SET quantity = quantity + ? WHERE id = ?",
+                (qty, int(row["id"])),
             )
         else:
             conn.execute(
-                "INSERT INTO cart (user_id, product_id, quantity) VALUES (?, ?, ?)",
+                """
+                INSERT INTO cart (user_id, product_id, quantity, custom_price, custom_label, grams)
+                VALUES (?, ?, ?, NULL, '', 0)
+                """,
                 (user_id, product_id, qty),
             )
 
 
-def cart_set_qty(user_id: int, product_id: int, qty: int) -> None:
+def cart_add_by_money(
+    user_id: int,
+    product_id: int,
+    *,
+    amount: int,
+    grams: int,
+    label: str,
+) -> dict[str, Any]:
+    """Kg mahsulotdan so‘mlik olish (masalan 5000 so‘mlik guruch)."""
+    amount = max(100, int(amount))
+    grams = max(1, int(grams))
+    label = (label or "").strip() or f"#{product_id}"
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT id, quantity FROM cart
+            WHERE user_id = ? AND product_id = ?
+              AND custom_price = ? AND grams = ?
+            """,
+            (user_id, product_id, amount, grams),
+        ).fetchone()
+        if row:
+            conn.execute(
+                "UPDATE cart SET quantity = quantity + 1 WHERE id = ?",
+                (int(row["id"]),),
+            )
+            cid = int(row["id"])
+            qty = int(row["quantity"]) + 1
+        else:
+            cur = conn.execute(
+                """
+                INSERT INTO cart (
+                    user_id, product_id, quantity, custom_price, custom_label, grams
+                ) VALUES (?, ?, 1, ?, ?, ?)
+                """,
+                (user_id, product_id, amount, label, grams),
+            )
+            cid = int(cur.lastrowid)
+            qty = 1
+    return {
+        "cart_id": cid,
+        "product_id": int(product_id),
+        "name": label,
+        "price": amount,
+        "quantity": qty,
+        "grams": grams,
+        "line_total": amount * qty,
+        "is_custom": True,
+    }
+
+
+def cart_set_qty(user_id: int, cart_id: int, qty: int) -> None:
     qty = int(qty)
     with get_connection() as conn:
         if qty <= 0:
             conn.execute(
-                "DELETE FROM cart WHERE user_id = ? AND product_id = ?",
-                (user_id, product_id),
+                "DELETE FROM cart WHERE user_id = ? AND id = ?",
+                (user_id, int(cart_id)),
             )
             return
+        conn.execute(
+            "UPDATE cart SET quantity = ? WHERE user_id = ? AND id = ?",
+            (qty, user_id, int(cart_id)),
+        )
+
+
+def cart_delta(user_id: int, cart_id: int, delta: int) -> int:
+    """Miqdorni o‘zgartiradi (cart qator id); 0 = o‘chirilgan."""
+    with get_connection() as conn:
         row = conn.execute(
-            "SELECT quantity FROM cart WHERE user_id = ? AND product_id = ?",
-            (user_id, product_id),
+            "SELECT quantity FROM cart WHERE user_id = ? AND id = ?",
+            (user_id, int(cart_id)),
         ).fetchone()
-        if row:
-            conn.execute(
-                "UPDATE cart SET quantity = ? WHERE user_id = ? AND product_id = ?",
-                (qty, user_id, product_id),
-            )
-        else:
-            conn.execute(
-                "INSERT INTO cart (user_id, product_id, quantity) VALUES (?, ?, ?)",
-                (user_id, product_id, qty),
-            )
-
-
-def cart_delta(user_id: int, product_id: int, delta: int) -> int:
-    """Miqdorni o‘zgartiradi; yangi quantity qaytaradi (0 = o‘chirilgan)."""
-    items = {i["product_id"]: i["quantity"] for i in get_cart(user_id)}
-    cur = int(items.get(int(product_id), 0)) + int(delta)
-    cart_set_qty(user_id, product_id, cur)
+        if not row:
+            return 0
+        cur = int(row["quantity"]) + int(delta)
+    cart_set_qty(user_id, int(cart_id), cur)
     return max(0, cur)
 
 
@@ -289,23 +654,38 @@ def get_cart(user_id: int) -> list[dict[str, Any]]:
     with get_connection() as conn:
         rows = conn.execute(
             """
-            SELECT c.product_id, c.quantity, p.name, p.price
+            SELECT c.id AS cart_id, c.product_id, c.quantity, c.custom_price,
+                   c.custom_label, c.grams, p.name, p.price
             FROM cart c
             JOIN products p ON p.id = c.product_id
             WHERE c.user_id = ? AND p.is_active = 1
-            ORDER BY p.name
+            ORDER BY c.id
             """,
             (user_id,),
         ).fetchall()
     items = []
     for r in rows:
+        custom = r["custom_price"]
+        grams = int(r["grams"] or 0)
+        if custom is not None:
+            unit_price = int(custom)
+            name = str(r["custom_label"] or r["name"])
+            is_custom = True
+        else:
+            unit_price = int(r["price"])
+            name = str(r["name"])
+            is_custom = False
+        qty = int(r["quantity"])
         items.append(
             {
+                "cart_id": int(r["cart_id"]),
                 "product_id": int(r["product_id"]),
-                "name": r["name"],
-                "price": int(r["price"]),
-                "quantity": int(r["quantity"]),
-                "line_total": int(r["price"]) * int(r["quantity"]),
+                "name": name,
+                "price": unit_price,
+                "quantity": qty,
+                "grams": grams,
+                "line_total": unit_price * qty,
+                "is_custom": is_custom,
             }
         )
     return items
@@ -378,6 +758,17 @@ def fill_cart_from_order(user_id: int, order_id: int) -> int:
         product = get_product(pid)
         if not product or not product["is_active"] or qty <= 0:
             continue
+        if it.get("is_custom") or it.get("custom_price") is not None or it.get("grams"):
+            amount = int(it.get("price") or it.get("custom_price") or 0)
+            grams = int(it.get("grams") or 0)
+            label = str(it.get("name") or product["name"])
+            if amount > 0 and grams > 0:
+                for _ in range(qty):
+                    cart_add_by_money(
+                        user_id, pid, amount=amount, grams=grams, label=label
+                    )
+                added += 1
+                continue
         cart_add(user_id, pid, qty)
         added += 1
     return added
@@ -523,4 +914,44 @@ def save_memory(user_id: int, history: list[dict[str, str]]) -> None:
                 updated_at = excluded.updated_at
             """,
             (user_id, json.dumps(trimmed, ensure_ascii=False), _now()),
+        )
+
+
+def get_customer(user_id: int) -> dict[str, str] | None:
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT name, phone, address FROM customers WHERE user_id = ?",
+            (int(user_id),),
+        ).fetchone()
+    if not row:
+        return None
+    name = str(row["name"] or "").strip()
+    phone = str(row["phone"] or "").strip()
+    address = str(row["address"] or "").strip()
+    if not (name and phone and address):
+        return None
+    return {"name": name, "phone": phone, "address": address}
+
+
+def upsert_customer(
+    user_id: int, *, name: str, phone: str, address: str
+) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO customers (user_id, name, phone, address, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                name = excluded.name,
+                phone = excluded.phone,
+                address = excluded.address,
+                updated_at = excluded.updated_at
+            """,
+            (
+                int(user_id),
+                name.strip(),
+                phone.strip(),
+                address.strip(),
+                _now(),
+            ),
         )

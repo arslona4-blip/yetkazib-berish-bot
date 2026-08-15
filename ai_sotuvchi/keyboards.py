@@ -1,6 +1,7 @@
-from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
+from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
 from ai_sotuvchi.config import money
+from ai_sotuvchi.matching import human_pack_label, kg_money_options
 from ai_sotuvchi.texts import STATUS_LABELS
 
 
@@ -12,12 +13,22 @@ def main_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
     ]
     if is_admin:
         rows.append(["Admin", "➕ Mahsulot"])
-        rows.append(["📢 Xabar"])
+        rows.append(["📦 Mahsulotlar", "📢 Xabar"])
     return ReplyKeyboardMarkup(rows, resize_keyboard=True)
 
 
 def cancel_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup([["Bekor qilish"]], resize_keyboard=True)
+
+
+def phone_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("📱 Raqamni yuborish", request_contact=True)],
+            ["Bekor qilish"],
+        ],
+        resize_keyboard=True,
+    )
 
 
 def skip_keyboard() -> ReplyKeyboardMarkup:
@@ -57,12 +68,25 @@ def catalog_keyboard(products: list) -> InlineKeyboardMarkup:
 
 def search_results_keyboard(products: list) -> InlineKeyboardMarkup:
     buttons = []
-    for p in products[:6]:
+    money_opts = kg_money_options(products) if products else []
+    for p in products[:8]:
+        label = human_pack_label(str(p["name"]))
+        show = label if label != str(p["name"]) else str(p["name"])
+        price = money(int(p["price"])).replace(" so‘m", "")
         buttons.append(
             [
                 InlineKeyboardButton(
-                    f"Savatga · {p['name']}",
+                    f"{show} — {price}",
                     callback_data=f"add:{p['id']}",
+                )
+            ]
+        )
+    for opt in money_opts:
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    f"{opt['label']} ({opt['detail']})",
+                    callback_data=f"som:{opt['product_id']}:{opt['amount']}",
                 )
             ]
         )
@@ -72,15 +96,15 @@ def search_results_keyboard(products: list) -> InlineKeyboardMarkup:
 def cart_keyboard(items: list | None = None) -> InlineKeyboardMarkup:
     buttons: list[list[InlineKeyboardButton]] = []
     for it in items or []:
-        pid = it["product_id"]
+        cid = it.get("cart_id") or it["product_id"]
         buttons.append(
             [
-                InlineKeyboardButton("−", callback_data=f"qty:-:{pid}"),
+                InlineKeyboardButton("−", callback_data=f"qty:-:{cid}"),
                 InlineKeyboardButton(
-                    f"{it['name'][:16]} ×{it['quantity']}",
+                    f"{it['name'][:18]} ×{it['quantity']}",
                     callback_data="noop",
                 ),
-                InlineKeyboardButton("+", callback_data=f"qty:+:{pid}"),
+                InlineKeyboardButton("+", callback_data=f"qty:+:{cid}"),
             ]
         )
     buttons.append(
@@ -120,13 +144,61 @@ def admin_product_keyboard(product_id: int, active: bool = True) -> InlineKeyboa
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton(
-                    "Narxni o‘zgartirish", callback_data=f"ap:price:{product_id}"
-                ),
+                InlineKeyboardButton("📝 Nom", callback_data=f"ap:name:{product_id}"),
+                InlineKeyboardButton("💰 Narx", callback_data=f"ap:price:{product_id}"),
+            ],
+            [
+                InlineKeyboardButton("📁 Toifa", callback_data=f"ap:cat:{product_id}"),
+                InlineKeyboardButton("🖼 Rasm", callback_data=f"ap:photo:{product_id}"),
+            ],
+            [
+                InlineKeyboardButton("📄 Izoh", callback_data=f"ap:desc:{product_id}"),
                 InlineKeyboardButton(
                     "Yashirish" if active else "Yoqish",
                     callback_data=f"ap:toggle:{product_id}",
                 ),
+            ],
+            [InlineKeyboardButton("← Spiska", callback_data="ap:list")],
+        ]
+    )
+
+
+def admin_categories_keyboard(categories: list[str]) -> InlineKeyboardMarkup:
+    buttons: list[list[InlineKeyboardButton]] = []
+    row: list[InlineKeyboardButton] = []
+    for cat in categories:
+        row.append(InlineKeyboardButton(cat, callback_data=f"alist:{cat}"))
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    buttons.append([InlineKeyboardButton("Barchasi", callback_data="alist:")])
+    return InlineKeyboardMarkup(buttons)
+
+
+def admin_product_list_keyboard(products: list) -> InlineKeyboardMarkup:
+    buttons = []
+    for p in products[:40]:
+        mark = "" if p["is_active"] else " 🚫"
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    f"{p['name']} — {money(int(p['price']))}{mark}",
+                    callback_data=f"ap:view:{p['id']}",
+                )
+            ]
+        )
+    buttons.append([InlineKeyboardButton("← Toifalar", callback_data="ap:list")])
+    return InlineKeyboardMarkup(buttons)
+
+
+def saved_checkout_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("Ha, shu bilan", callback_data="chk:yes"),
+                InlineKeyboardButton("O‘zgartirish", callback_data="chk:no"),
             ]
         ]
     )
@@ -176,7 +248,3 @@ def bot_commands(is_admin: bool = False) -> list[BotCommand]:
             ]
         )
     return cmds
-
-
-# re-export
-__all__ = ["STATUS_LABELS"]
