@@ -256,7 +256,8 @@
         <h3 class="card-title"></h3>
         <p class="card-price"></p>
       `;
-      body.querySelector(".card-title").textContent = product.name;
+      body.querySelector(".card-title").textContent =
+        product.card_name || product.name;
       body.querySelector(".card-price").textContent =
         product.display_price || formatMoney(product.price);
       if (
@@ -340,7 +341,7 @@
   }
 
   function openKgPicker(product) {
-    els.variantTitle.textContent = `${product.name} — hajm tanlang`;
+    els.variantTitle.textContent = `${product.card_name || product.name} — hajm tanlang`;
     els.variantOptions.innerHTML = "";
     const stem = productStem(product.name) || product.name;
     (product.kg_packs || []).forEach((pack) => {

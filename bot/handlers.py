@@ -646,6 +646,9 @@ async def show_category_products(
     user_id = update.effective_user.id
     category = get_category(category_id)
     products = get_products(category_id=category_id)
+    from bot.shop_ai import collapse_catalog_families
+
+    shown = collapse_catalog_families(list(products))
     title = category_label(category) if category else "Toifa"
     if not products:
         text = (
@@ -658,7 +661,7 @@ async def show_category_products(
         text = (
             f"📁 <b>{title}</b>\n"
             f"{format_now_html()}\n"
-            f"{len(products)} ta mahsulot — tanlang ✨"
+            f"{len(shown)} ta mahsulot — tanlang ✨"
         )
         markup = catalog_keyboard(
             products,

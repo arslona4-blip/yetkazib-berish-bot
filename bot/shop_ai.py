@@ -64,8 +64,12 @@ _ALIASES = {
     "cola": "cola",
     "kola": "cola",
     "coca": "cola",
+    "cocacola": "cola",
     "fanta": "fanta",
     "pepsi": "pepsi",
+    "sprite": "sprite",
+    "suv": "suv",
+    "water": "suv",
 }
 
 
@@ -605,6 +609,144 @@ def expand_liter_packs(products: list[Any]) -> list[dict[str, Any]]:
     if len(items) < 2:
         return []
     return items
+
+
+def display_stem_name(name: str) -> str:
+    """«Coca Cola 1L» → «Coca Cola»."""
+    stem = re.sub(
+        r"\d+(?:[.,]\d+)?\s*(kg|l|lt|litr|gr|g|ml|gramm)\b",
+        "",
+        str(name),
+        flags=re.I,
+    )
+    stem = re.sub(r"[-_/]+", " ", stem)
+    stem = re.sub(r"\s+", " ", stem).strip()
+    return stem or str(name)
+
+
+def liter_stem_key(name: str) -> str:
+    """Bir xil ichimlik: «Coca Cola 1L» va «Cola 1.5L» → cola; Pepsi alohida."""
+    stem = _norm(display_stem_name(name))
+    tokens = [t for t in re.split(r"\W+", stem) if t and t not in _STOP]
+    mapped = [_ALIASES.get(t, t) for t in tokens]
+    if "cola" in mapped and any(t != "cola" for t in mapped):
+        mapped = [t for t in mapped if t != "cola"]
+    out: list[str] = []
+    for tok in mapped:
+        if not out or out[-1] != tok:
+            out.append(tok)
+    return " ".join(out)
+
+
+def liter_family_for_product(product: Any) -> tuple[str, list[Any]]:
+    """Barcha ichimlik hajmlari: Fanta/Pepsi/Cola 0.5L–2L — har biri o‘z narxi."""
+    if not _product_ml(product):
+        return "", []
+    key = liter_stem_key(str(product["name"]))
+    if not key:
+        return "", [product]
+    family: list[Any] = []
+    seen: set[int] = set()
+    for p in db.get_products():
+        if not _product_ml(p):
+            continue
+        if liter_stem_key(str(p["name"])) != key:
+            continue
+        pid = int(p["id"])
+        if pid in seen:
+            continue
+        seen.add(pid)
+        family.append(p)
+    if int(product["id"]) not in seen:
+        family.insert(0, product)
+    family.sort(key=lambda p: (_product_ml(p) or 0, int(p["id"])))
+    return key, family
+
+
+def _has_product_photo(product: Any) -> bool:
+    try:
+        return bool(product["image_file_id"])
+    except (KeyError, IndexError, TypeError):
+        return False
+
+
+def _pick_family_rep(members: list[Any]) -> Any:
+    def score(p: Any) -> tuple:
+        photo = 1 if _has_product_photo(p) else 0
+        ml = _product_ml(p) or 0
+        grams = _product_grams(p) or 0
+        size_pref = 0
+        if ml == 1500 or grams == 1000:
+            size_pref = 3
+        elif ml == 1000 or grams == 500:
+            size_pref = 2
+        elif ml or grams:
+            size_pref = 1
+        return (photo, size_pref, -int(p["id"]))
+
+    return max(members, key=score)
+
+
+def collapse_catalog_families(products: list[Any]) -> list[Any]:
+    """Cola/Fanta/Pepsi 1L+1.5L+2L — katalogda bitta kartochka."""
+    if not products:
+        return []
+    list_ids = {int(p["id"]) for p in products}
+    used: set[int] = set()
+    out: list[Any] = []
+    liter_groups: dict[str, list[Any]] = {}
+    for p in products:
+        if not _product_ml(p):
+            continue
+        key = liter_stem_key(str(p["name"]))
+        if key:
+            liter_groups.setdefault(key, []).append(p)
+
+    for p in products:
+        pid = int(p["id"])
+        if pid in used:
+            continue
+        if _product_ml(p):
+            key = liter_stem_key(str(p["name"]))
+            members = liter_groups.get(key) or [p]
+            mls = {_product_ml(x) for x in members if _product_ml(x)}
+            if len(members) >= 2 and len(mls) >= 2:
+                rep = _pick_family_rep(members)
+                out.append(rep)
+                for m in members:
+                    used.add(int(m["id"]))
+                continue
+            out.append(p)
+            used.add(pid)
+            continue
+        _query, family = kg_family_for_product(p)
+        members = [x for x in family if int(x["id"]) in list_ids]
+        if len(members) < 2:
+            out.append(p)
+            used.add(pid)
+            continue
+        packs = expand_kg_packs(members)
+        real_ids = {
+            int(opt["product_id"])
+            for opt in packs
+            if not opt.get("virtual")
+        }
+        if len(real_ids) < 2:
+            out.append(p)
+            used.add(pid)
+            continue
+        extra = [x for x in products if int(x["id"]) in real_ids]
+        seen = {int(m["id"]) for m in members}
+        for x in extra:
+            xid = int(x["id"])
+            if xid not in seen:
+                members.append(x)
+                seen.add(xid)
+        rep = _pick_family_rep(members)
+        out.append(rep)
+        for m in members:
+            used.add(int(m["id"]))
+    return out
 
 
 def format_variants(query: str, products: list[Any]) -> str:

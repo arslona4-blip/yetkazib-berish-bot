@@ -259,13 +259,13 @@ def _kg_line_from_pack(product: Any, pack_grams: int, pack_amount: int) -> tuple
 
 def _liter_line_from_pack(product: Any, pack_ml: int) -> tuple[str, int]:
     """Ichimlik hajmi faqat katalogdagi mahsulot narxi bilan."""
-    from bot.shop_ai import _product_ml, expand_liter_packs, kg_family_for_product
+    from bot.shop_ai import _product_ml, expand_liter_packs, liter_family_for_product
 
     prod_ml = _product_ml(product)
     price = int(effective_product_price(product))
     if prod_ml and pack_ml == prod_ml:
         return str(product["name"]), price
-    _query, family = kg_family_for_product(product)
+    _key, family = liter_family_for_product(product)
     for opt in expand_liter_packs(family):
         if int(opt["ml"]) == int(pack_ml):
             real = get_product(int(opt["product_id"]))
@@ -277,16 +277,24 @@ def _liter_line_from_pack(product: Any, pack_ml: int) -> tuple[str, int]:
 
 def _kg_api_fields(product: Any) -> dict[str, Any]:
     from bot.shop_ai import (
+        _product_ml,
         expand_kg_packs,
         expand_liter_packs,
         kg_family_for_product,
         kg_money_options,
+        liter_family_for_product,
     )
 
-    _query, family = kg_family_for_product(product)
-    packs = expand_kg_packs(family)
-    money_opts = kg_money_options(family)
-    liter_packs = [] if packs else expand_liter_packs(family)
+    packs: list = []
+    money_opts: list = []
+    liter_packs: list = []
+    if _product_ml(product):
+        _key, family = liter_family_for_product(product)
+        liter_packs = expand_liter_packs(family)
+    else:
+        _query, family = kg_family_for_product(product)
+        packs = expand_kg_packs(family)
+        money_opts = kg_money_options(family)
     return {
         "kg_packs": [
             {
@@ -347,6 +355,19 @@ def _product_api_payload(product: Any, *, extra: dict[str, Any] | None = None) -
         ],
     }
     payload.update(_kg_api_fields(product))
+    liters = payload.get("liter_packs") or []
+    real_kg = [x for x in (payload.get("kg_packs") or []) if not x.get("virtual")]
+    priced = liters if len(liters) >= 2 else real_kg
+    if len(priced) >= 2:
+        from bot.shop_ai import display_stem_name
+
+        payload["card_name"] = display_stem_name(str(product["name"]))
+        prices = [int(x["price"]) for x in priced]
+        lo, hi = min(prices), max(prices)
+        if lo != hi:
+            payload["display_price"] = (
+                f"{lo:,} – {hi:,} so'm".replace(",", " ")
+            )
     if extra:
         payload.update(extra)
     return payload
@@ -672,6 +693,9 @@ async def api_products(request: web.Request) -> web.Response:
             raise web.HTTPBadRequest(text="category_id noto'g'ri")
 
     products = get_products(active_only=True, category_id=category_id)
+    from bot.shop_ai import collapse_catalog_families
+
+    products = collapse_catalog_families(list(products))
     payload = [_product_api_payload(p) for p in products]
     return web.json_response(payload)
 

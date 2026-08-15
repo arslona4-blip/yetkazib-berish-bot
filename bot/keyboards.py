@@ -252,10 +252,13 @@ def cancel_keyboard() -> ReplyKeyboardMarkup:
 def catalog_categories_keyboard(categories) -> InlineKeyboardMarkup:
     from bot.category_emoji import category_label
     from bot.database import get_products
+    from bot.shop_ai import collapse_catalog_families
 
     rows = []
     for category in categories:
-        count = len(get_products(category_id=category["id"]))
+        count = len(
+            collapse_catalog_families(get_products(category_id=category["id"]))
+        )
         label = f"{category_label(category)} · {count} ta"
         if len(label) > 64:
             label = label[:61] + "..."
@@ -293,20 +296,40 @@ def catalog_keyboard(
     category_id: int | None = None,
     cart_qty: dict[int, int] | None = None,
 ) -> InlineKeyboardMarkup:
-    from bot.database import get_variants, product_display_price
+    from bot.database import product_display_price
+    from bot.shop_ai import (
+        collapse_catalog_families,
+        display_stem_name,
+        expand_kg_packs,
+        expand_liter_packs,
+        kg_family_for_product,
+        liter_family_for_product,
+        _product_ml,
+    )
 
     cart_qty = cart_qty or {}
+    products = collapse_catalog_families(list(products))
     rows = []
     for product in products:
-        # Har doim mahsulot kartochkasini ochamiz (rasm ko'rinsin)
         callback = f"product:{product['id']}"
-
         qty = cart_qty.get(product["id"], 0)
         mark = f" ✅ x{qty}" if qty else ""
+        if _product_ml(product):
+            _key, family = liter_family_for_product(product)
+            packs = expand_liter_packs(family)
+        else:
+            _query, family = kg_family_for_product(product)
+            packs = expand_kg_packs(family)
+        real_n = len({int(x["product_id"]) for x in packs if not x.get("virtual")})
+        label_name = (
+            display_stem_name(str(product["name"]))
+            if real_n >= 2
+            else str(product["name"])
+        )
         rows.append(
             [
                 InlineKeyboardButton(
-                    f"{product['name']} — {product_display_price(product)}{mark}",
+                    f"{label_name} — {product_display_price(product)}{mark}",
                     callback_data=callback,
                 )
             ]

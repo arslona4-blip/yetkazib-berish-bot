@@ -11,11 +11,13 @@ from bot.keyboards import main_menu_keyboard, shop_ai_results_keyboard
 from bot.shop_ai import (
     _money_label,
     _product_ml,
+    display_stem_name,
     expand_kg_packs,
     expand_liter_packs,
     format_variants,
     grams_for_money,
     kg_family_for_product,
+    liter_family_for_product,
     money,
     reply_to_user,
 )
@@ -120,7 +122,7 @@ async def shop_ai_liter_callback(
     if not product or ml < 1:
         await query.answer("Topilmadi", show_alert=True)
         return
-    _query, family = kg_family_for_product(product)
+    _key, family = liter_family_for_product(product)
     match = None
     for p in family:
         got = _product_ml(p)
@@ -152,12 +154,16 @@ async def show_kg_product_options(update: Update, product) -> bool:
 
     if get_variants(int(product["id"]), active_only=True):
         return False
-    _query, family = kg_family_for_product(product)
-    packs = expand_kg_packs(family) or expand_liter_packs(family)
+    if _product_ml(product):
+        _key, family = liter_family_for_product(product)
+        packs = expand_liter_packs(family)
+        title = display_stem_name(str(product["name"])) or _key
+    else:
+        title, family = kg_family_for_product(product)
+        packs = expand_kg_packs(family)
     if not packs:
         return False
     await query.answer()
-    title = _query or str(product["name"])
     text = format_variants(title, family)
     kb = shop_ai_results_keyboard(family)
     uid = query.from_user.id
