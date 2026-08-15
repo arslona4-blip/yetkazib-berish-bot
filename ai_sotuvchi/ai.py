@@ -94,6 +94,30 @@ def _norm(s: str) -> str:
     )
 
 
+_LOOKALIKE_ZERO = str.maketrans({
+    "o": "0",
+    "о": "0",  # kirill o
+    "О": "0",
+    "O": "0",
+})
+
+
+def _fix_lookalike_digits(s: str) -> str:
+    """20OOO / 20ооо → 20000; 20 000 / 20.000 → 20000.
+
+    Faqat raqam+O tokenlari o‘zgaradi — cola, somlik, guruch tegilmaydi.
+    """
+
+    def _token(m: re.Match[str]) -> str:
+        return m.group(0).translate(_LOOKALIKE_ZERO)
+
+    s = re.sub(r"(?i)\b[\dOОoо]+\b", _token, s)
+    # minglik ajratgich: 20 000 yoki 20.000
+    s = re.sub(r"(\d)[\s.](\d{3})(?=\D|$)", r"\1\2", s)
+    s = re.sub(r"(\d)[\s.](\d{3})(?=\D|$)", r"\1\2", s)
+    return s
+
+
 def _fold_token(s: str) -> str:
     """Yozuv farqlari uchun yumshoq shakl: pechene≈pecnene, yubileniy≈yubileyni."""
     t = _norm(s)
@@ -523,7 +547,7 @@ def _extract_money_amount(raw: str) -> tuple[int | None, str]:
 
 
 def _parse_segment(seg: str) -> dict[str, Any] | None:
-    raw = _norm(seg).strip()
+    raw = _fix_lookalike_digits(_norm(seg)).strip()
     if len(raw) < 2:
         return None
     raw = re.sub(r"\b(kerak|bormi|bering|iltimos|menga)\b", " ", raw)
