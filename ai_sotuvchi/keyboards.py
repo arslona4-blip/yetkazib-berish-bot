@@ -56,13 +56,33 @@ def catalog_keyboard(products: list) -> InlineKeyboardMarkup:
 
 
 def search_results_keyboard(products: list) -> InlineKeyboardMarkup:
-    buttons = []
-    for p in products[:6]:
+    """Qadoq + (kg bo‘lsa) 5000/10000 so‘mlik tugmalar."""
+    from ai_sotuvchi.ai import _human_pack_label, kg_money_options
+
+    buttons: list[list[InlineKeyboardButton]] = []
+    for p in products[:8]:
+        label = _human_pack_label(str(p["name"]))
+        show = label if label != str(p["name"]) else str(p["name"])
+        btn = f"{show} — {money(int(p['price']))}"
+        if len(btn) > 64:
+            btn = btn[:61] + "…"
         buttons.append(
             [
                 InlineKeyboardButton(
-                    f"Savatga · {p['name']}",
+                    btn,
                     callback_data=f"add:{p['id']}",
+                )
+            ]
+        )
+    for opt in kg_money_options(products):
+        btn = f"{opt['label']} · {opt['detail']}"
+        if len(btn) > 64:
+            btn = btn[:61] + "…"
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    btn,
+                    callback_data=f"addm:{opt['product_id']}:{opt['amount']}",
                 )
             ]
         )

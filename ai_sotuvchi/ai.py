@@ -419,32 +419,62 @@ def _human_pack_label(name: str) -> str:
     return str(name)
 
 
+# Kg mahsulot tanlanganda chiqadigan so‘mlik variantlar
+KG_MONEY_OPTIONS = (5000, 10000)
+
+
+def kg_money_options(products: list[Any]) -> list[dict[str, Any]]:
+    """1kg bor bo‘lsa — 5000 / 10000 so‘mlik variantlar."""
+    kg = _find_1kg_product(products)
+    if not kg:
+        return []
+    price_kg = int(kg["price"])
+    out: list[dict[str, Any]] = []
+    for amount in KG_MONEY_OPTIONS:
+        grams = db.grams_for_money(price_kg, amount)
+        out.append(
+            {
+                "product_id": int(kg["id"]),
+                "amount": amount,
+                "grams": grams,
+                "label": f"{money(amount)}lik",
+                "detail": f"~{grams} g",
+            }
+        )
+    return out
+
+
 def format_variants(query: str, products: list[Any]) -> str:
     title = query.strip().title() if query else "Mahsulot"
-    if len(products) == 1:
+    money_opts = kg_money_options(products)
+
+    # Bitta oddiy (kg emas) mahsulot
+    if len(products) == 1 and not money_opts:
         p = products[0]
         return (
             f"Topdim: <b>{p['name']}</b> — {money(int(p['price']))}\n"
             "Savatga qo‘shish: pastdagi tugma."
         )
+
     lines = [
-        f"<b>{title}</b> — mavjud hajmlar:",
+        f"<b>{title}</b> — barcha variantlar:",
         "————————————",
+        "<b>Qadoq:</b>",
     ]
-    has_kg = False
     for p in products:
         label = _human_pack_label(str(p["name"]))
         show = label if label != str(p["name"]) else str(p["name"])
-        lines.append(f"• <b>{show}</b> — {money(int(p['price']))} (#{p['id']})")
-        size, unit = _pack_size_from_name(str(p["name"]))
-        if unit == "kg" or (unit in {"g", "gr"} and size and size >= 250):
-            has_kg = True
+        lines.append(f"• <b>{show}</b> — {money(int(p['price']))}")
+
+    if money_opts:
+        lines.append("")
+        lines.append("<b>So‘mlik:</b>")
+        for opt in money_opts:
+            lines.append(
+                f"• <b>{opt['label']}</b> — {opt['detail']}"
+            )
+
     lines.append("\nKeraklisini tugmadan tanlang.")
-    if has_kg:
-        lines.append(
-            f"<i>Yoki so‘mlik: «{query.strip() or 'guruch'} 5000 so‘mlik», "
-            f"«10000 so‘mlik»</i>"
-        )
     return "\n".join(lines)
 
 

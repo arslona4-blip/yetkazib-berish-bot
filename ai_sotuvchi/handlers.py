@@ -352,6 +352,35 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             )
         return
 
+    if data.startswith("addm:"):
+        # addm:{product_id}:{amount} — so‘mlik (kg)
+        parts = data.split(":")
+        if len(parts) < 3:
+            return
+        pid = int(parts[1])
+        amount = int(parts[2])
+        product = db.get_product(pid)
+        if not product or amount < 500:
+            await query.answer("Topilmadi", show_alert=True)
+            return
+        from ai_sotuvchi.ai import _money_label
+
+        price_kg = int(product["price"])
+        grams = db.grams_for_money(price_kg, amount)
+        label = _money_label(str(product["name"]), grams, amount)
+        db.cart_add_by_money(
+            uid, pid, amount=amount, grams=grams, label=label
+        )
+        await query.answer("Savatga qo‘shildi")
+        await context.bot.send_message(
+            uid,
+            f"<b>{label}</b> savatga qo‘shildi.\n"
+            f"Jami: {money(db.cart_total(uid))}",
+            parse_mode="HTML",
+            reply_markup=main_keyboard(is_admin(uid)),
+        )
+        return
+
     if data.startswith("qty:"):
         _, sign, cid_s = data.split(":")
         cid = int(cid_s)
