@@ -113,6 +113,28 @@ def init_db() -> None:
         _ensure_size_variants(conn)
         # Barcha kg li oilalar: 250g/500g narxi 1kg dan
         _sync_all_weight_pack_prices(conn)
+        _fix_common_product_spellings(conn)
+
+
+def _fix_common_product_spellings(conn: sqlite3.Connection) -> None:
+    """Odatiy yozuv xatolarini tuzatish (pechene, yubileyniy, …)."""
+    fixes = [
+        ("YUBILEYNI PECNENE  1 kg", "Yubileyniy Pechene 1kg"),
+        ("Yubileyni pecnene 250g", "Yubileyniy Pechene 250g"),
+        ("Yubileyni pecnene 500g", "Yubileyniy Pechene 500g"),
+        ("YUBILEYNI PECNENE 1 kg", "Yubileyniy Pechene 1kg"),
+        ("Yubileyni pecnene 1kg", "Yubileyniy Pechene 1kg"),
+    ]
+    for old, new in fixes:
+        conn.execute(
+            "UPDATE products SET name = ? WHERE name = ?",
+            (new, old),
+        )
+        # case-insensitive
+        conn.execute(
+            "UPDATE products SET name = ? WHERE lower(name) = lower(?) AND name != ?",
+            (new, old, new),
+        )
 
 
 def _price_from_kg(price_1kg: int, grams: int) -> int:

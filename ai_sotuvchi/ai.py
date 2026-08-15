@@ -83,22 +83,6 @@ def catalog_text(limit: int = 40, category: str | None = None) -> str:
     return "\n".join(lines)
 
 
-def find_products(user_text: str, limit: int = 6) -> list[Any]:
-    text = (user_text or "").strip().lower()
-    tokens = [t for t in re.split(r"\W+", text) if len(t) >= 3 and t not in _STOP]
-    found: list[Any] = []
-    seen: set[int] = set()
-    for token in tokens or [text]:
-        for p in db.search_products(token, limit=5):
-            pid = int(p["id"])
-            if pid not in seen:
-                seen.add(pid)
-                found.append(p)
-            if len(found) >= limit:
-                return found
-    return found
-
-
 def _norm(s: str) -> str:
     return (
         (s or "")
@@ -108,6 +92,129 @@ def _norm(s: str) -> str:
         .replace("ё", "e")
         .replace(",", ".")
     )
+
+
+def _fold_token(s: str) -> str:
+    """Yozuv farqlari uchun yumshoq shakl: pechene≈pecnene, yubileniy≈yubileyni."""
+    t = _norm(s)
+    # lotin/kirill chalkashligi
+    for a, b in (
+        ("ch", "c"),
+        ("sh", "s"),
+        ("zh", "j"),
+        ("kh", "x"),
+        ("ʻ", ""),
+        ("'", ""),
+        ("`", ""),
+    ):
+        t = t.replace(a, b)
+    t = re.sub(r"[^a-z0-9]+", "", t)
+    # oxiridagi yumshoq unlilar (iy/yi/i)
+    t = re.sub(r"(iy|yi|yy)$", "i", t)
+    return t
+
+
+def _edit_distance(a: str, b: str) -> int:
+    if a == b:
+        return 0
+    if not a:
+        return len(b)
+    if not b:
+        return len(a)
+    if abs(len(a) - len(b)) > 3:
+        return 99
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            ins = cur[j - 1] + 1
+            delete = prev[j] + 1
+            sub = prev[j - 1] + (0 if ca == cb else 1)
+            cur.append(min(ins, delete, sub))
+        prev = cur
+    return prev[-1]
+
+
+def _tokens_fuzzy_match(query_tok: str, name_tok: str) -> bool:
+    q = _fold_token(query_tok)
+    n = _fold_token(name_tok)
+    if len(q) < 3 or len(n) < 3:
+        return q == n and len(q) >= 2
+    if q in n or n in q:
+        return True
+    # qisqa tokenlar — 1 xato; uzun — 2 xato
+    limit = 1 if min(len(q), len(n)) <= 5 else 2
+    return _edit_distance(q, n) <= limit
+
+
+def _query_matches_name(query: str, name: str) -> int:
+    """Moslik balli (0 = yo‘q)."""
+    q = _norm(query)
+    n = _norm(name)
+    if not q:
+        return 0
+    if q in n:
+        return 100
+    q_toks = [t for t in re.split(r"\W+", q) if len(t) >= 2 and t not in _STOP]
+    n_toks = [t for t in re.split(r"\W+", n) if len(t) >= 2]
+    if not q_toks:
+        return 0
+    matched = 0
+    for qt in q_toks:
+        if any(_tokens_fuzzy_match(qt, nt) for nt in n_toks):
+            matched += 1
+        elif any(_fold_token(qt) in _fold_token(nt) or _fold_token(nt) in _fold_token(qt) for nt in n_toks):
+            matched += 1
+    if matched == 0:
+        # butun so‘rov vs butun nom (hajmsiz)
+        qb = _fold_token(re.sub(r"\d+(?:\.\d+)?\s*(kg|g|l|ml)\b", "", q))
+        nb = _fold_token(_base_name(name) if "(" not in name else name)
+        if qb and nb and (qb in nb or nb in qb or _edit_distance(qb, nb) <= 2):
+            return 40
+        return 0
+    # barcha muhim tokenlar topilsa — yuqori ball
+    ratio = matched / len(q_toks)
+    return int(50 + 50 * ratio)
+
+
+def find_products(user_text: str, limit: int = 6) -> list[Any]:
+    text = (user_text or "").strip()
+    tokens = [
+        t
+        for t in re.split(r"\W+", _norm(text))
+        if len(t) >= 3 and t not in _STOP
+    ]
+    scored: list[tuple[int, Any]] = []
+    seen: set[int] = set()
+
+    # 1) LIKE qidiruv
+    for token in tokens or [_norm(text)]:
+        for p in db.search_products(token, limit=12):
+            pid = int(p["id"])
+            if pid in seen:
+                continue
+            seen.add(pid)
+            scored.append((_query_matches_name(text, str(p["name"])) or 10, p))
+
+    # 2) Fuzzy — butun katalog (kichik do‘kon)
+    if len(scored) < limit:
+        for p in db.list_products(active_only=True):
+            pid = int(p["id"])
+            if pid in seen:
+                continue
+            score = _query_matches_name(text, str(p["name"]))
+            if score <= 0:
+                # tokenlar bo‘yicha ham
+                for tok in tokens:
+                    if _query_matches_name(tok, str(p["name"])) > 0:
+                        score = 30
+                        break
+            if score > 0:
+                seen.add(pid)
+                scored.append((score, p))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [p for s, p in scored[:limit] if s > 0]
 
 
 def _pack_size_from_name(name: str) -> tuple[float | None, str | None]:
@@ -214,40 +321,38 @@ def find_variants(query: str, limit: int = 20) -> list[Any]:
     if not tokens:
         return []
 
-    # Butun katalogdan oila bo‘yicha yig‘ish (cola-only emas)
     all_products = db.list_products(active_only=True)
     scored: list[tuple[int, Any]] = []
     for p in all_products:
-        name = _norm(str(p["name"]))
-        base = _base_name(str(p["name"]))
-        score = 0
-        for tok in tokens:
-            if tok in name or tok in base:
-                score += 30
-            # qisqa brand (cola in coca-cola)
-            if len(tok) >= 3 and tok in name.replace("-", " "):
-                score += 10
+        score = _query_matches_name(query, str(p["name"]))
+        if score <= 0:
+            # alohida tokenlar
+            name = str(p["name"])
+            for tok in tokens:
+                if _query_matches_name(tok, name) > 0:
+                    score += 25
         # alias: cola ↔ coca
+        name_n = _norm(str(p["name"]))
         if "cola" in tokens or "coca" in tokens:
-            if "cola" in name or "coca" in name:
+            if "cola" in name_n or "coca" in name_n:
                 score += 25
         if score > 0:
             scored.append((score, p))
 
     if not scored:
-        # fallback LIKE qidiruv
-        for tok in tokens:
-            for p in db.search_products(tok, limit=20):
-                scored.append((_score_product(tok, p, None, None), p))
+        # fallback LIKE + fuzzy find_products
+        for p in find_products(query, limit=20):
+            scored.append((_query_matches_name(query, str(p["name"])) or 20, p))
 
-    # Eng yaxshi match oilasini olish: bir xil base_name atrofida
     scored.sort(key=lambda x: x[0], reverse=True)
     if not scored or scored[0][0] <= 0:
         return []
 
     top = scored[0][1]
     top_base = _base_name(str(top["name"]))
-    top_tokens = set(re.split(r"\W+", top_base)) - _STOP - {""}
+    top_tokens = [
+        t for t in re.split(r"\W+", top_base) if t and t not in _STOP
+    ]
 
     family: list[Any] = []
     seen: set[int] = set()
@@ -258,15 +363,29 @@ def find_variants(query: str, limit: int = 20) -> list[Any]:
         if pid in seen:
             continue
         p_base = _base_name(str(p["name"]))
-        p_tokens = set(re.split(r"\W+", p_base)) - _STOP - {""}
-        # bir oila: umumiy token bor yoki base o‘xshash
-        if top_tokens & p_tokens or (
-            top_base and (top_base in p_base or p_base in top_base)
+        p_tokens = [
+            t for t in re.split(r"\W+", p_base) if t and t not in _STOP
+        ]
+        # bir oila: fuzzy umumiy token yoki base o‘xshash
+        shared = False
+        for tt in top_tokens:
+            for pt in p_tokens:
+                if _tokens_fuzzy_match(tt, pt):
+                    shared = True
+                    break
+            if shared:
+                break
+        if shared or (
+            top_base
+            and (
+                top_base in p_base
+                or p_base in top_base
+                or _edit_distance(_fold_token(top_base), _fold_token(p_base)) <= 2
+            )
         ):
             seen.add(pid)
             family.append(p)
 
-    # Agar oila bo‘sh qolsa — faqat top matchlar
     if not family:
         for score, p in scored[:limit]:
             if score > 0:
@@ -726,6 +845,14 @@ def _faq_reply(user_text: str) -> str | None:
 def _general_reply(user_text: str) -> str:
     """Har qanday savolga do‘stona javob (katalogsiz ham)."""
     text = (user_text or "").strip()
+    # Mahsulotga o‘xshash so‘rov — aniqroq javob
+    if len(text) >= 3 and not text.endswith("?"):
+        return (
+            f"«<b>{text[:80]}</b>» katalogda topilmadi.\n\n"
+            "Nomini tekshiring yoki <b>Katalog</b>dan qarang.\n"
+            "Admin bo‘lsangiz — <b>➕ Mahsulot</b> bilan qo‘shing.\n\n"
+            f"📞 {SHOP_PHONE} · ⏰ {SHOP_HOURS}"
+        )
     return (
         f"Tushundim: «{text[:120]}»\n\n"
         f"Men {SHOP_NAME} AI sotuvchisiman — asosan mahsulot, narx va buyurtma bo‘yicha yordam beraman.\n"
