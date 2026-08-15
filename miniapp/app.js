@@ -77,14 +77,16 @@
     const variantId = item.variant_id || 0;
     const grams = item.pack_grams || 0;
     const amount = item.pack_amount || 0;
-    return `${productId}:${variantId}:${grams}:${amount}`;
+    const ml = item.pack_ml || 0;
+    return `${productId}:${variantId}:${grams}:${amount}:${ml}`;
   }
 
   function hasSizeChoice(product) {
     return (
       (product.variants && product.variants.length > 0) ||
       (product.kg_packs && product.kg_packs.length > 0) ||
-      (product.kg_money && product.kg_money.length > 0)
+      (product.kg_money && product.kg_money.length > 0) ||
+      (product.liter_packs && product.liter_packs.length > 0)
     );
   }
 
@@ -257,10 +259,14 @@
       body.querySelector(".card-title").textContent = product.name;
       body.querySelector(".card-price").textContent =
         product.display_price || formatMoney(product.price);
-      if (product.kg_packs && product.kg_packs.length) {
+      if (
+        (product.kg_packs && product.kg_packs.length) ||
+        (product.liter_packs && product.liter_packs.length)
+      ) {
         const hint = document.createElement("p");
         hint.className = "card-packs muted";
-        hint.textContent = product.kg_packs.map((p) => p.label).join(" · ");
+        const labels = (product.kg_packs || []).concat(product.liter_packs || []);
+        hint.textContent = labels.map((p) => p.label).join(" · ");
         body.appendChild(hint);
       }
 
@@ -280,11 +286,12 @@
     const variants = product.variants || [];
     const packs = product.kg_packs || [];
     const money = product.kg_money || [];
+    const liters = product.liter_packs || [];
     if (variants.length) {
       openVariantPicker(product);
       return;
     }
-    if (packs.length || money.length) {
+    if (packs.length || money.length || liters.length) {
       openKgPicker(product);
       return;
     }
@@ -327,7 +334,7 @@
 
   function productStem(name) {
     return String(name || "")
-      .replace(/\d+(?:\.\d+)?\s*(kg|g|gr|gramm)\b/gi, "")
+      .replace(/\d+(?:[.,]\d+)?\s*(kg|g|gr|gramm|l|lt|litr|ml)\b/gi, "")
       .replace(/\s+/g, " ")
       .trim();
   }
@@ -343,6 +350,21 @@
           product_id: pack.product_id || product.id,
           variant_id: 0,
           pack_grams: useReal ? 0 : pack.grams,
+          name: useReal && product.id === pack.product_id
+            ? product.name
+            : `${stem} ${pack.label}`.trim(),
+          price: pack.price,
+          quantity: 1,
+        });
+      });
+    });
+    (product.liter_packs || []).forEach((pack) => {
+      addOptionButton(`${pack.label} — ${formatMoney(pack.price)}`, () => {
+        const useReal = !pack.virtual;
+        upsertCartItem({
+          product_id: pack.product_id || product.id,
+          variant_id: 0,
+          pack_ml: useReal ? 0 : pack.ml,
           name: useReal && product.id === pack.product_id
             ? product.name
             : `${stem} ${pack.label}`.trim(),
@@ -641,6 +663,7 @@
         variant_id: item.variant_id || undefined,
         pack_grams: item.pack_grams || undefined,
         pack_amount: item.pack_amount || undefined,
+        pack_ml: item.pack_ml || undefined,
       })),
     };
     if (devUser && !payload.initData && !telegramUser) {

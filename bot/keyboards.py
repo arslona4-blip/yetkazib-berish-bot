@@ -346,12 +346,14 @@ def shop_ai_results_keyboard(products) -> InlineKeyboardMarkup | None:
     from bot.shop_ai import (
         _human_pack_label,
         expand_kg_packs,
+        expand_liter_packs,
         kg_money_options,
         money,
     )
 
     buttons: list[list[InlineKeyboardButton]] = []
     packs = expand_kg_packs(products)
+    liter_packs = [] if packs else expand_liter_packs(products)
     if packs:
         for opt in packs:
             btn = f"{opt['label']} — {money(int(opt['price']))}"
@@ -359,6 +361,16 @@ def shop_ai_results_keyboard(products) -> InlineKeyboardMarkup | None:
                 btn = btn[:61] + "…"
             if opt["virtual"]:
                 cb = f"ai_p:{opt['kg_product_id']}:{opt['grams']}"
+            else:
+                cb = f"cart_add:{opt['product_id']}:0"
+            buttons.append([InlineKeyboardButton(btn, callback_data=cb)])
+    elif liter_packs:
+        for opt in liter_packs:
+            btn = f"{opt['label']} — {money(int(opt['price']))}"
+            if len(btn) > 64:
+                btn = btn[:61] + "…"
+            if opt["virtual"]:
+                cb = f"ai_l:{opt['liter_product_id']}:{opt['ml']}"
             else:
                 cb = f"cart_add:{opt['product_id']}:0"
             buttons.append([InlineKeyboardButton(btn, callback_data=cb)])

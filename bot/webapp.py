@@ -216,6 +216,7 @@ def parse_init_data_user_fallback(init_data: str) -> dict[str, Any] | None:
 
 _MAX_PACK_GRAMS = 50_000
 _MAX_PACK_AMOUNT = 5_000_000
+_MAX_PACK_ML = 10_000
 
 
 def _int_field(raw: dict[str, Any], key: str) -> int:
@@ -256,12 +257,36 @@ def _kg_line_from_pack(product: Any, pack_grams: int, pack_amount: int) -> tuple
     return f"{stem} {label}".strip(), unit_price
 
 
+def _liter_line_from_pack(product: Any, pack_ml: int) -> tuple[str, int]:
+    """Ichimlik hajmi faqat katalogdagi mahsulot narxi bilan."""
+    from bot.shop_ai import _product_ml, expand_liter_packs, kg_family_for_product
+
+    prod_ml = _product_ml(product)
+    price = int(effective_product_price(product))
+    if prod_ml and pack_ml == prod_ml:
+        return str(product["name"]), price
+    _query, family = kg_family_for_product(product)
+    for opt in expand_liter_packs(family):
+        if int(opt["ml"]) == int(pack_ml):
+            real = get_product(int(opt["product_id"]))
+            if not real:
+                break
+            return str(real["name"]), int(effective_product_price(real))
+    raise ValueError("Bu hajm katalogda yo'q")
+
+
 def _kg_api_fields(product: Any) -> dict[str, Any]:
-    from bot.shop_ai import expand_kg_packs, kg_family_for_product, kg_money_options
+    from bot.shop_ai import (
+        expand_kg_packs,
+        expand_liter_packs,
+        kg_family_for_product,
+        kg_money_options,
+    )
 
     _query, family = kg_family_for_product(product)
     packs = expand_kg_packs(family)
     money_opts = kg_money_options(family)
+    liter_packs = [] if packs else expand_liter_packs(family)
     return {
         "kg_packs": [
             {
@@ -283,6 +308,17 @@ def _kg_api_fields(product: Any) -> dict[str, Any]:
                 "detail": opt["detail"],
             }
             for opt in money_opts
+        ],
+        "liter_packs": [
+            {
+                "ml": int(opt["ml"]),
+                "price": int(opt["price"]),
+                "label": opt["label"],
+                "virtual": bool(opt["virtual"]),
+                "product_id": int(opt["product_id"]),
+                "liter_product_id": int(opt["liter_product_id"]),
+            }
+            for opt in liter_packs
         ],
     }
 
@@ -335,16 +371,21 @@ def resolve_order_items(
         )
         pack_grams = _int_field(raw, "pack_grams")
         pack_amount = _int_field(raw, "pack_amount")
-        if pack_grams < 0 or pack_amount < 0:
+        pack_ml = _int_field(raw, "pack_ml")
+        if pack_grams < 0 or pack_amount < 0 or pack_ml < 0:
             raise ValueError("Hajm noto'g'ri")
         if pack_grams > _MAX_PACK_GRAMS:
             raise ValueError("Hajm juda katta")
         if pack_amount > _MAX_PACK_AMOUNT:
             raise ValueError("Summa juda katta")
+        if pack_ml > _MAX_PACK_ML:
+            raise ValueError("Hajm juda katta")
         product = get_product(product_id)
         if not product:
             raise ValueError(f"Mahsulot topilmadi: {product_id}")
-        if pack_grams or pack_amount:
+        if pack_ml:
+            name, unit_price = _liter_line_from_pack(product, pack_ml)
+        elif pack_grams or pack_amount:
             name, unit_price = _kg_line_from_pack(product, pack_grams, pack_amount)
         elif variant_id:
             variant = get_variant(variant_id)

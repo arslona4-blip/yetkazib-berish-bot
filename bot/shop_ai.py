@@ -557,10 +557,60 @@ def kg_money_options(products: list[Any]) -> list[dict[str, Any]]:
     return out
 
 
+def _product_ml(product: Any) -> int | None:
+    size, unit = _pack_size_from_name(str(product["name"]))
+    if not size or not unit:
+        return None
+    if unit == "ml":
+        return int(round(size))
+    if unit in {"l", "lt", "litr"}:
+        return int(round(size * 1000))
+    return None
+
+
+def _liter_label(ml: int) -> str:
+    """500 → 0,5L; 1000 → 1L; 1500 → 1,5L."""
+    if ml >= 1000 and ml % 1000 == 0:
+        return f"{ml // 1000}L"
+    text = f"{ml / 1000.0:.2f}".rstrip("0").rstrip(".")
+    return text.replace(".", ",") + "L"
+
+
+def expand_liter_packs(products: list[Any]) -> list[dict[str, Any]]:
+    """Faqat katalogdagi ichimlik hajmlari — har biri o‘z narxi bilan. Virtual yo‘q."""
+    if not products:
+        return []
+    if any(_product_grams(p) for p in products) and not any(
+        _product_ml(p) for p in products
+    ):
+        return []
+    items: list[dict[str, Any]] = []
+    seen_ml: set[int] = set()
+    for p in products:
+        ml = _product_ml(p)
+        if not ml or ml in seen_ml:
+            continue
+        seen_ml.add(ml)
+        items.append(
+            {
+                "ml": ml,
+                "price": int(p["price"]),
+                "label": _liter_label(ml),
+                "product_id": int(p["id"]),
+                "virtual": False,
+                "liter_product_id": int(p["id"]),
+            }
+        )
+    items.sort(key=lambda x: int(x["ml"]))
+    if len(items) < 2:
+        return []
+    return items
+
+
 def format_variants(query: str, products: list[Any]) -> str:
     title = query.strip().title() if query else "Mahsulot"
     money_opts = kg_money_options(products)
-    packs = expand_kg_packs(products)
+    packs = expand_kg_packs(products) or expand_liter_packs(products)
 
     # Bitta oddiy (kg emas) mahsulot
     if len(products) == 1 and not money_opts and not packs:
@@ -848,6 +898,33 @@ def try_multi_add(user_id: int, user_text: str) -> tuple[str, list[Any]] | None:
                 )
                 products.append(kg_product)
             continue
+
+        ml_want = None
+        if want_size is not None:
+            wu = (want_unit or "").lower()
+            if wu == "ml":
+                ml_want = float(want_size)
+            elif wu in {"l", "lt", "litr"}:
+                ml_want = float(want_size) * 1000.0
+        if ml_want:
+            ml_i = max(1, int(round(ml_want)))
+            exact = None
+            for p in variants:
+                m = _product_ml(p)
+                if m is not None and abs(m - ml_i) <= 20:
+                    exact = p
+                    break
+            if exact:
+                db.add_to_cart(user_id, int(exact["id"]), max(1, qty))
+                line_total = int(exact["price"]) * max(1, qty)
+                added_lines.append(
+                    f"• {exact['name']} × {max(1, qty)} — {money(line_total)}"
+                )
+                products.append(exact)
+                continue
+            if variants:
+                choose_blocks.append((seg["query"], variants))
+                continue
 
         if _should_list_variants(seg, variants):
             choose_blocks.append((seg["query"], variants))

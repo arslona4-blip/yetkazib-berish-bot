@@ -10,7 +10,9 @@ from bot.database import add_money_to_cart, get_cart_totals, get_product
 from bot.keyboards import main_menu_keyboard, shop_ai_results_keyboard
 from bot.shop_ai import (
     _money_label,
+    _product_ml,
     expand_kg_packs,
+    expand_liter_packs,
     format_variants,
     grams_for_money,
     kg_family_for_product,
@@ -103,11 +105,55 @@ async def shop_ai_pack_callback(
     )
 
 
-async def show_kg_product_options(update: Update, product) -> bool:
-    """Kg mahsulot bo‘lsa barcha hajmlarni chiqaradi. True = ko‘rsatildi."""
+async def shop_ai_liter_callback(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """ai_l:{product_id}:{ml} — katalogdagi ichimlik hajmini savatga qo‘shadi."""
     query = update.callback_query
+    parts = (query.data or "").split(":")
+    if len(parts) < 3:
+        await query.answer()
+        return
+    pid = int(parts[1])
+    ml = int(parts[2])
+    product = get_product(pid)
+    if not product or ml < 1:
+        await query.answer("Topilmadi", show_alert=True)
+        return
     _query, family = kg_family_for_product(product)
-    packs = expand_kg_packs(family)
+    match = None
+    for p in family:
+        got = _product_ml(p)
+        if got is not None and abs(got - ml) <= 20:
+            match = p
+            break
+    if not match:
+        await query.answer("Bu hajm katalogda yo‘q", show_alert=True)
+        return
+    uid = query.from_user.id
+    from bot.database import add_to_cart
+
+    add_to_cart(uid, int(match["id"]), 1)
+    label = str(match["name"])
+    count, total = get_cart_totals(uid)
+    await query.answer("Savatga qo‘shildi")
+    await query.message.reply_text(
+        f"✅ <b>{label}</b> savatchaga qo‘shildi.\n"
+        f"Savat: {count} ta · {money(total)}",
+        parse_mode="HTML",
+        reply_markup=_menu(uid),
+    )
+
+
+async def show_kg_product_options(update: Update, product) -> bool:
+    """Kg yoki ichimlik oilasi bo‘lsa barcha hajmlarni chiqaradi. True = ko‘rsatildi."""
+    query = update.callback_query
+    from bot.database import get_variants
+
+    if get_variants(int(product["id"]), active_only=True):
+        return False
+    _query, family = kg_family_for_product(product)
+    packs = expand_kg_packs(family) or expand_liter_packs(family)
     if not packs:
         return False
     await query.answer()
