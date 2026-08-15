@@ -85,8 +85,6 @@ def init_db() -> None:
         count = conn.execute("SELECT COUNT(*) AS c FROM products").fetchone()["c"]
         if count == 0:
             seed = [
-                ("Guruch 250g", 4500, "Oq guruch — 250 gramm", "Oziq-ovqat"),
-                ("Guruch 500g", 9000, "Oq guruch — 500 gramm", "Oziq-ovqat"),
                 ("Guruch 1kg", 18000, "Oq guruch, yumshoq", "Oziq-ovqat"),
                 ("Sut 0.5L", 7000, "Pastörizatsiya qilingan", "Ichimliklar"),
                 ("Sut 1L", 12000, "Pastörizatsiya qilingan", "Ichimliklar"),
@@ -95,7 +93,6 @@ def init_db() -> None:
                 ("Coca-Cola 1.5L", 14000, "Gazli ichimlik", "Ichimliklar"),
                 ("Coca Cola 2L", 18000, "Gazli ichimlik", "Ichimliklar"),
                 ("Yog‘ 1L", 22000, "O‘simlik yog‘i", "Oziq-ovqat"),
-                ("Shakar 500g", 8000, "Oq shakar", "Oziq-ovqat"),
                 ("Shakar 1kg", 15000, "Oq shakar", "Oziq-ovqat"),
                 ("Sovun", 8000, "Hojatxona sovuni", "Uy-ro‘zg‘or"),
                 ("Nam salfetka", 10000, "120 donalik", "Uy-ro‘zg‘or"),
@@ -110,8 +107,8 @@ def init_db() -> None:
                 )
         # Mavjud DB ga ham hajm variantlarini qo‘shish (yo‘q bo‘lsa)
         _ensure_size_variants(conn)
-        # Guruch 250g/500g narxi 1kg ga proporsional
-        _sync_weight_pack_prices(conn, stem="guruch")
+        # Barcha kg li oilalar: 250g/500g narxi 1kg dan
+        _sync_all_weight_pack_prices(conn)
 
 
 def _price_from_kg(price_1kg: int, grams: int) -> int:
@@ -119,57 +116,162 @@ def _price_from_kg(price_1kg: int, grams: int) -> int:
     return max(0, int(round(int(price_1kg) * grams / 1000.0)))
 
 
+def _normalize_product_key(name: str) -> str:
+    return (
+        (name or "")
+        .casefold()
+        .replace("‘", "'")
+        .replace("’", "'")
+        .replace(" ", "")
+        .replace("-", "")
+        .replace("_", "")
+    )
+
+
+def _weight_family_stem(name: str) -> str | None:
+    """«Guruch 1kg» / «Shakar 500g» → «guruch» / «shakar». Litr/dona → None."""
+    import re
+
+    n = (name or "").casefold()
+    if not re.search(r"\d+(?:[.,]\d+)?\s*(kg|g|gr|gramm)\b", n):
+        return None
+    base = re.sub(r"\d+(?:[.,]\d+)?\s*(kg|g|gr|gramm)\b", " ", n)
+    base = re.sub(r"[-_/]+", " ", base)
+    base = re.sub(r"\s+", " ", base).strip()
+    return base or None
+
+
+def _pack_grams_from_name(name: str) -> int | None:
+    """«Guruch 250g» → 250; «Guruch 1kg» → 1000."""
+    import re
+
+    n = (name or "").casefold().replace("gramm", "g").replace("грамм", "g")
+    m = re.search(r"(\d+(?:[.,]\d+)?)\s*(kg|g|gr)\b", n)
+    if not m:
+        return None
+    size = float(m.group(1).replace(",", "."))
+    unit = m.group(2)
+    if unit == "kg":
+        return int(round(size * 1000))
+    return int(round(size))
+
+
 def _sync_weight_pack_prices(conn: sqlite3.Connection, *, stem: str) -> None:
-    """Masalan guruch 1kg=18000 → 500g=9000, 250g=4500."""
+    """Bitta oila: 1kg narxidan 250g/500g (va boshqa g) proporsional."""
     rows = conn.execute(
         "SELECT id, name, price FROM products WHERE is_active = 1 AND lower(name) LIKE ?",
         (f"%{stem}%",),
     ).fetchall()
     if not rows:
         return
-    kg_row = None
+    # Faqat shu stem oilasiga tegishli og‘irlik mahsulotlari
+    family = []
     for r in rows:
-        name = str(r["name"]).casefold().replace(" ", "")
-        if name.endswith("1kg") or "1kg" in name:
+        fam = _weight_family_stem(str(r["name"]))
+        if fam == stem.casefold().strip():
+            family.append(r)
+    if not family:
+        return
+    kg_row = None
+    for r in family:
+        grams = _pack_grams_from_name(str(r["name"]))
+        if grams == 1000:
             kg_row = r
             break
     if not kg_row:
         return
     price_1kg = int(kg_row["price"])
-    targets = {
-        250: _price_from_kg(price_1kg, 250),
-        500: _price_from_kg(price_1kg, 500),
-    }
+    for r in family:
+        grams = _pack_grams_from_name(str(r["name"]))
+        if not grams or grams == 1000:
+            continue
+        # Faqat 1kg dan kichik qadoqlar
+        if grams >= 1000:
+            continue
+        new_price = _price_from_kg(price_1kg, grams)
+        if int(r["price"]) != new_price:
+            conn.execute(
+                "UPDATE products SET price = ? WHERE id = ?",
+                (new_price, int(r["id"])),
+            )
+
+
+def _sync_all_weight_pack_prices(conn: sqlite3.Connection) -> None:
+    """Katalogdagi barcha *1kg oilalar uchun 250g/500g narxlarini sync."""
+    rows = conn.execute(
+        "SELECT id, name, price FROM products WHERE is_active = 1"
+    ).fetchall()
+    stems: set[str] = set()
     for r in rows:
-        name = str(r["name"]).casefold().replace(" ", "")
-        for grams, price in targets.items():
-            # 250g / 250gr / 250gramm
-            if f"{grams}g" in name or f"{grams}gr" in name:
-                if int(r["price"]) != price:
-                    conn.execute(
-                        "UPDATE products SET price = ? WHERE id = ?",
-                        (price, int(r["id"])),
-                    )
-                break
+        grams = _pack_grams_from_name(str(r["name"]))
+        if grams != 1000:
+            continue
+        stem = _weight_family_stem(str(r["name"]))
+        if stem:
+            stems.add(stem)
+    for stem in sorted(stems):
+        _ensure_weight_packs_for_stem(conn, stem)
+        _sync_weight_pack_prices(conn, stem=stem)
+
+
+def _ensure_weight_packs_for_stem(conn: sqlite3.Connection, stem: str) -> None:
+    """1kg bor bo‘lsa — 250g va 500g yo‘q bo‘lsa qo‘shadi (narx 1kg dan)."""
+    rows = conn.execute(
+        "SELECT id, name, price, description, category FROM products "
+        "WHERE is_active = 1 AND lower(name) LIKE ?",
+        (f"%{stem}%",),
+    ).fetchall()
+    kg_row = None
+    existing_grams: set[int] = set()
+    for r in rows:
+        fam = _weight_family_stem(str(r["name"]))
+        if fam != stem.casefold().strip():
+            continue
+        grams = _pack_grams_from_name(str(r["name"]))
+        if grams is None:
+            continue
+        existing_grams.add(grams)
+        if grams == 1000:
+            kg_row = r
+    if not kg_row:
+        return
+    price_1kg = int(kg_row["price"])
+    cat = str(kg_row["category"] or "Oziq-ovqat")
+    desc_base = str(kg_row["description"] or stem.title())
+    display = stem[:1].upper() + stem[1:] if stem else "Mahsulot"
+    # Title-case oddiy: guruch → Guruch
+    for grams, label in ((250, "250g"), (500, "500g")):
+        if grams in existing_grams:
+            continue
+        name = f"{display} {label}"
+        conn.execute(
+            """
+            INSERT INTO products (name, price, description, category, is_active, created_at)
+            VALUES (?, ?, ?, ?, 1, ?)
+            """,
+            (
+                name,
+                _price_from_kg(price_1kg, grams),
+                f"{desc_base} — {grams} gramm",
+                cat,
+                _now(),
+            ),
+        )
 
 
 def _ensure_size_variants(conn: sqlite3.Connection) -> None:
     """Guruch/shakar/sut/cola uchun barcha hajmlar bo‘lsin (250g, 500g, 1kg, …)."""
-    # Guruch: 1kg=18000 → 500g=9000, 250g=4500
+    # Og‘irlik: faqat 1kg seed; 250g/500g sync orqali 1kg dan hisoblanadi
     families = [
         (
             "guruch",
             [
-                ("Guruch 250g", 4500, "Oq guruch — 250 gramm", "Oziq-ovqat"),
-                ("Guruch 500g", 9000, "Oq guruch — 500 gramm", "Oziq-ovqat"),
                 ("Guruch 1kg", 18000, "Oq guruch — 1 kilogram", "Oziq-ovqat"),
             ],
         ),
         (
             "shakar",
             [
-                ("Shakar 250g", 4000, "Oq shakar — 250 gramm", "Oziq-ovqat"),
-                ("Shakar 500g", 8000, "Oq shakar — 500 gramm", "Oziq-ovqat"),
                 ("Shakar 1kg", 15000, "Oq shakar — 1 kilogram", "Oziq-ovqat"),
             ],
         ),
@@ -278,7 +380,13 @@ def add_product(
                 image_file_id,
             ),
         )
-        return int(cur.lastrowid)
+        pid = int(cur.lastrowid)
+        # kg li mahsulot: 250g/500g yarating yoki narxini sync qiling
+        stem = _weight_family_stem(name)
+        if stem and _pack_grams_from_name(name) is not None:
+            _ensure_weight_packs_for_stem(conn, stem)
+            _sync_weight_pack_prices(conn, stem=stem)
+        return pid
 
 
 def set_product_image(product_id: int, file_id: str) -> bool:
@@ -301,9 +409,14 @@ def set_product_price(product_id: int, price: int) -> bool:
             row = conn.execute(
                 "SELECT name FROM products WHERE id = ?", (int(product_id),)
             ).fetchone()
-            if row and "guruch" in str(row["name"]).casefold():
-                # 1kg yangilansa 250g/500g ham yangilanadi
-                _sync_weight_pack_prices(conn, stem="guruch")
+            if row:
+                stem = _weight_family_stem(str(row["name"]))
+                grams = _pack_grams_from_name(str(row["name"]))
+                # 1kg (yoki oiladagi istalgan og‘irlik) yangilansa — g qadoqlar sync
+                if stem and grams is not None:
+                    if grams == 1000:
+                        _ensure_weight_packs_for_stem(conn, stem)
+                    _sync_weight_pack_prices(conn, stem=stem)
         return ok
 
 
