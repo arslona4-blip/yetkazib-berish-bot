@@ -70,6 +70,34 @@ def scan_inline_button(label: str = "📷 Skaner") -> InlineKeyboardButton | Non
     )
 
 
+def is_main_menu_text(text: str) -> bool:
+    """Asosiy / qo‘shimcha menyu tugmasi — admin FSM ni to‘xtatish uchun."""
+    t = (text or "").strip()
+    return t in {
+        "🛍 Katalog",
+        "🛒 Savatcha",
+        "📞 Aloqa",
+        "⋯ Ko'proq",
+        "📷 Skaner",
+        "🖥 Admin ilova",
+        "📦 Buyurtmalar",
+        "🛠 Admin panel",
+        "🚴 Kuryer panel",
+        "⬅️ Asosiy menyu",
+        "⭐ Sevimlilar",
+        "🎁 Bonus",
+        "👥 Ulashish",
+        "📋 Mening buyurtmalarim",
+        "ℹ️ Yordam",
+        "🌐 Til",
+        "🌐 Язык",
+        "🛒 Do'kon",
+        "🔍 Qidiruv",
+        "✨ Tavsiyalar",
+        "🔁 Takroriy buyurtmalar",
+    }
+
+
 def main_menu_keyboard(is_admin: bool = False, is_courier: bool = False) -> ReplyKeyboardMarkup:
     rows: list[list] = []
     shop_btn = shop_reply_button()
@@ -911,13 +939,24 @@ def admin_product_item_keyboard(product_id: int, is_active: bool) -> InlineKeybo
         [
             [
                 InlineKeyboardButton(
-                    "💰 Narx", callback_data=f"admin_prod:price:{product_id}"
+                    "📝 Nom", callback_data=f"admin_prod:name:{product_id}"
                 ),
                 InlineKeyboardButton(
-                    "📐 O'lcham", callback_data=f"admin_prod:size:{product_id}"
+                    "💰 Narx", callback_data=f"admin_prod:price:{product_id}"
                 ),
             ],
             [
+                InlineKeyboardButton(
+                    "📁 Toifa", callback_data=f"admin_prod:cat:{product_id}"
+                ),
+                InlineKeyboardButton(
+                    "📄 Izoh", callback_data=f"admin_prod:desc:{product_id}"
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "📐 O'lcham", callback_data=f"admin_prod:size:{product_id}"
+                ),
                 InlineKeyboardButton(
                     "🖼 Rasm", callback_data=f"admin_prod:photo:{product_id}"
                 ),

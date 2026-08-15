@@ -90,6 +90,7 @@ from bot.database import (
     spend_bonus,
     update_order_status,
     update_payment_status,
+    update_product_fields,
     update_product_price,
     upsert_user,
 )
@@ -132,6 +133,7 @@ from bot.keyboards import (
     scan_sale_keyboard,
     shop_inline_button,
     suggested_name_keyboard,
+    is_main_menu_text,
 )
 from bot.timeutil import format_now_html, get_delivery_slots, money_html
 
@@ -157,6 +159,8 @@ class ProductAdminState(IntEnum):
     SIZE_PRICE = 8
     BARCODE = 9
     STOCK = 10
+    EDIT_NAME = 11
+    EDIT_DESC = 12
 
 
 def is_admin(user_id: int) -> bool:
@@ -1781,6 +1785,76 @@ async def show_admin_category_products(
     )
 
 
+def _admin_product_card_html(product) -> str:
+    status = "✅ Faol" if product["is_active"] else "🚫 Yashirin"
+    category = product["category_name"] or "—"
+    barcode = ""
+    try:
+        barcode = product["barcode"] or ""
+    except (KeyError, IndexError):
+        barcode = ""
+    code_line = f"📷 Kod: <code>{barcode}</code>\n" if barcode else "📷 Kod: —\n"
+    stock_line = ""
+    try:
+        if product["stock"] is not None:
+            stock_line = f"📦 Ombor: {int(product['stock'])} dona\n"
+    except (KeyError, IndexError, TypeError):
+        stock_line = ""
+    return (
+        f"#{product['id']} <b>{product['name']}</b>\n"
+        f"🗂 {category}\n"
+        f"✨ {money_html(product['price'])} ✨\n"
+        f"{stock_line}"
+        f"{code_line}"
+        f"📝 {product['description'] or '—'}\n"
+        f"Holat: {status}"
+    )
+
+
+def _admin_product_item_markup(product) -> InlineKeyboardMarkup:
+    cat_id = product["category_id"]
+    rows = list(
+        admin_product_item_keyboard(
+            product["id"], bool(product["is_active"])
+        ).inline_keyboard
+    )
+    back_row = [
+        [
+            InlineKeyboardButton(
+                "⬅️ Spiskaga",
+                callback_data="admin_prod:list",
+            )
+        ]
+    ]
+    if cat_id:
+        back_row.append(
+            [
+                InlineKeyboardButton(
+                    "⬅️ Toifaga",
+                    callback_data=f"admin_prod:viewcat:{cat_id}",
+                )
+            ]
+        )
+    return InlineKeyboardMarkup(rows + back_row)
+
+
+async def _send_admin_product_card(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    product_id: int,
+    prefix: str = "",
+) -> None:
+    product = get_product_by_id(product_id)
+    if not product or not update.message:
+        return
+    text = prefix + _admin_product_card_html(product)
+    await update.message.reply_text(
+        text,
+        reply_markup=_admin_product_item_markup(product),
+        parse_mode="HTML",
+    )
+
+
 async def admin_product_callback(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> int | None:
@@ -1813,44 +1887,9 @@ async def admin_product_callback(
         if not product:
             await query.answer("Mahsulot topilmadi.", show_alert=True)
             return None
-        status = "✅ Faol" if product["is_active"] else "🚫 Yashirin"
-        category = product["category_name"] or "—"
-        cat_id = product["category_id"]
-        barcode = ""
-        try:
-            barcode = product["barcode"] or ""
-        except (KeyError, IndexError):
-            barcode = ""
-        code_line = f"📷 Kod: <code>{barcode}</code>\n" if barcode else "📷 Kod: —\n"
-        rows = admin_product_item_keyboard(
-            product["id"], bool(product["is_active"])
-        ).inline_keyboard
-        back_row = [
-            [
-                InlineKeyboardButton(
-                    "⬅️ Spiskaga",
-                    callback_data="admin_prod:list",
-                )
-            ]
-        ]
-        if cat_id:
-            back_row.append(
-                [
-                    InlineKeyboardButton(
-                        "⬅️ Toifaga",
-                        callback_data=f"admin_prod:viewcat:{cat_id}",
-                    )
-                ]
-            )
-        markup = InlineKeyboardMarkup(list(rows) + back_row)
         await query.edit_message_text(
-            f"#{product['id']} <b>{product['name']}</b>\n"
-            f"🗂 {category}\n"
-            f"✨ {money_html(product['price'])} ✨\n"
-            f"{code_line}"
-            f"📝 {product['description'] or '—'}\n"
-            f"Holat: {status}",
-            reply_markup=markup,
+            _admin_product_card_html(product),
+            reply_markup=_admin_product_item_markup(product),
             parse_mode="HTML",
         )
         return None
@@ -1920,6 +1959,27 @@ async def admin_product_callback(
 
     if action == "setcat":
         category_id = int(parts[2])
+        draft = context.user_data.get("admin_product") or {}
+        if draft.get("mode") == "edit_cat" and draft.get("id"):
+            product_id = int(draft["id"])
+            try:
+                update_product_fields(product_id, category_id=category_id)
+            except ValueError as exc:
+                await query.answer(str(exc), show_alert=True)
+                return ConversationHandler.END
+            category = get_category(category_id)
+            context.user_data.pop("admin_product", None)
+            await query.edit_message_text(
+                f"✅ Toifa: {category_label(category) if category else category_id}"
+            )
+            product = get_product_by_id(product_id)
+            if product:
+                await query.message.reply_text(
+                    _admin_product_card_html(product),
+                    reply_markup=_admin_product_item_markup(product),
+                    parse_mode="HTML",
+                )
+            return ConversationHandler.END
         context.user_data.setdefault("admin_product", {})["category_id"] = category_id
         context.user_data["admin_product"]["_picked_category"] = True
         category = get_category(category_id)
@@ -1931,6 +1991,55 @@ async def admin_product_callback(
             reply_markup=cancel_keyboard(),
         )
         return ProductAdminState.PRICE
+
+    if action == "name":
+        product_id = int(parts[2])
+        product = get_product_by_id(product_id)
+        if not product:
+            await query.answer("Mahsulot topilmadi.", show_alert=True)
+            return ConversationHandler.END
+        context.user_data["admin_product"] = {"id": product_id, "mode": "edit_name"}
+        await query.message.reply_text(
+            f"«{product['name']}» uchun yangi nom yozing:",
+            reply_markup=cancel_keyboard(),
+        )
+        return ProductAdminState.EDIT_NAME
+
+    if action == "desc":
+        product_id = int(parts[2])
+        product = get_product_by_id(product_id)
+        if not product:
+            await query.answer("Mahsulot topilmadi.", show_alert=True)
+            return ConversationHandler.END
+        context.user_data["admin_product"] = {"id": product_id, "mode": "edit_desc"}
+        current = product["description"] or "—"
+        await query.message.reply_text(
+            f"«{product['name']}» uchun izoh yozing:\n"
+            f"Hozirgi: {current}\n"
+            "O‘chirish: «⏭ O'tkazib yuborish»",
+            reply_markup=ReplyKeyboardMarkup(
+                [["⏭ O'tkazib yuborish"], ["❌ Bekor qilish"]],
+                resize_keyboard=True,
+            ),
+        )
+        return ProductAdminState.EDIT_DESC
+
+    if action == "cat":
+        product_id = int(parts[2])
+        product = get_product_by_id(product_id)
+        if not product:
+            await query.answer("Mahsulot topilmadi.", show_alert=True)
+            return ConversationHandler.END
+        categories = get_categories()
+        if not categories:
+            await query.answer("Avval toifa yarating.", show_alert=True)
+            return ConversationHandler.END
+        context.user_data["admin_product"] = {"id": product_id, "mode": "edit_cat"}
+        await query.message.reply_text(
+            f"«{product['name']}» uchun toifa tanlang:",
+            reply_markup=category_pick_keyboard(categories),
+        )
+        return ProductAdminState.PICK_CATEGORY
 
     if action == "price":
         product_id = int(parts[2])
@@ -2096,6 +2205,9 @@ async def _apply_new_product_barcode(
 async def admin_product_barcode(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> int:
+    left = await exit_admin_if_menu(update, context)
+    if left is not None:
+        return left
     text = (update.message.text or "").strip()
     if _is_cancel_text(text):
         return await cancel_product_admin(update, context)
@@ -2131,6 +2243,9 @@ async def admin_product_barcode_webapp(
 async def admin_product_name(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> int:
+    left = await exit_admin_if_menu(update, context)
+    if left is not None:
+        return left
     text = (update.message.text or "").strip()
     if text == "❌ Bekor qilish":
         return await cancel_product_admin(update, context)
@@ -2182,6 +2297,102 @@ def _is_skip_text(text: str) -> bool:
     )
 
 
+def _clear_admin_draft(context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.user_data.pop("admin_product", None)
+    context.user_data.pop("awaiting_admin", None)
+
+
+async def dispatch_main_menu(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> bool:
+    """Menyu tugmasini shu yerda bajaramiz (FSM yutib qo‘ymasligi uchun)."""
+    if not update.message:
+        return False
+    text = (update.message.text or "").strip()
+    if text == "🛠 Admin panel":
+        await admin_panel(update, context)
+        return True
+    if text == "🛍 Katalog":
+        await show_catalog(update, context)
+        return True
+    if text == "🛒 Savatcha":
+        await show_cart_message(update, context)
+        return True
+    if text == "📞 Aloqa":
+        await contact_info(update, context)
+        return True
+    if text == "⋯ Ko'proq":
+        await show_more_menu(update, context)
+        return True
+    if text == "📦 Buyurtmalar":
+        await admin_orders_panel(update, context)
+        return True
+    if text == "🚴 Kuryer panel":
+        from bot.extras import courier_panel
+
+        await courier_panel(update, context)
+        return True
+    if text == "⬅️ Asosiy menyu":
+        await back_to_main_menu(update, context)
+        return True
+    if text == "⭐ Sevimlilar":
+        from bot.extras import show_favorites
+
+        await show_favorites(update, context)
+        return True
+    if text == "🎁 Bonus":
+        from bot.extras import show_bonus
+
+        await show_bonus(update, context)
+        return True
+    if text == "👥 Ulashish":
+        await share_invite(update, context)
+        return True
+    if text == "📋 Mening buyurtmalarim":
+        await my_orders(update, context)
+        return True
+    if text == "ℹ️ Yordam":
+        await help_command(update, context)
+        return True
+    if text in {"🌐 Til", "🌐 Язык"}:
+        from bot.features_handlers import ask_language
+
+        await ask_language(update, context)
+        return True
+    if text == "✨ Tavsiyalar":
+        from bot.features_handlers import show_recommendations
+
+        await show_recommendations(update, context)
+        return True
+    if text == "🔁 Takroriy buyurtmalar":
+        from bot.features_handlers import show_recurring_list
+
+        await show_recurring_list(update, context)
+        return True
+    if text == "🔍 Qidiruv":
+        await update.message.reply_text(
+            "🔍 <b>Qidiruv</b>\n\nMahsulot nomini yozing.",
+            parse_mode="HTML",
+            reply_markup=main_menu_keyboard(
+                is_admin(update.effective_user.id),
+                is_courier(update.effective_user.id),
+            ),
+        )
+        return True
+    return False
+
+
+async def exit_admin_if_menu(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int | None:
+    text = (update.message.text or "").strip() if update.message else ""
+    if not is_main_menu_text(text):
+        return None
+    _clear_admin_draft(context)
+    await dispatch_main_menu(update, context)
+    return ConversationHandler.END
+
+
 def _is_cancel_text(text: str) -> bool:
     normalized = (text or "").strip().casefold()
     return normalized.startswith("❌") or "bekor" in normalized
@@ -2190,6 +2401,9 @@ def _is_cancel_text(text: str) -> bool:
 async def admin_product_price(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> int:
+    left = await exit_admin_if_menu(update, context)
+    if left is not None:
+        return left
     raw = update.message.text or ""
     if _is_cancel_text(raw):
         return await cancel_product_admin(update, context)
@@ -2221,6 +2435,9 @@ async def admin_product_price(
 async def admin_product_stock(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> int:
+    left = await exit_admin_if_menu(update, context)
+    if left is not None:
+        return left
     text = (update.message.text or "").strip()
     if _is_cancel_text(text):
         return await cancel_product_admin(update, context)
@@ -2244,6 +2461,9 @@ async def admin_product_description(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> int:
     """Eski izoh bosqichi — endi to‘g‘ridan-to‘g‘ri saqlaydi (stock=100)."""
+    left = await exit_admin_if_menu(update, context)
+    if left is not None:
+        return left
     text = (update.message.text or "").strip()
     if _is_cancel_text(text):
         return await cancel_product_admin(update, context)
@@ -2318,6 +2538,10 @@ async def _save_new_product(
             [
                 [
                     InlineKeyboardButton(
+                        "✏️ Tahrirlash",
+                        callback_data=f"admin_prod:item:{product_id}",
+                    ),
+                    InlineKeyboardButton(
                         "🖼 Rasm",
                         callback_data=f"admin_prod:photo:{product_id}",
                     ),
@@ -2341,6 +2565,9 @@ async def _save_new_product(
 async def admin_category_name(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> int:
+    left = await exit_admin_if_menu(update, context)
+    if left is not None:
+        return left
     text = (update.message.text or "").strip()
     context.user_data.pop("awaiting_admin", None)
 
@@ -2380,8 +2607,14 @@ async def admin_awaiting_text(
     if not update.message or not is_admin(update.effective_user.id):
         return
 
-    mode = context.user_data.get("awaiting_admin")
     text = update.message.text or ""
+    if is_main_menu_text(text):
+        _clear_admin_draft(context)
+        if await dispatch_main_menu(update, context):
+            raise ApplicationHandlerStop
+        return
+
+    mode = context.user_data.get("awaiting_admin")
     draft = context.user_data.get("admin_product") or {}
     has_product_draft = bool(draft.get("name") and draft.get("price") is not None)
 
@@ -2402,6 +2635,9 @@ async def admin_awaiting_text(
 
 
 async def admin_size_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    left = await exit_admin_if_menu(update, context)
+    if left is not None:
+        return left
     text = (update.message.text or "").strip()
     if text == "❌ Bekor qilish":
         return await cancel_product_admin(update, context)
@@ -2415,6 +2651,9 @@ async def admin_size_name(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def admin_size_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    left = await exit_admin_if_menu(update, context)
+    if left is not None:
+        return left
     raw = update.message.text or ""
     if raw.strip() == "❌ Bekor qilish":
         return await cancel_product_admin(update, context)
@@ -2444,6 +2683,9 @@ async def admin_size_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 
 async def admin_edit_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    left = await exit_admin_if_menu(update, context)
+    if left is not None:
+        return left
     raw = update.message.text or ""
     if raw.strip() == "❌ Bekor qilish":
         return await cancel_product_admin(update, context)
@@ -2467,6 +2709,62 @@ async def admin_edit_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         f"{product['name']} — {product['price']:,} so'm",
         reply_markup=main_menu_keyboard(is_admin(update.effective_user.id)),
     )
+    await _send_admin_product_card(update, context, product_id)
+    return ConversationHandler.END
+
+
+async def admin_edit_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    left = await exit_admin_if_menu(update, context)
+    if left is not None:
+        return left
+    text = (update.message.text or "").strip()
+    if _is_cancel_text(text):
+        return await cancel_product_admin(update, context)
+    if len(text) < 2:
+        await update.message.reply_text("Nom kamida 2 belgi bo‘lsin:")
+        return ProductAdminState.EDIT_NAME
+    product_id = context.user_data.get("admin_product", {}).get("id")
+    if not product_id:
+        await update.message.reply_text("Xatolik. Qaytadan urinib ko'ring.")
+        return ConversationHandler.END
+    try:
+        update_product_fields(int(product_id), name=text)
+    except ValueError as exc:
+        await update.message.reply_text(f"❌ {exc}")
+        return ProductAdminState.EDIT_NAME
+    context.user_data.pop("admin_product", None)
+    await update.message.reply_text(
+        f"✅ Nom yangilandi: <b>{text}</b>",
+        parse_mode="HTML",
+        reply_markup=main_menu_keyboard(is_admin(update.effective_user.id)),
+    )
+    await _send_admin_product_card(update, context, int(product_id))
+    return ConversationHandler.END
+
+
+async def admin_edit_desc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    left = await exit_admin_if_menu(update, context)
+    if left is not None:
+        return left
+    text = (update.message.text or "").strip()
+    if _is_cancel_text(text):
+        return await cancel_product_admin(update, context)
+    product_id = context.user_data.get("admin_product", {}).get("id")
+    if not product_id:
+        await update.message.reply_text("Xatolik. Qaytadan urinib ko'ring.")
+        return ConversationHandler.END
+    description = "" if _is_skip_text(text) else text
+    try:
+        update_product_fields(int(product_id), description=description)
+    except ValueError as exc:
+        await update.message.reply_text(f"❌ {exc}")
+        return ProductAdminState.EDIT_DESC
+    context.user_data.pop("admin_product", None)
+    await update.message.reply_text(
+        "✅ Izoh yangilandi." if description else "✅ Izoh o‘chirildi.",
+        reply_markup=main_menu_keyboard(is_admin(update.effective_user.id)),
+    )
+    await _send_admin_product_card(update, context, int(product_id))
     return ConversationHandler.END
 
 
@@ -2815,7 +3113,7 @@ def build_product_admin_conversation() -> ConversationHandler:
         entry_points=[
             CallbackQueryHandler(
                 admin_product_callback,
-                pattern=r"^admin_prod:(add|addin:\d+|price:\d+|size:\d+|setcat:\d+)$",
+                pattern=r"^admin_prod:(add|addin:\d+|price:\d+|size:\d+|setcat:\d+|name:\d+|desc:\d+|cat:\d+)$",
             ),
         ],
         states={
@@ -2846,6 +3144,12 @@ def build_product_admin_conversation() -> ConversationHandler:
             ],
             ProductAdminState.EDIT_PRICE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, admin_edit_price)
+            ],
+            ProductAdminState.EDIT_NAME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, admin_edit_name)
+            ],
+            ProductAdminState.EDIT_DESC: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, admin_edit_desc)
             ],
             ProductAdminState.CATEGORY_NAME: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, admin_category_name)

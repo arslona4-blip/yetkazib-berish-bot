@@ -75,6 +75,9 @@ def cart_qty_by_product(user_id: int) -> dict[int, int]:
 async def cancel_extra(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data.pop("awaiting_barcode_product_id", None)
     context.user_data.pop("barcode_product_id", None)
+    context.user_data.pop("photo_product_id", None)
+    context.user_data.pop("awaiting_admin", None)
+    context.user_data.pop("admin_product", None)
     await update.message.reply_text(
         "Bekor qilindi.",
         reply_markup=menu_kb(update.effective_user.id),
@@ -287,6 +290,7 @@ async def start_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     await query.answer()
     product_id = int(query.data.split(":")[2])
     context.user_data["photo_product_id"] = product_id
+    context.user_data.pop("awaiting_admin", None)
     await query.message.reply_text(
         "🖼 Mahsulot rasmini yuboring (telefon galereyasidan).\n"
         "Yaxshi yoritilgan, aniq rasm — sotuvni oshiradi.",
@@ -296,8 +300,19 @@ async def start_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 
 
 async def do_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if update.message.text == "❌ Bekor qilish":
+    from bot.keyboards import is_main_menu_text
+
+    text = (update.message.text or "").strip() if update.message else ""
+    if text == "❌ Bekor qilish":
         return await cancel_extra(update, context)
+    if is_main_menu_text(text):
+        context.user_data.pop("awaiting_admin", None)
+        context.user_data.pop("admin_product", None)
+        context.user_data.pop("photo_product_id", None)
+        from bot.handlers import dispatch_main_menu
+
+        await dispatch_main_menu(update, context)
+        return ConversationHandler.END
     if not update.message.photo:
         await update.message.reply_text("Iltimos, rasm yuboring (matn emas).")
         return ExtraState.PHOTO
@@ -310,6 +325,8 @@ async def do_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         await cache_product_photo(int(pid), file_id)
     except Exception:
         pass
+    context.user_data.pop("awaiting_admin", None)
+    context.user_data.pop("photo_product_id", None)
     await update.message.reply_text(
         f"✅ Rasm saqlandi! (#{pid})\n"
         f"Katalogda mahsulot endi rasm bilan chiqadi.",
