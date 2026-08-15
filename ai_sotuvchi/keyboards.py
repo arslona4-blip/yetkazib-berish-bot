@@ -72,15 +72,15 @@ def search_results_keyboard(products: list) -> InlineKeyboardMarkup:
 def cart_keyboard(items: list | None = None) -> InlineKeyboardMarkup:
     buttons: list[list[InlineKeyboardButton]] = []
     for it in items or []:
-        pid = it["product_id"]
+        cid = it.get("cart_id") or it["product_id"]
         buttons.append(
             [
-                InlineKeyboardButton("−", callback_data=f"qty:-:{pid}"),
+                InlineKeyboardButton("−", callback_data=f"qty:-:{cid}"),
                 InlineKeyboardButton(
                     f"{it['name'][:16]} ×{it['quantity']}",
                     callback_data="noop",
                 ),
-                InlineKeyboardButton("+", callback_data=f"qty:+:{pid}"),
+                InlineKeyboardButton("+", callback_data=f"qty:+:{cid}"),
             ]
         )
     buttons.append(

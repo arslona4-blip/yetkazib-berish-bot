@@ -353,9 +353,9 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     if data.startswith("qty:"):
-        _, sign, pid_s = data.split(":")
-        pid = int(pid_s)
-        db.cart_delta(uid, pid, 1 if sign == "+" else -1)
+        _, sign, cid_s = data.split(":")
+        cid = int(cid_s)
+        db.cart_delta(uid, cid, 1 if sign == "+" else -1)
         text, kb = _cart_message(uid)
         if kb is None:
             await query.edit_message_text(text, parse_mode="HTML")

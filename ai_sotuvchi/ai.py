@@ -312,18 +312,28 @@ def format_variants(query: str, products: list[Any]) -> str:
         f"<b>{title}</b> — mavjud hajmlar:",
         "————————————",
     ]
+    has_kg = False
     for p in products:
         label = _human_pack_label(str(p["name"]))
-        # Agar hajm o‘qilmasa — to‘liq nom
         show = label if label != str(p["name"]) else str(p["name"])
         lines.append(f"• <b>{show}</b> — {money(int(p['price']))} (#{p['id']})")
+        size, unit = _pack_size_from_name(str(p["name"]))
+        if unit == "kg" or (unit in {"g", "gr"} and size and size >= 250):
+            has_kg = True
     lines.append("\nKeraklisini tugmadan tanlang.")
+    if has_kg:
+        lines.append(
+            f"<i>Yoki so‘mlik: «{query.strip() or 'guruch'} 5000 so‘mlik», "
+            f"«10000 so‘mlik»</i>"
+        )
     return "\n".join(lines)
 
 
 def _should_list_variants(seg: dict[str, Any], variants: list[Any]) -> bool:
     """Hajm aytilmagan bo‘lsa — barcha mahsulotlar uchun variantlarni ko‘rsat."""
     if not variants:
+        return False
+    if seg.get("want_money") is not None:
         return False
     if seg.get("want_size") is not None:
         return False
@@ -332,6 +342,35 @@ def _should_list_variants(seg: dict[str, Any], variants: list[Any]) -> bool:
         return False
     # 1+ variant: har doim ro‘yxat (cola, sut, guruch, …)
     return True
+
+
+def _extract_money_amount(raw: str) -> tuple[int | None, str]:
+    """«5000 so'mlik» / «10 ming» / «10000lik» → summa va qolgan matn."""
+    # 10 ming so'mlik
+    m = re.search(
+        r"(\d+(?:\.\d+)?)\s*ming(?:\s*(?:so['ʻ’`]?m|sum|som))?(?:lik|liq)?",
+        raw,
+    )
+    if m:
+        amount = int(round(float(m.group(1)) * 1000))
+        rest = (raw[: m.start()] + " " + raw[m.end() :]).strip()
+        return amount, re.sub(r"\s+", " ", rest)
+    # 5000 so'm / 5000 so'mlik
+    m = re.search(
+        r"(\d+)\s*(?:so['ʻ’`]?m|sum|som)(?:lik|liq)?",
+        raw,
+    )
+    if m:
+        amount = int(m.group(1))
+        rest = (raw[: m.start()] + " " + raw[m.end() :]).strip()
+        return amount, re.sub(r"\s+", " ", rest)
+    # 5000lik / 10000liq
+    m = re.search(r"\b(\d{3,})\s*(?:lik|liq)\b", raw)
+    if m:
+        amount = int(m.group(1))
+        rest = (raw[: m.start()] + " " + raw[m.end() :]).strip()
+        return amount, re.sub(r"\s+", " ", rest)
+    return None, raw
 
 
 def _parse_segment(seg: str) -> dict[str, Any] | None:
@@ -344,6 +383,10 @@ def _parse_segment(seg: str) -> dict[str, Any] | None:
     qty = 1
     want_size = None
     want_unit = None
+    want_money = None
+
+    # so‘mlik (kg mahsulotlar uchun) — hajmdan oldin
+    want_money, raw = _extract_money_amount(raw)
 
     # x2 / ×2
     m = re.search(r"[x×*]\s*(\d+)\b", raw)
@@ -364,10 +407,12 @@ def _parse_segment(seg: str) -> dict[str, Any] | None:
         want_size = float(m.group(1))
         want_unit = m.group(2)
         raw = (raw[: m.start()] + " " + raw[m.end() :]).strip()
+        # aniq hajm bo‘lsa so‘mlikni e’tiborsiz qoldiramiz
+        want_money = None
 
     # leading qty still there?
     m = re.match(r"^(\d+)\s+(.+)$", raw)
-    if m and want_size is None:
+    if m and want_size is None and want_money is None:
         qty = max(1, int(m.group(1)))
         raw = m.group(2).strip()
 
@@ -382,7 +427,36 @@ def _parse_segment(seg: str) -> dict[str, Any] | None:
         "qty": qty,
         "want_size": want_size,
         "want_unit": want_unit,
+        "want_money": want_money,
     }
+
+
+def _find_1kg_product(variants: list[Any]):
+    for p in variants:
+        size, unit = _pack_size_from_name(str(p["name"]))
+        if not size or not unit:
+            continue
+        if unit == "kg" and abs(size - 1.0) < 0.01:
+            return p
+        if unit in {"g", "gr"} and abs(size - 1000.0) < 0.01:
+            return p
+    return None
+
+
+def _money_label(base_name: str, grams: int, amount: int) -> str:
+    stem = re.sub(
+        r"\d+(?:\.\d+)?\s*(kg|g|gr|gramm)\b",
+        "",
+        _norm(base_name),
+        flags=re.I,
+    ).strip()
+    stem = re.sub(r"\s+", " ", stem).strip() or "mahsulot"
+    title = stem[:1].upper() + stem[1:]
+    if grams >= 1000:
+        w = f"{grams / 1000:.2f}".rstrip("0").rstrip(".") + " kg"
+    else:
+        w = f"{grams} g"
+    return f"{title} ~{w} ({money(amount)}lik)"
 
 
 def parse_order_segments(user_text: str) -> list[dict[str, Any]]:
@@ -437,7 +511,34 @@ def try_multi_add(user_id: int, user_text: str) -> tuple[str, list[Any]] | None:
         variants = find_variants(seg["query"])
         want_size = seg["want_size"]
         want_unit = seg["want_unit"]
+        want_money = seg.get("want_money")
         qty = int(seg["qty"] or 1)
+
+        # So‘mlik: kg mahsulotdan proporsional og‘irlik
+        if want_money is not None:
+            amount = int(want_money)
+            if amount < 500:
+                missing.append(f"{seg['query']} (min 500 so‘m)")
+                continue
+            kg_product = _find_1kg_product(variants)
+            if not kg_product:
+                missing.append(f"{seg['query']} (kg yo‘q)")
+                continue
+            price_kg = int(kg_product["price"])
+            grams = db.grams_for_money(price_kg, amount)
+            label = _money_label(str(kg_product["name"]), grams, amount)
+            for _ in range(max(1, qty)):
+                db.cart_add_by_money(
+                    user_id,
+                    int(kg_product["id"]),
+                    amount=amount,
+                    grams=grams,
+                    label=label,
+                )
+            line_total = amount * max(1, qty)
+            added_lines.append(f"• {label} × {max(1, qty)} — {money(line_total)}")
+            products.append(kg_product)
+            continue
 
         if _should_list_variants(seg, variants):
             choose_blocks.append((seg["query"], variants))
@@ -702,6 +803,8 @@ def _openai_reply(user_id: int, user_text: str) -> str | None:
         "Agar mijoz hajmsiz yozsa (masalan «cola», «sut», «guruch») — ADD qilma; "
         "katalogdagi SHU mahsulotning barcha hajm/tur variantlarini (#ID bilan) ko‘rsat "
         "va tanlashni so‘ra. Bu QOIDА barcha mahsulotlarga tegishli.\n"
+        "Agar mijoz so‘mlik so‘rasa (masalan «guruch 5000 so‘mlik», «shakar 10 minglik») — "
+        "1kg narxidan gramm hisobla va tushuntir; ADD qilma (tizim o‘zi qo‘shadi).\n"
         "Agar mijoz bir nechta mahsulot so‘rasa (masalan: guruch 2kg, cola 1.5l x2), "
         "mos mahsulotlarni tanla va HAR BIR uchun alohida qator yoz:\n"
         "ADD:#ID:QTY\n"
@@ -745,12 +848,14 @@ def _openai_reply(user_id: int, user_text: str) -> str | None:
 
 
 def reply_to_user(user_id: int, user_text: str) -> tuple[str, list[Any]]:
-    # Hajmsiz so‘rov — HAR QANDAY mahsulot oilasi uchun variantlar
+    # So‘mlik / aniq hajm — avval multi; faqat hajmsiz → variantlar
     segments = parse_order_segments(user_text)
     if len(segments) == 1 and "," not in user_text:
-        variants = find_variants(segments[0]["query"])
-        if _should_list_variants(segments[0], variants):
-            return format_variants(segments[0]["query"], variants), variants
+        seg0 = segments[0]
+        if seg0.get("want_money") is None and seg0.get("want_size") is None:
+            variants = find_variants(seg0["query"])
+            if _should_list_variants(seg0, variants):
+                return format_variants(seg0["query"], variants), variants
 
     multi = try_multi_add(user_id, user_text)
     if multi:

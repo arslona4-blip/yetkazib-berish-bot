@@ -54,10 +54,13 @@ def init_db() -> None:
             );
 
             CREATE TABLE IF NOT EXISTS cart (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
                 product_id INTEGER NOT NULL,
                 quantity INTEGER NOT NULL DEFAULT 1,
-                PRIMARY KEY (user_id, product_id)
+                custom_price INTEGER,
+                custom_label TEXT NOT NULL DEFAULT '',
+                grams INTEGER NOT NULL DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS chat_memory (
@@ -82,6 +85,7 @@ def init_db() -> None:
             conn.execute(
                 "ALTER TABLE orders ADD COLUMN subtotal INTEGER NOT NULL DEFAULT 0"
             )
+        _migrate_cart_table(conn)
         count = conn.execute("SELECT COUNT(*) AS c FROM products").fetchone()["c"]
         if count == 0:
             seed = [
@@ -311,6 +315,50 @@ def _ensure_size_variants(conn: sqlite3.Connection) -> None:
             )
 
 
+def _migrate_cart_table(conn: sqlite3.Connection) -> None:
+    """Savat: id PK + so‘mlik (custom) qatorlar uchun ustunlar."""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(cart)").fetchall()}
+    if "id" in cols and "custom_price" in cols:
+        return
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS cart_v2 (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            product_id INTEGER NOT NULL,
+            quantity INTEGER NOT NULL DEFAULT 1,
+            custom_price INTEGER,
+            custom_label TEXT NOT NULL DEFAULT '',
+            grams INTEGER NOT NULL DEFAULT 0
+        );
+        """
+    )
+    if cols:
+        # eski savatni ko‘chirish
+        has_custom = "custom_price" in cols
+        if has_custom:
+            conn.execute(
+                """
+                INSERT INTO cart_v2 (user_id, product_id, quantity, custom_price, custom_label, grams)
+                SELECT user_id, product_id, quantity,
+                       custom_price, COALESCE(custom_label, ''), COALESCE(grams, 0)
+                FROM cart
+                """
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO cart_v2 (user_id, product_id, quantity, custom_price, custom_label, grams)
+                SELECT user_id, product_id, quantity, NULL, '', 0 FROM cart
+                """
+            )
+        conn.execute("DROP TABLE cart")
+    conn.execute("ALTER TABLE cart_v2 RENAME TO cart")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cart_user ON cart(user_id)"
+    )
+
+
 def list_products(active_only: bool = True) -> list[sqlite3.Row]:
     with get_connection() as conn:
         if active_only:
@@ -522,54 +570,111 @@ def list_products_by_category(category: str) -> list[sqlite3.Row]:
 
 
 def cart_add(user_id: int, product_id: int, qty: int = 1) -> None:
+    """Oddiy mahsulot (qadoq) — bir xil product_id qatoriga qo‘shiladi."""
     qty = max(1, int(qty))
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT quantity FROM cart WHERE user_id = ? AND product_id = ?",
+            """
+            SELECT id, quantity FROM cart
+            WHERE user_id = ? AND product_id = ?
+              AND custom_price IS NULL AND grams = 0
+            """,
             (user_id, product_id),
         ).fetchone()
         if row:
             conn.execute(
-                "UPDATE cart SET quantity = quantity + ? WHERE user_id = ? AND product_id = ?",
-                (qty, user_id, product_id),
+                "UPDATE cart SET quantity = quantity + ? WHERE id = ?",
+                (qty, int(row["id"])),
             )
         else:
             conn.execute(
-                "INSERT INTO cart (user_id, product_id, quantity) VALUES (?, ?, ?)",
+                """
+                INSERT INTO cart (user_id, product_id, quantity, custom_price, custom_label, grams)
+                VALUES (?, ?, ?, NULL, '', 0)
+                """,
                 (user_id, product_id, qty),
             )
 
 
-def cart_set_qty(user_id: int, product_id: int, qty: int) -> None:
+def cart_add_by_money(
+    user_id: int,
+    product_id: int,
+    *,
+    amount: int,
+    grams: int,
+    label: str,
+) -> dict[str, Any]:
+    """Kg mahsulotdan so‘mlik olish (masalan 5000 so‘mlik guruch)."""
+    amount = max(100, int(amount))
+    grams = max(1, int(grams))
+    label = (label or "").strip() or f"#{product_id}"
+    with get_connection() as conn:
+        # Bir xil so‘mlik qator bo‘lsa — miqdorni oshirish emas, yangi qator
+        # (har bir so‘rov alohida). Lekin bir xil amount+grams birlashtiramiz.
+        row = conn.execute(
+            """
+            SELECT id, quantity FROM cart
+            WHERE user_id = ? AND product_id = ?
+              AND custom_price = ? AND grams = ?
+            """,
+            (user_id, product_id, amount, grams),
+        ).fetchone()
+        if row:
+            conn.execute(
+                "UPDATE cart SET quantity = quantity + 1 WHERE id = ?",
+                (int(row["id"]),),
+            )
+            cid = int(row["id"])
+            qty = int(row["quantity"]) + 1
+        else:
+            cur = conn.execute(
+                """
+                INSERT INTO cart (
+                    user_id, product_id, quantity, custom_price, custom_label, grams
+                ) VALUES (?, ?, 1, ?, ?, ?)
+                """,
+                (user_id, product_id, amount, label, grams),
+            )
+            cid = int(cur.lastrowid)
+            qty = 1
+    return {
+        "cart_id": cid,
+        "product_id": int(product_id),
+        "name": label,
+        "price": amount,
+        "quantity": qty,
+        "grams": grams,
+        "line_total": amount * qty,
+        "is_custom": True,
+    }
+
+
+def cart_set_qty(user_id: int, cart_id: int, qty: int) -> None:
     qty = int(qty)
     with get_connection() as conn:
         if qty <= 0:
             conn.execute(
-                "DELETE FROM cart WHERE user_id = ? AND product_id = ?",
-                (user_id, product_id),
+                "DELETE FROM cart WHERE user_id = ? AND id = ?",
+                (user_id, int(cart_id)),
             )
             return
+        conn.execute(
+            "UPDATE cart SET quantity = ? WHERE user_id = ? AND id = ?",
+            (qty, user_id, int(cart_id)),
+        )
+
+
+def cart_delta(user_id: int, cart_id: int, delta: int) -> int:
+    """Miqdorni o‘zgartiradi (cart qator id); 0 = o‘chirilgan."""
+    with get_connection() as conn:
         row = conn.execute(
-            "SELECT quantity FROM cart WHERE user_id = ? AND product_id = ?",
-            (user_id, product_id),
+            "SELECT quantity FROM cart WHERE user_id = ? AND id = ?",
+            (user_id, int(cart_id)),
         ).fetchone()
-        if row:
-            conn.execute(
-                "UPDATE cart SET quantity = ? WHERE user_id = ? AND product_id = ?",
-                (qty, user_id, product_id),
-            )
-        else:
-            conn.execute(
-                "INSERT INTO cart (user_id, product_id, quantity) VALUES (?, ?, ?)",
-                (user_id, product_id, qty),
-            )
-
-
-def cart_delta(user_id: int, product_id: int, delta: int) -> int:
-    """Miqdorni o‘zgartiradi; yangi quantity qaytaradi (0 = o‘chirilgan)."""
-    items = {i["product_id"]: i["quantity"] for i in get_cart(user_id)}
-    cur = int(items.get(int(product_id), 0)) + int(delta)
-    cart_set_qty(user_id, product_id, cur)
+        if not row:
+            return 0
+        cur = int(row["quantity"]) + int(delta)
+    cart_set_qty(user_id, int(cart_id), cur)
     return max(0, cur)
 
 
@@ -582,23 +687,38 @@ def get_cart(user_id: int) -> list[dict[str, Any]]:
     with get_connection() as conn:
         rows = conn.execute(
             """
-            SELECT c.product_id, c.quantity, p.name, p.price
+            SELECT c.id AS cart_id, c.product_id, c.quantity, c.custom_price,
+                   c.custom_label, c.grams, p.name, p.price
             FROM cart c
             JOIN products p ON p.id = c.product_id
             WHERE c.user_id = ? AND p.is_active = 1
-            ORDER BY p.name
+            ORDER BY c.id
             """,
             (user_id,),
         ).fetchall()
     items = []
     for r in rows:
+        custom = r["custom_price"]
+        grams = int(r["grams"] or 0)
+        if custom is not None:
+            unit_price = int(custom)
+            name = str(r["custom_label"] or r["name"])
+            is_custom = True
+        else:
+            unit_price = int(r["price"])
+            name = str(r["name"])
+            is_custom = False
+        qty = int(r["quantity"])
         items.append(
             {
+                "cart_id": int(r["cart_id"]),
                 "product_id": int(r["product_id"]),
-                "name": r["name"],
-                "price": int(r["price"]),
-                "quantity": int(r["quantity"]),
-                "line_total": int(r["price"]) * int(r["quantity"]),
+                "name": name,
+                "price": unit_price,
+                "quantity": qty,
+                "grams": grams,
+                "line_total": unit_price * qty,
+                "is_custom": is_custom,
             }
         )
     return items
@@ -606,6 +726,35 @@ def get_cart(user_id: int) -> list[dict[str, Any]]:
 
 def cart_total(user_id: int) -> int:
     return sum(i["line_total"] for i in get_cart(user_id))
+
+
+def find_kg_product(stem_query: str):
+    """Oila ichidan 1kg mahsulotni topadi."""
+    rows = list_products(active_only=True)
+    q = (stem_query or "").casefold().strip()
+    best = None
+    for p in rows:
+        name = str(p["name"])
+        grams = _pack_grams_from_name(name)
+        if grams != 1000:
+            continue
+        stem = _weight_family_stem(name)
+        if not stem:
+            continue
+        if q in stem or stem in q or q in name.casefold():
+            best = p
+            break
+    if best:
+        return best
+    # find_variants orqali
+    return None
+
+
+def grams_for_money(price_1kg: int, amount: int) -> int:
+    """1kg narxidan so‘m bo‘yicha gramm."""
+    if price_1kg <= 0:
+        return 0
+    return max(1, int(round(int(amount) * 1000.0 / int(price_1kg))))
 
 
 def create_order(
@@ -671,6 +820,17 @@ def fill_cart_from_order(user_id: int, order_id: int) -> int:
         product = get_product(pid)
         if not product or not product["is_active"] or qty <= 0:
             continue
+        if it.get("is_custom") or it.get("custom_price") is not None or it.get("grams"):
+            amount = int(it.get("price") or it.get("custom_price") or 0)
+            grams = int(it.get("grams") or 0)
+            label = str(it.get("name") or product["name"])
+            if amount > 0 and grams > 0:
+                for _ in range(qty):
+                    cart_add_by_money(
+                        user_id, pid, amount=amount, grams=grams, label=label
+                    )
+                added += 1
+                continue
         cart_add(user_id, pid, qty)
         added += 1
     return added
