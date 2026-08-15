@@ -23,5 +23,5 @@ ENV DATABASE_PATH=/data/bot.db
 ENV AI_SOTUVCHI_DB=/data/ai_sotuvchi.db
 ENV WEBAPP_PORT=8088
 
-# Baraka + (token bo‘lsa) AI Sotuvchi
+# Yetkazib berish boti
 CMD ["python", "-m", "run_bots"]
