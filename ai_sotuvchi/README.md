@@ -42,19 +42,20 @@ Token qo‘yilmasa faqat Baraka ishlayveradi.
 
 ## Imkoniyatlar
 
-- 💬 AI suhbat (OpenAI yoki mahalliy qidiruv)
-- 📦 Katalog kategoriyalar bilan
-- 🛒 Savat (+/−) · tezkor: `2 ta sut`
-- ✅ Buyurtma · 📋 Mening buyurtmalarim
-- 🛠 `/add` `/off` `/on` `/orders` `/stats`
+- 💬 AI sotuvchi: mahsulot qidiradi, savat yig‘adi, buyurtma oladi
+- 🔍 Fuzzy qidiruv (`Yubileniy Pechene` → Yubileyniy Pechene)
+- 📦 Kg mahsulot: **250g / 500g / 1kg** + **5 000 / 10 000 so‘mlik**
+- 🛒 Savat (+/−) · tezkor: `2 ta sut`, `guruch 5000 so‘mlik`
+- ✅ Buyurtma · saqlangan telefon/manzil (ikkinchi marta tez)
+- 📋 Mening buyurtmalarim · qayta buyurtma
+- 🛠 Admin: mahsulot tahrir (nom, narx, toifa, rasm), `/orders` `/stats`
 
 ## Professional oqim
 
 - Salomlashuv va chek ko‘rinishidagi buyurtma
 - Katalog → savat → buyurtma
 - Status: Yangi → Qabul → Yetkazilmoqda → Yetkazildi
-- Mahsulot: nom → narx → (ixtiyoriy) rasm
-- Admin: narx o‘zgartirish, yashirish/yoqish
+- 1 kg narxi o‘zgarsa 250g/500g avtomatik hisoblanadi
 
 ## Mahsulot qo‘shish
 
@@ -62,4 +63,10 @@ Token qo‘yilmasa faqat Baraka ishlayveradi.
 2. Nom
 3. Narx
 4. Rasm yoki **O‘tkazib yuborish**
+
+## Test
+
+```bash
+python -m unittest ai_sotuvchi.tests
+```
 

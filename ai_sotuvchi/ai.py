@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import re
 import urllib.error
 import urllib.request
@@ -21,49 +20,24 @@ from ai_sotuvchi.config import (
     money,
 )
 from ai_sotuvchi import database as db
+from ai_sotuvchi.matching import (
+    format_variants,
+    grams_for_money,
+    kg_money_options,
+    not_found_text,
+    pack_grams_from_name,
+    pack_size_from_name,
+    packs_needed,
+    parse_order_segments,
+    pick_family,
+    query_matches_name,
+    query_tokens,
+    score_product,
+    should_list_variants,
+    to_base_unit,
+)
 
 logger = logging.getLogger(__name__)
-
-_STOP = {
-    "kerak",
-    "kerakli",
-    "bormi",
-    "bor",
-    "yoq",
-    "yo‘q",
-    "yuboring",
-    "bering",
-    "iltimos",
-    "menga",
-    "bizga",
-    "va",
-    "ham",
-    "uchun",
-    "dan",
-    "ga",
-    "ni",
-    "ning",
-    "x",
-    "ta",
-    "dona",
-    "bitta",
-    "bittasini",
-    "kg",
-    "l",
-    "lt",
-    "litr",
-    "gr",
-    "g",
-}
-
-# Qisqa nom → qidiruv kaliti
-_ALIASES = {
-    "cola": "cola",
-    "kola": "cola",
-    "coca": "cola",
-    "fanta": "fanta",
-    "pepsi": "pepsi",
-}
 
 
 def catalog_text(limit: int = 40, category: str | None = None) -> str:
@@ -84,289 +58,116 @@ def catalog_text(limit: int = 40, category: str | None = None) -> str:
 
 
 def find_products(user_text: str, limit: int = 6) -> list[Any]:
-    text = (user_text or "").strip().lower()
-    tokens = [t for t in re.split(r"\W+", text) if len(t) >= 3 and t not in _STOP]
-    found: list[Any] = []
+    text = (user_text or "").strip()
+    tokens = query_tokens(text)
+    scored: list[tuple[int, Any]] = []
     seen: set[int] = set()
+
     for token in tokens or [text]:
-        for p in db.search_products(token, limit=5):
+        for p in db.search_products(token, limit=12):
             pid = int(p["id"])
-            if pid not in seen:
+            if pid in seen:
+                continue
+            seen.add(pid)
+            scored.append((query_matches_name(text, str(p["name"])) or 10, p))
+
+    if len(scored) < limit:
+        for p in db.list_products(active_only=True):
+            pid = int(p["id"])
+            if pid in seen:
+                continue
+            score = query_matches_name(text, str(p["name"]))
+            if score <= 0:
+                for tok in tokens:
+                    if query_matches_name(tok, str(p["name"])) > 0:
+                        score = 30
+                        break
+            if score > 0:
                 seen.add(pid)
-                found.append(p)
-            if len(found) >= limit:
-                return found
-    return found
+                scored.append((score, p))
 
-
-def _norm(s: str) -> str:
-    return (
-        (s or "")
-        .lower()
-        .replace("‘", "'")
-        .replace("’", "'")
-        .replace("ё", "e")
-        .replace(",", ".")
-    )
-
-
-def _pack_size_from_name(name: str) -> tuple[float | None, str | None]:
-    m = re.search(r"(\d+(?:\.\d+)?)\s*(kg|l|lt|litr|gr|g)\b", _norm(name))
-    if not m:
-        return None, None
-    return float(m.group(1)), m.group(2)
-
-
-def _score_product(query: str, product: Any, want_size: float | None, want_unit: str | None) -> int:
-    name = _norm(str(product["name"]))
-    q = _norm(query)
-    score = 0
-    if q and q in name:
-        score += 50
-    for tok in re.split(r"\W+", q):
-        if len(tok) >= 3 and tok in name:
-            score += 10
-    if want_size is not None and want_unit:
-        psize, punit = _pack_size_from_name(name)
-        if psize is not None and punit:
-            # unit family
-            uq = want_unit
-            up = punit
-            if uq in {"l", "lt", "litr"}:
-                uq = "l"
-            if up in {"l", "lt", "litr"}:
-                up = "l"
-            if uq in {"gr", "g"}:
-                uq = "g"
-            if up in {"gr", "g"}:
-                up = "g"
-            if uq == up:
-                score += 20
-                if abs(psize - want_size) < 0.01:
-                    score += 40
-                elif psize <= want_size + 0.01:
-                    score += 10
-    return score
-
-
-def _base_name(name: str) -> str:
-    """«Coca-Cola 1.5L» → «coca cola»; «Guruch 1kg» → «guruch»."""
-    n = _norm(name)
-    n = re.sub(r"\d+(?:\.\d+)?\s*(kg|l|lt|litr|gr|g|ml|dona|ta)\b", " ", n)
-    n = re.sub(r"[-_/]+", " ", n)
-    n = re.sub(r"\s+", " ", n).strip()
-    return n
-
-
-def _query_tokens(query: str) -> list[str]:
-    q = _norm(query)
-    for tok in list(re.split(r"\W+", q)):
-        if tok in _ALIASES:
-            q = _ALIASES[tok]
-            break
-    return [t for t in re.split(r"\W+", q) if len(t) >= 2 and t not in _STOP]
-
-
-def _best_product(query: str, want_size: float | None = None, want_unit: str | None = None):
-    variants = find_variants(query, limit=20)
-    if not variants:
-        return None
-    ranked = sorted(
-        variants,
-        key=lambda p: _score_product(query, p, want_size, want_unit),
-        reverse=True,
-    )
-    best = ranked[0]
-    if _score_product(query, best, want_size, want_unit) <= 0:
-        return None
-    return best
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [p for s, p in scored[:limit] if s > 0]
 
 
 def find_variants(query: str, limit: int = 20) -> list[Any]:
-    """Har qanday mahsulot oilasi: hajmsiz so‘rovda barcha variantlar.
-
-    Masalan: cola → 0.5L/1.5L/2L; sut → Sut 1L, Sut 0.5L (bor bo‘lsa).
-    """
-    tokens = _query_tokens(query)
+    tokens = query_tokens(query)
     if not tokens:
         return []
 
-    # Butun katalogdan oila bo‘yicha yig‘ish (cola-only emas)
     all_products = db.list_products(active_only=True)
     scored: list[tuple[int, Any]] = []
     for p in all_products:
-        name = _norm(str(p["name"]))
-        base = _base_name(str(p["name"]))
-        score = 0
-        for tok in tokens:
-            if tok in name or tok in base:
-                score += 30
-            # qisqa brand (cola in coca-cola)
-            if len(tok) >= 3 and tok in name.replace("-", " "):
-                score += 10
-        # alias: cola ↔ coca
+        score = query_matches_name(query, str(p["name"]))
+        if score <= 0:
+            name = str(p["name"])
+            for tok in tokens:
+                if query_matches_name(tok, name) > 0:
+                    score += 25
+        name_n = str(p["name"]).lower()
         if "cola" in tokens or "coca" in tokens:
-            if "cola" in name or "coca" in name:
+            if "cola" in name_n or "coca" in name_n:
                 score += 25
         if score > 0:
             scored.append((score, p))
 
     if not scored:
-        # fallback LIKE qidiruv
-        for tok in tokens:
-            for p in db.search_products(tok, limit=20):
-                scored.append((_score_product(tok, p, None, None), p))
+        for p in find_products(query, limit=20):
+            scored.append((query_matches_name(query, str(p["name"])) or 20, p))
 
-    # Eng yaxshi match oilasini olish: bir xil base_name atrofida
-    scored.sort(key=lambda x: x[0], reverse=True)
-    if not scored or scored[0][0] <= 0:
-        return []
-
-    top = scored[0][1]
-    top_base = _base_name(str(top["name"]))
-    top_tokens = set(re.split(r"\W+", top_base)) - _STOP - {""}
-
-    family: list[Any] = []
-    seen: set[int] = set()
-    for score, p in scored:
-        if score <= 0:
-            continue
-        pid = int(p["id"])
-        if pid in seen:
-            continue
-        p_base = _base_name(str(p["name"]))
-        p_tokens = set(re.split(r"\W+", p_base)) - _STOP - {""}
-        # bir oila: umumiy token bor yoki base o‘xshash
-        if top_tokens & p_tokens or (
-            top_base and (top_base in p_base or p_base in top_base)
-        ):
-            seen.add(pid)
-            family.append(p)
-
-    # Agar oila bo‘sh qolsa — faqat top matchlar
-    if not family:
-        for score, p in scored[:limit]:
-            if score > 0:
-                family.append(p)
-
-    def sort_key(p: Any) -> tuple:
-        size, unit = _pack_size_from_name(str(p["name"]))
-        unit_rank = {"l": 0, "lt": 0, "litr": 0, "ml": 0, "kg": 1, "g": 2, "gr": 2}.get(
-            unit or "", 9
-        )
-        return (unit_rank, size if size is not None else 999, _norm(str(p["name"])))
-
-    family.sort(key=sort_key)
-    return family[:limit]
+    return pick_family(scored, limit=limit)
 
 
-def format_variants(query: str, products: list[Any]) -> str:
-    title = query.strip().title() if query else "Mahsulot"
-    if len(products) == 1:
-        p = products[0]
-        return (
-            f"Topdim: <b>{p['name']}</b> — {money(int(p['price']))}\n"
-            "Savatga qo‘shish: pastdagi tugma."
-        )
-    lines = [
-        f"<b>{title}</b> — mavjud variantlar (hajm/tur):",
-        "————————————",
-    ]
-    for p in products:
-        lines.append(f"• {p['name']} — {money(int(p['price']))} (#{p['id']})")
-    lines.append("\nKeraklisini tugmadan tanlang.")
-    return "\n".join(lines)
-
-
-def _should_list_variants(seg: dict[str, Any], variants: list[Any]) -> bool:
-    """Hajm aytilmagan bo‘lsa — barcha mahsulotlar uchun variantlarni ko‘rsat."""
+def _best_product(
+    query: str, want_size: float | None = None, want_unit: str | None = None
+):
+    variants = find_variants(query, limit=20)
     if not variants:
-        return False
-    if seg.get("want_size") is not None:
-        return False
-    # Aniq miqdor (2 ta) va faqat 1 variant → to‘g‘ridan qo‘shish mumkin
-    if int(seg.get("qty") or 1) > 1 and len(variants) == 1:
-        return False
-    # 1+ variant: har doim ro‘yxat (cola, sut, guruch, …)
-    return True
-
-
-def _parse_segment(seg: str) -> dict[str, Any] | None:
-    raw = _norm(seg).strip()
-    if len(raw) < 2:
         return None
-    raw = re.sub(r"\b(kerak|bormi|bering|iltimos|menga)\b", " ", raw)
-    raw = re.sub(r"\s+", " ", raw).strip()
-
-    qty = 1
-    want_size = None
-    want_unit = None
-
-    # x2 / ×2
-    m = re.search(r"[x×*]\s*(\d+)\b", raw)
-    if m:
-        qty = max(1, int(m.group(1)))
-        raw = (raw[: m.start()] + " " + raw[m.end() :]).strip()
-
-    # 2 ta / 2 dona
-    m = re.search(r"\b(\d+)\s*(?:ta|dona)\b", raw)
-    if m:
-        qty = max(1, int(m.group(1)))
-        raw = (raw[: m.start()] + " " + raw[m.end() :]).strip()
-
-    # 2kg / 1.5 l / 0.5 kg
-    m = re.search(r"(\d+(?:\.\d+)?)\s*(kg|l|lt|litr|gr|g)\b", raw)
-    if m:
-        want_size = float(m.group(1))
-        want_unit = m.group(2)
-        raw = (raw[: m.start()] + " " + raw[m.end() :]).strip()
-
-    # leading qty still there?
-    m = re.match(r"^(\d+)\s+(.+)$", raw)
-    if m and want_size is None:
-        qty = max(1, int(m.group(1)))
-        raw = m.group(2).strip()
-
-    # cleanup
-    raw = re.sub(r"[x×*]", " ", raw)
-    tokens = [t for t in re.split(r"\W+", raw) if t and t not in _STOP]
-    query = " ".join(tokens).strip()
-    if len(query) < 2:
+    ranked = sorted(
+        variants,
+        key=lambda p: score_product(query, str(p["name"]), want_size, want_unit),
+        reverse=True,
+    )
+    best = ranked[0]
+    if score_product(query, str(best["name"]), want_size, want_unit) <= 0:
         return None
-    return {
-        "query": query,
-        "qty": qty,
-        "want_size": want_size,
-        "want_unit": want_unit,
-    }
+    return best
 
 
-def parse_order_segments(user_text: str) -> list[dict[str, Any]]:
-    text = (user_text or "").strip()
-    if not text:
-        return []
-    # 0,5 kg kabi o‘nlik vergulni nuqtaga
-    text = re.sub(r"(\d),(\d)", r"\1.\2", text)
-    # split by comma / semicolon / newline / " va "
-    parts = re.split(r"[,;\n]|[\s]+va[\s]+", text, flags=re.IGNORECASE)
-    out = []
-    for part in parts:
-        parsed = _parse_segment(part)
-        if parsed:
-            out.append(parsed)
-    if not out:
-        parsed = _parse_segment(text)
-        if parsed:
-            out.append(parsed)
-    return out
+def _somlik_label(product_name: str, amount: int, grams: int) -> str:
+    base = re.sub(
+        r"\s*\d+(?:\.\d+)?\s*(kg|g|gr|l|ml)\b",
+        "",
+        str(product_name),
+        flags=re.IGNORECASE,
+    ).strip() or str(product_name)
+    return f"{base} ~{grams} g ({money(amount)}lik)"
+
+
+def _add_somlik(user_id: int, product: Any, amount: int) -> str | None:
+    price_kg = int(product["price"])
+    grams = grams_for_money(price_kg, amount)
+    if grams <= 0:
+        return None
+    label = _somlik_label(str(product["name"]), amount, grams)
+    db.cart_add_by_money(
+        user_id,
+        int(product["id"]),
+        amount=amount,
+        grams=grams,
+        label=label,
+    )
+    return f"• {label} — {money(amount)}"
 
 
 def try_multi_add(user_id: int, user_text: str) -> tuple[str, list[Any]] | None:
     """Bir nechta mahsulotli so‘rovni savatga yig‘adi.
 
-    Hajmsiz so‘rovda (masalan «cola») — barcha variantlarni ko‘rsatadi, avto-qo‘shmaydi.
+    Hajmsiz so‘rovda (masalan «cola») — barcha variantlarni ko‘rsatadi.
+    «guruch 5000 so‘mlik» — gramm hisoblab savatga qo‘shadi.
     """
-    text = _norm(user_text)
+    text = (user_text or "").strip().lower()
     if text.endswith("?") and not any(
         w in text for w in ("kerak", "bering", "yuboring", "olaman", "zakaz")
     ):
@@ -377,10 +178,9 @@ def try_multi_add(user_id: int, user_text: str) -> tuple[str, list[Any]] | None:
     if len(segments) < 1:
         return None
 
-    # Bitta so‘rov, hajmsiz → variantlar (barcha mahsulotlar)
     if len(segments) == 1:
         variants = find_variants(segments[0]["query"])
-        if _should_list_variants(segments[0], variants):
+        if should_list_variants(segments[0], variants):
             return format_variants(segments[0]["query"], variants), variants
 
     added_lines: list[str] = []
@@ -393,9 +193,28 @@ def try_multi_add(user_id: int, user_text: str) -> tuple[str, list[Any]] | None:
         variants = find_variants(seg["query"])
         want_size = seg["want_size"]
         want_unit = seg["want_unit"]
+        want_money = seg.get("want_money")
         qty = int(seg["qty"] or 1)
 
-        if _should_list_variants(seg, variants):
+        if want_money:
+            kg = None
+            for p in variants:
+                if pack_grams_from_name(str(p["name"])) == 1000:
+                    kg = p
+                    break
+            kg = kg or _best_product(seg["query"])
+            if not kg:
+                missing.append(seg["query"])
+                continue
+            line = _add_somlik(user_id, kg, int(want_money) * max(1, qty))
+            if line:
+                added_lines.append(line)
+                products.append(kg)
+            else:
+                missing.append(seg["query"])
+            continue
+
+        if should_list_variants(seg, variants):
             choose_blocks.append((seg["query"], variants))
             continue
 
@@ -404,26 +223,19 @@ def try_multi_add(user_id: int, user_text: str) -> tuple[str, list[Any]] | None:
             missing.append(seg["query"])
             continue
 
-        psize, punit = _pack_size_from_name(str(product["name"]))
-        if want_size is not None and psize:
-            wu = want_unit or ""
-            pu = punit or ""
-            if wu in {"l", "lt", "litr"}:
-                wu = "l"
-            if pu in {"l", "lt", "litr"}:
-                pu = "l"
-            if wu in {"gr", "g"}:
-                wu = "g"
-            if pu in {"gr", "g"}:
-                pu = "g"
-            if wu == pu and psize > 0:
-                packs = max(1, int(math.ceil(want_size / psize - 1e-9)))
+        if want_size is not None and want_unit:
+            packs = packs_needed(want_size, want_unit, str(product["name"]))
+            if packs:
                 qty = packs * max(1, int(seg["qty"] or 1))
-                if abs(packs * psize - want_size) > 0.05:
-                    notes.append(
-                        f"{product['name']}: so‘ralgan {want_size}{want_unit}, "
-                        f"paket {psize}{punit} → {qty} dona"
-                    )
+                psize, punit = pack_size_from_name(str(product["name"]))
+                if psize and punit:
+                    want = to_base_unit(want_size, want_unit)
+                    have = to_base_unit(psize, punit)
+                    if want and have and abs(packs * have[0] - want[0]) > 5:
+                        notes.append(
+                            f"{product['name']}: so‘ralgan {want_size}{want_unit} "
+                            f"→ {qty} dona"
+                        )
 
         db.cart_add(user_id, int(product["id"]), qty)
         line_total = int(product["price"]) * qty
@@ -432,10 +244,8 @@ def try_multi_add(user_id: int, user_text: str) -> tuple[str, list[Any]] | None:
         )
         products.append(product)
 
-    # Faqat tanlash kerak bo‘lgan holat
     if not added_lines and choose_blocks:
         q, vars_ = choose_blocks[0]
-        # bir nechta oila bo‘lsa birlashtiramiz
         if len(choose_blocks) == 1:
             return format_variants(q, vars_), vars_
         lines = ["Bir nechta mahsulotda hajm tanlang:"]
@@ -463,7 +273,7 @@ def try_multi_add(user_id: int, user_text: str) -> tuple[str, list[Any]] | None:
     lines.append(f"Mahsulotlar: {money(subtotal)}")
     lines.append(f"Yetkazish: {money(DELIVERY_FEE)}")
     lines.append(f"<b>Jami: {money(subtotal + DELIVERY_FEE)}</b>")
-    lines.append("\nDavom etish: <b>Buyurtma berish</b>")
+    lines.append("\nYana nima kerak? Yoki <b>Buyurtma berish</b>.")
     return "\n".join(lines), products
 
 
@@ -476,7 +286,6 @@ def try_quick_add(user_id: int, user_text: str) -> str | None:
     m_qty = re.match(r"^(\d+)\s*(?:ta|dona)?\s+(.+)$", text)
     if not has_add_verb and not m_qty:
         return None
-    # ko‘p mahsulotli bo‘lsa multi ishlaydi
     if "," in text or " va " in text:
         return None
     if m_qty:
@@ -492,24 +301,36 @@ def try_quick_add(user_id: int, user_text: str) -> str | None:
             query = m2.group(2).strip()
     if len(query) < 2:
         return None
+    segments = parse_order_segments(query)
+    if segments and segments[0].get("want_money"):
+        return None
+    if segments and should_list_variants(segments[0], find_variants(segments[0]["query"])):
+        return None
     product = _best_product(query)
     if not product:
         return None
     db.cart_add(user_id, int(product["id"]), max(1, qty))
     return (
         f"✅ {product['name']} ×{max(1, qty)} savatga qo‘shildi.\n"
-        f"Savat: {money(db.cart_total(user_id))}"
+        f"Savat: {money(db.cart_total(user_id))}\n"
+        "Yana nima kerak?"
     )
 
 
 def _faq_reply(user_text: str) -> str | None:
-    text = _norm(user_text)
+    text = (user_text or "").strip().lower()
+    text = (
+        text.replace("‘", "'")
+        .replace("’", "'")
+        .replace("ё", "e")
+        .replace(",", ".")
+    )
     if any(w in text for w in ("salom", "assalom", "hello", "hi", "hayrli")):
         return (
             f"Assalomu alaykum! {SHOP_NAME} xizmatidaman.\n"
             f"⏰ {SHOP_HOURS} · 📞 {SHOP_PHONE}\n\n"
             "Nima kerak? Masalan:\n"
-            "<i>guruch 2kg, cola 1.5l x 2, shakar 0.5kg</i>"
+            "<i>guruch 2kg, cola 1.5l x 2, shakar 5000 so‘mlik</i>"
         )
     if any(w in text for w in ("rahmat", "tashakkur", "spasibo")):
         return "Arzimaydi! Yana kerak bo‘lsa yozing."
@@ -559,7 +380,6 @@ def _faq_reply(user_text: str) -> str | None:
     if "soat nechi" in text or text in {"vaqt", "time"}:
         now = datetime.now().strftime("%H:%M")
         return f"Hozir taxminan {now}. Do‘kon: {SHOP_HOURS}."
-    # oddiy hisob
     m = re.fullmatch(r"\s*(\d+)\s*([+\-*/])\s*(\d+)\s*", text)
     if m:
         a, op, b = int(m.group(1)), m.group(2), int(m.group(3))
@@ -579,15 +399,13 @@ def _faq_reply(user_text: str) -> str | None:
 
 
 def _general_reply(user_text: str) -> str:
-    """Har qanday savolga do‘stona javob (katalogsiz ham)."""
-    text = (user_text or "").strip()
+    q = (user_text or "").strip()
+    if len(q) >= 2:
+        return not_found_text(q)
     return (
-        f"Tushundim: «{text[:120]}»\n\n"
-        f"Men {SHOP_NAME} AI sotuvchisiman — asosan mahsulot, narx va buyurtma bo‘yicha yordam beraman.\n"
+        f"Men {SHOP_NAME} AI sotuvchisiman — mahsulot, narx va buyurtma.\n"
         f"📞 {SHOP_PHONE} · ⏰ {SHOP_HOURS}\n\n"
-        "Agar buyurtma bo‘lsa, shunday yozing:\n"
-        "<i>guruch 2kg, cola 1.5l x 2, shakar 0.5kg</i>\n\n"
-        "Boshqa savolingiz bo‘lsa — yozing, imkon qadar javob beraman."
+        "Masalan: <i>guruch, cola, shakar 5000 so‘mlik</i>"
     )
 
 
@@ -599,14 +417,14 @@ def _local_reply(user_text: str) -> tuple[str, list[Any]]:
     segments = parse_order_segments(user_text)
     if len(segments) == 1:
         variants = find_variants(segments[0]["query"])
-        if _should_list_variants(segments[0], variants):
+        if should_list_variants(segments[0], variants):
             return format_variants(segments[0]["query"], variants), variants
 
     found = find_products(user_text)
     if found:
         q = segments[0]["query"] if segments else user_text
         variants = find_variants(q)
-        if variants and _should_list_variants(
+        if variants and should_list_variants(
             segments[0] if segments else {"qty": 1, "want_size": None},
             variants,
         ):
@@ -621,7 +439,6 @@ def _local_reply(user_text: str) -> tuple[str, list[Any]]:
 
 
 def _apply_ai_adds(user_id: int, reply: str) -> str:
-    """AI javobidagi ADD:#id:qty qatorlarini savatga qo‘llaydi."""
     adds = re.findall(r"ADD:#(\d+):(\d+)", reply)
     if not adds:
         return reply
@@ -650,19 +467,14 @@ def _openai_reply(user_id: int, user_text: str) -> str | None:
 
     history = db.get_memory(user_id)
     system = (
-        f"Sen «{SHOP_NAME}» do‘konining professional o‘zbek AI yordamchisisan.\n"
+        f"Sen «{SHOP_NAME}» do‘konining professional o‘zbek AI sotuvchisisan.\n"
         f"Telefon: {SHOP_PHONE}. Ish vaqti: {SHOP_HOURS}. "
         f"Minimal: {MIN_ORDER_AMOUNT}. Yetkazish: {DELIVERY_FEE}.\n"
-        "Har qanday savolga odobli va foydali javob ber (do‘kon, hayot, umumiy).\n"
-        "Do‘kon savollarida katalogdan foydalan. Yo‘q mahsulotni o‘ylab topma.\n"
-        "Agar mijoz hajmsiz yozsa (masalan «cola», «sut», «guruch») — ADD qilma; "
-        "katalogdagi SHU mahsulotning barcha hajm/tur variantlarini (#ID bilan) ko‘rsat "
-        "va tanlashni so‘ra. Bu QOIDА barcha mahsulotlarga tegishli.\n"
-        "Agar mijoz bir nechta mahsulot so‘rasa (masalan: guruch 2kg, cola 1.5l x2), "
-        "mos mahsulotlarni tanla va HAR BIR uchun alohida qator yoz:\n"
-        "ADD:#ID:QTY\n"
-        "Masalan: ADD:#1:2\n"
-        "Keyin odamga tushunarli xulosa yoz.\n\n"
+        "Sotuvchi kabi yoz: qisqa, aniq, mahsulotni taklif qil, savatga chorla.\n"
+        "Yo‘q mahsulotni o‘ylab topma. Topilmasa shunday de: katalogda yo‘q.\n"
+        "Hajmsiz so‘rovda (cola, sut, guruch) ADD qilma — variantlarni (#ID) ko‘rsat.\n"
+        "Kg mahsulotda qadoq (250g/500g/1kg) va so‘mlik (5000/10000) ni ayt.\n"
+        "Bir nechta mahsulot so‘ralsa HAR BIR uchun: ADD:#ID:QTY\n\n"
         f"KATALOG:\n{catalog_text()}"
     )
     messages = [{"role": "system", "content": system}]
@@ -701,12 +513,12 @@ def _openai_reply(user_id: int, user_text: str) -> str | None:
 
 
 def reply_to_user(user_id: int, user_text: str) -> tuple[str, list[Any]]:
-    # Hajmsiz so‘rov — HAR QANDAY mahsulot oilasi uchun variantlar
     segments = parse_order_segments(user_text)
     if len(segments) == 1 and "," not in user_text:
-        variants = find_variants(segments[0]["query"])
-        if _should_list_variants(segments[0], variants):
-            return format_variants(segments[0]["query"], variants), variants
+        seg = segments[0]
+        variants = find_variants(seg["query"])
+        if should_list_variants(seg, variants):
+            return format_variants(seg["query"], variants), variants
 
     multi = try_multi_add(user_id, user_text)
     if multi:
@@ -729,3 +541,14 @@ def reply_to_user(user_id: int, user_text: str) -> tuple[str, list[Any]]:
         return ai, products
 
     return _local_reply(user_text)
+
+
+# handlers / keyboards uchun
+__all__ = [
+    "catalog_text",
+    "find_products",
+    "find_variants",
+    "format_variants",
+    "kg_money_options",
+    "reply_to_user",
+]

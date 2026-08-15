@@ -46,7 +46,7 @@ def welcome_text(first_name: str | None = None) -> str:
         f"📞 Aloqa: <b>{SHOP_PHONE}</b>\n"
         f"💳 Minimal buyurtma: <b>{money(MIN_ORDER_AMOUNT)}</b>\n"
         f"🚚 Yetkazish: <b>{money(DELIVERY_FEE)}</b>\n\n"
-        "<i>Yozing:</i> «guruch bormi?» yoki «2 ta sut»\n"
+        f"<i>Yozing:</i> «guruch», «cola», «shakar 5000 so‘mlik»\n"
         "yoki pastdagi menyudan boshlang."
     )
 
@@ -130,6 +130,20 @@ def admin_home(stats: dict) -> str:
         f"Yetkazilgan: <b>{stats['delivered']}</b>\n"
         f"Tushum: <b>{money(stats['revenue'])}</b>\n"
         "————————————\n"
-        "➕ Mahsulot · /orders · /stats\n"
-        "📢 Xabar — /broadcast"
+        "➕ Mahsulot · 📦 Mahsulotlar\n"
+        "/orders · /stats · 📢 Xabar"
     )
+
+
+def product_card(product) -> str:
+    active = bool(product["is_active"])
+    mark = "" if active else " 🚫 yashirin"
+    desc = str(product["description"] or "").strip()
+    lines = [
+        f"<b>{product['name']}</b>{mark}",
+        f"💰 {money(int(product['price']))}",
+        f"📁 {product['category']} · #{product['id']}",
+    ]
+    if desc:
+        lines.append(f"📄 {desc}")
+    return "\n".join(lines)

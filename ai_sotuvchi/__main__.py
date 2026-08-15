@@ -27,6 +27,7 @@ from ai_sotuvchi.handlers import (
     WAIT_PROD_NAME,
     WAIT_PROD_PHOTO,
     WAIT_PROD_PRICE,
+    WAIT_SAVED,
     add_product_category,
     add_product_name,
     add_product_photo,
@@ -40,11 +41,15 @@ from ai_sotuvchi.handlers import (
     callback_router,
     cancel_add_product,
     cancel_order_flow,
+    checkout_saved_callback,
+    checkout_saved_text,
+    on_admin_photo,
     on_text,
     order_address,
     order_name,
     order_note,
     order_phone,
+    order_phone_contact,
     shop_info,
     show_cart,
     show_catalog,
@@ -104,8 +109,13 @@ def main() -> None:
             CallbackQueryHandler(start_order_callback, pattern=r"^cart:order$"),
         ],
         states={
+            WAIT_SAVED: [
+                CallbackQueryHandler(checkout_saved_callback, pattern=r"^chk:"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, checkout_saved_text),
+            ],
             WAIT_PHONE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, order_phone)
+                MessageHandler(filters.CONTACT, order_phone_contact),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, order_phone),
             ],
             WAIT_ADDRESS: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, order_address)
@@ -186,6 +196,7 @@ def main() -> None:
     app.add_handler(order_conv)
     app.add_handler(broadcast_conv)
     app.add_handler(CallbackQueryHandler(callback_router))
+    app.add_handler(MessageHandler(filters.PHOTO, on_admin_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
 
     logger.info("AI Sotuvchi (pro+) ishga tushdi")
