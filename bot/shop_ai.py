@@ -70,6 +70,8 @@ _ALIASES = {
     "sprite": "sprite",
     "suv": "suv",
     "water": "suv",
+    "non": "non",
+    "нон": "non",
 }
 
 
@@ -663,6 +665,86 @@ def liter_family_for_product(product: Any) -> tuple[str, list[Any]]:
     return key, family
 
 
+_PIECE_FAMILY_TOKENS = {"non"}
+_PIECE_CARD_NAMES = {"non": "Non"}
+
+
+def _is_piece_product(product: Any) -> bool:
+    size, unit = _pack_size_from_name(str(product["name"]))
+    if unit in {"kg", "g", "gr", "l", "lt", "litr", "ml"}:
+        return False
+    return True
+
+
+def piece_stem_key(name: str) -> str:
+    """«Yupqa non», «Non 4000», «Non (1 dona)» → non."""
+    n = _norm(name)
+    n = re.sub(
+        r"\d+(?:\.\d+)?\s*(kg|l|lt|litr|gr|g|ml|dona|ta|som|so'm)\b",
+        " ",
+        n,
+    )
+    n = re.sub(r"\b\d{3,7}\b", " ", n)
+    n = re.sub(r"[-_/()]+", " ", n)
+    tokens = [t for t in re.split(r"\W+", n) if t and t not in _STOP]
+    mapped = [_ALIASES.get(t, t) for t in tokens]
+    for tok in mapped:
+        if tok in _PIECE_FAMILY_TOKENS:
+            return tok
+    return ""
+
+
+def expand_piece_packs(products: list[Any]) -> list[dict[str, Any]]:
+    """Non 3000 / 4000 / 5000 — har biri o‘z nomi va narxi."""
+    items: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    for p in products:
+        pid = int(p["id"])
+        if pid in seen:
+            continue
+        seen.add(pid)
+        items.append(
+            {
+                "product_id": pid,
+                "price": int(p["price"]),
+                "label": str(p["name"]),
+                "name": str(p["name"]),
+            }
+        )
+    items.sort(key=lambda x: (int(x["price"]), str(x["label"])))
+    if len(items) < 2:
+        return []
+    return items
+
+
+def piece_family_for_product(product: Any) -> tuple[str, list[Any]]:
+    if not _is_piece_product(product):
+        return "", []
+    key = piece_stem_key(str(product["name"]))
+    if not key:
+        return "", []
+    family: list[Any] = []
+    seen: set[int] = set()
+    for p in db.get_products():
+        if not _is_piece_product(p):
+            continue
+        if piece_stem_key(str(p["name"])) != key:
+            continue
+        pid = int(p["id"])
+        if pid in seen:
+            continue
+        seen.add(pid)
+        family.append(p)
+    if int(product["id"]) not in seen:
+        family.insert(0, product)
+    family.sort(key=lambda p: (int(p["price"]), str(p["name"])))
+    return key, family
+
+
+def piece_card_name(key: str, product: Any) -> str:
+    return _PIECE_CARD_NAMES.get(key) or display_stem_name(str(product["name"]))
+
+
 def _has_product_photo(product: Any) -> bool:
     try:
         return bool(product["image_file_id"])
@@ -688,19 +770,23 @@ def _pick_family_rep(members: list[Any]) -> Any:
 
 
 def collapse_catalog_families(products: list[Any]) -> list[Any]:
-    """Cola/Fanta/Pepsi 1L+1.5L+2L — katalogda bitta kartochka."""
+    """Cola/Fanta va Non 3000/4000 — katalogda bitta kartochka."""
     if not products:
         return []
     list_ids = {int(p["id"]) for p in products}
     used: set[int] = set()
     out: list[Any] = []
     liter_groups: dict[str, list[Any]] = {}
+    piece_groups: dict[str, list[Any]] = {}
     for p in products:
-        if not _product_ml(p):
+        if _product_ml(p):
+            key = liter_stem_key(str(p["name"]))
+            if key:
+                liter_groups.setdefault(key, []).append(p)
             continue
-        key = liter_stem_key(str(p["name"]))
-        if key:
-            liter_groups.setdefault(key, []).append(p)
+        key = piece_stem_key(str(p["name"]))
+        if key and _is_piece_product(p):
+            piece_groups.setdefault(key, []).append(p)
 
     for p in products:
         pid = int(p["id"])
@@ -719,6 +805,15 @@ def collapse_catalog_families(products: list[Any]) -> list[Any]:
             out.append(p)
             used.add(pid)
             continue
+        pkey = piece_stem_key(str(p["name"]))
+        if pkey and _is_piece_product(p):
+            members = piece_groups.get(pkey) or [p]
+            if len(expand_piece_packs(members)) >= 2:
+                rep = _pick_family_rep(members)
+                out.append(rep)
+                for m in members:
+                    used.add(int(m["id"]))
+                continue
         _query, family = kg_family_for_product(p)
         members = [x for x in family if int(x["id"]) in list_ids]
         if len(members) < 2:
@@ -752,7 +847,11 @@ def collapse_catalog_families(products: list[Any]) -> list[Any]:
 def format_variants(query: str, products: list[Any]) -> str:
     title = query.strip().title() if query else "Mahsulot"
     money_opts = kg_money_options(products)
-    packs = expand_kg_packs(products) or expand_liter_packs(products)
+    packs = (
+        expand_kg_packs(products)
+        or expand_liter_packs(products)
+        or expand_piece_packs(products)
+    )
 
     # Bitta oddiy (kg emas) mahsulot
     if len(products) == 1 and not money_opts and not packs:
@@ -765,7 +864,7 @@ def format_variants(query: str, products: list[Any]) -> str:
     lines = [
         f"<b>{title}</b> — barcha variantlar:",
         "————————————",
-        "<b>Qadoq:</b>",
+        "<b>Variantlar:</b>",
     ]
     if packs:
         for opt in packs:

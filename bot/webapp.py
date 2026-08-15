@@ -280,21 +280,27 @@ def _kg_api_fields(product: Any) -> dict[str, Any]:
         _product_ml,
         expand_kg_packs,
         expand_liter_packs,
+        expand_piece_packs,
         kg_family_for_product,
         kg_money_options,
         liter_family_for_product,
+        piece_family_for_product,
     )
 
     packs: list = []
     money_opts: list = []
     liter_packs: list = []
+    piece_packs: list = []
     if _product_ml(product):
         _key, family = liter_family_for_product(product)
         liter_packs = expand_liter_packs(family)
     else:
-        _query, family = kg_family_for_product(product)
-        packs = expand_kg_packs(family)
-        money_opts = kg_money_options(family)
+        _pkey, pfamily = piece_family_for_product(product)
+        piece_packs = expand_piece_packs(pfamily)
+        if not piece_packs:
+            _query, family = kg_family_for_product(product)
+            packs = expand_kg_packs(family)
+            money_opts = kg_money_options(family)
     return {
         "kg_packs": [
             {
@@ -328,6 +334,15 @@ def _kg_api_fields(product: Any) -> dict[str, Any]:
             }
             for opt in liter_packs
         ],
+        "piece_packs": [
+            {
+                "product_id": int(opt["product_id"]),
+                "price": int(opt["price"]),
+                "label": opt["label"],
+                "name": opt["name"],
+            }
+            for opt in piece_packs
+        ],
     }
 
 
@@ -356,12 +371,18 @@ def _product_api_payload(product: Any, *, extra: dict[str, Any] | None = None) -
     }
     payload.update(_kg_api_fields(product))
     liters = payload.get("liter_packs") or []
+    pieces = payload.get("piece_packs") or []
     real_kg = [x for x in (payload.get("kg_packs") or []) if not x.get("virtual")]
-    priced = liters if len(liters) >= 2 else real_kg
+    priced = liters if len(liters) >= 2 else pieces if len(pieces) >= 2 else real_kg
     if len(priced) >= 2:
-        from bot.shop_ai import display_stem_name
+        from bot.shop_ai import display_stem_name, piece_card_name, piece_stem_key
 
-        payload["card_name"] = display_stem_name(str(product["name"]))
+        key = piece_stem_key(str(product["name"]))
+        payload["card_name"] = (
+            piece_card_name(key, product)
+            if pieces and key
+            else display_stem_name(str(product["name"]))
+        )
         prices = [int(x["price"]) for x in priced]
         lo, hi = min(prices), max(prices)
         if lo != hi:

@@ -302,8 +302,11 @@ def catalog_keyboard(
         display_stem_name,
         expand_kg_packs,
         expand_liter_packs,
+        expand_piece_packs,
         kg_family_for_product,
         liter_family_for_product,
+        piece_card_name,
+        piece_family_for_product,
         _product_ml,
     )
 
@@ -314,18 +317,26 @@ def catalog_keyboard(
         callback = f"product:{product['id']}"
         qty = cart_qty.get(product["id"], 0)
         mark = f" ✅ x{qty}" if qty else ""
+        label_name = str(product["name"])
         if _product_ml(product):
             _key, family = liter_family_for_product(product)
             packs = expand_liter_packs(family)
+            real_n = len({int(x["product_id"]) for x in packs if not x.get("virtual")})
+            if real_n >= 2:
+                label_name = display_stem_name(str(product["name"]))
         else:
-            _query, family = kg_family_for_product(product)
-            packs = expand_kg_packs(family)
-        real_n = len({int(x["product_id"]) for x in packs if not x.get("virtual")})
-        label_name = (
-            display_stem_name(str(product["name"]))
-            if real_n >= 2
-            else str(product["name"])
-        )
+            pkey, pfamily = piece_family_for_product(product)
+            ppacks = expand_piece_packs(pfamily)
+            if len(ppacks) >= 2:
+                label_name = piece_card_name(pkey, product)
+            else:
+                _query, family = kg_family_for_product(product)
+                packs = expand_kg_packs(family)
+                real_n = len(
+                    {int(x["product_id"]) for x in packs if not x.get("virtual")}
+                )
+                if real_n >= 2:
+                    label_name = display_stem_name(str(product["name"]))
         rows.append(
             [
                 InlineKeyboardButton(
@@ -426,7 +437,7 @@ def shop_ai_results_keyboard(products) -> InlineKeyboardMarkup | None:
                 cb = f"cart_add:{opt['product_id']}:0"
             buttons.append([InlineKeyboardButton(btn, callback_data=cb)])
     else:
-        for p in products[:8]:
+        for p in products[:20]:
             label = _human_pack_label(str(p["name"]))
             show = label if label != str(p["name"]) else str(p["name"])
             btn = f"{show} — {money(int(p['price']))}"

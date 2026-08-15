@@ -86,7 +86,8 @@
       (product.variants && product.variants.length > 0) ||
       (product.kg_packs && product.kg_packs.length > 0) ||
       (product.kg_money && product.kg_money.length > 0) ||
-      (product.liter_packs && product.liter_packs.length > 0)
+      (product.liter_packs && product.liter_packs.length > 0) ||
+      (product.piece_packs && product.piece_packs.length > 0)
     );
   }
 
@@ -262,11 +263,14 @@
         product.display_price || formatMoney(product.price);
       if (
         (product.kg_packs && product.kg_packs.length) ||
-        (product.liter_packs && product.liter_packs.length)
+        (product.liter_packs && product.liter_packs.length) ||
+        (product.piece_packs && product.piece_packs.length)
       ) {
         const hint = document.createElement("p");
         hint.className = "card-packs muted";
-        const labels = (product.kg_packs || []).concat(product.liter_packs || []);
+        const labels = (product.kg_packs || [])
+          .concat(product.liter_packs || [])
+          .concat(product.piece_packs || []);
         hint.textContent = labels.map((p) => p.label).join(" · ");
         body.appendChild(hint);
       }
@@ -274,7 +278,12 @@
       const addBtn = document.createElement("button");
       addBtn.type = "button";
       addBtn.className = "btn add";
-      addBtn.textContent = hasSizeChoice(product) ? "Hajm tanlash" : "Qo'shish";
+      const pieces = product.piece_packs || [];
+      addBtn.textContent = !hasSizeChoice(product)
+        ? "Qo'shish"
+        : pieces.length
+          ? "Tanlash"
+          : "Hajm tanlash";
       addBtn.addEventListener("click", () => addProduct(product));
       body.appendChild(addBtn);
 
@@ -288,11 +297,12 @@
     const packs = product.kg_packs || [];
     const money = product.kg_money || [];
     const liters = product.liter_packs || [];
+    const pieces = product.piece_packs || [];
     if (variants.length) {
       openVariantPicker(product);
       return;
     }
-    if (packs.length || money.length || liters.length) {
+    if (packs.length || money.length || liters.length || pieces.length) {
       openKgPicker(product);
       return;
     }
@@ -341,7 +351,7 @@
   }
 
   function openKgPicker(product) {
-    els.variantTitle.textContent = `${product.card_name || product.name} — hajm tanlang`;
+    els.variantTitle.textContent = `${product.card_name || product.name} — tanlang`;
     els.variantOptions.innerHTML = "";
     const stem = productStem(product.name) || product.name;
     (product.kg_packs || []).forEach((pack) => {
@@ -369,6 +379,17 @@
           name: useReal && product.id === pack.product_id
             ? product.name
             : `${stem} ${pack.label}`.trim(),
+          price: pack.price,
+          quantity: 1,
+        });
+      });
+    });
+    (product.piece_packs || []).forEach((pack) => {
+      addOptionButton(`${pack.label} — ${formatMoney(pack.price)}`, () => {
+        upsertCartItem({
+          product_id: pack.product_id || product.id,
+          variant_id: 0,
+          name: pack.name || pack.label,
           price: pack.price,
           quantity: 1,
         });

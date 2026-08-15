@@ -14,10 +14,13 @@ from bot.shop_ai import (
     display_stem_name,
     expand_kg_packs,
     expand_liter_packs,
+    expand_piece_packs,
     format_variants,
     grams_for_money,
     kg_family_for_product,
     liter_family_for_product,
+    piece_card_name,
+    piece_family_for_product,
     money,
     reply_to_user,
 )
@@ -159,8 +162,14 @@ async def show_kg_product_options(update: Update, product) -> bool:
         packs = expand_liter_packs(family)
         title = display_stem_name(str(product["name"])) or _key
     else:
-        title, family = kg_family_for_product(product)
-        packs = expand_kg_packs(family)
+        pkey, pfamily = piece_family_for_product(product)
+        packs = expand_piece_packs(pfamily)
+        if packs:
+            family = pfamily
+            title = piece_card_name(pkey, product)
+        else:
+            title, family = kg_family_for_product(product)
+            packs = expand_kg_packs(family)
     if not packs:
         return False
     await query.answer()
