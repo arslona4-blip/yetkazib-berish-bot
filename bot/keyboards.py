@@ -339,6 +339,38 @@ def product_keyboard(
     return InlineKeyboardMarkup(rows)
 
 
+def shop_ai_results_keyboard(products) -> InlineKeyboardMarkup | None:
+    """AI qidiruv: qadoq + (kg bo‘lsa) so‘mlik tugmalar."""
+    if not products:
+        return None
+    from bot.shop_ai import _human_pack_label, kg_money_options, money
+
+    buttons: list[list[InlineKeyboardButton]] = []
+    for p in products[:8]:
+        label = _human_pack_label(str(p["name"]))
+        show = label if label != str(p["name"]) else str(p["name"])
+        btn = f"{show} — {money(int(p['price']))}"
+        if len(btn) > 64:
+            btn = btn[:61] + "…"
+        buttons.append(
+            [InlineKeyboardButton(btn, callback_data=f"cart_add:{int(p['id'])}:0")]
+        )
+    for opt in kg_money_options(products):
+        btn = f"{opt['label']} · {opt['detail']}"
+        if len(btn) > 64:
+            btn = btn[:61] + "…"
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    btn,
+                    callback_data=f"ai_m:{opt['product_id']}:{opt['amount']}",
+                )
+            ]
+        )
+    buttons.append([InlineKeyboardButton("🛒 Savatcha", callback_data="cart:view")])
+    return InlineKeyboardMarkup(buttons) if buttons else None
+
+
 def category_pick_keyboard(categories) -> InlineKeyboardMarkup:
     from bot.category_emoji import category_label
 

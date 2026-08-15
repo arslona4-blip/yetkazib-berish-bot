@@ -156,6 +156,12 @@ WEBHOOK_PORT = int(os.getenv("WEBHOOK_LISTEN_PORT", "0") or "0")
 DATABASE_URL = os.getenv("DATABASE_URL", "")  # reserved; SQLite primary
 DEFAULT_LANG = os.getenv("DEFAULT_LANG", "uz")
 
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
+OPENAI_BASE_URL = os.getenv(
+    "OPENAI_BASE_URL", "https://api.openai.com/v1"
+).rstrip("/")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
 # Admin PWA brauzer kirishi (kodsiz). Railway’da o‘zgartirish mumkin.
 ADMIN_APP_PIN = os.getenv("ADMIN_APP_PIN", "7788").strip()
 

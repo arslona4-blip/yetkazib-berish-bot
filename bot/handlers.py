@@ -272,7 +272,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"✨ <b>Assalomu alaykum, {name}!</b>\n"
         f"{delivery_rates_html()}\n"
         f"🎁 <b>100 000+</b> → BEPUL 🥤 Coca-Cola / 🔵 Pepsi / 🧡 Fanta 1L!\n"
-        f"👇 Pastdagi <b>🛒 Do'kon</b> tugmasini bosing!"
+        f"👇 <b>🛒 Do'kon</b> yoki yozing: <i>guruch 2kg</i>"
     )
     # Rasm yo‘q bo‘lsa — to‘liq matn
     welcome_text_fallback = (
@@ -287,7 +287,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"└──────────────┘\n\n"
         f"{delivery_rates_html()}\n\n"
         f"{gift_drink_promo_html()}\n\n"
-        f"👇 Pastdagi <b>🛒 Do'kon</b> tugmasini bosing!"
+        f"👇 Pastdagi <b>🛒 Do'kon</b> tugmasini bosing!\n"
+        f"💬 Yoki yozing: <i>guruch 2kg</i>, <i>cola 1.5l</i>"
     )
     markup = menu_for(user.id)
 
@@ -382,6 +383,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "2️⃣ <b>Savatcha</b> — miqdorni sozlang\n"
         "3️⃣ <b>Buyurtma berish</b> — manzil + vaqt\n"
         "4️⃣ Tasdiqlang va to‘lovni tanlang\n\n"
+        "💬 Yoki shu yerga yozing: <i>guruch 2kg</i>, "
+        "<i>cola 1.5l</i>, <i>guruch 20000 somlik</i>\n\n"
         f"{delivery_rates_html()}\n\n"
         f"{gift_drink_promo_html()}\n\n"
         f"👥 Do‘st taklif qilsangiz — +{REFERRAL_BONUS:,} bonus\n"

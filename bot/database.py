@@ -318,6 +318,22 @@ def _migrate_features(conn: sqlite3.Connection) -> None:
             "ALTER TABLE users ADD COLUMN language TEXT NOT NULL DEFAULT 'uz'"
         )
 
+    cart_cols = {r[1] for r in conn.execute("PRAGMA table_info(cart_items)").fetchall()}
+    if "custom_name" not in cart_cols:
+        conn.execute("ALTER TABLE cart_items ADD COLUMN custom_name TEXT")
+    if "grams" not in cart_cols:
+        conn.execute("ALTER TABLE cart_items ADD COLUMN grams INTEGER")
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ai_memory (
+            user_id INTEGER PRIMARY KEY,
+            history_json TEXT NOT NULL DEFAULT '[]',
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+
     product_cols = {r[1] for r in conn.execute("PRAGMA table_info(products)").fetchall()}
     if "sale_price" not in product_cols:
         conn.execute("ALTER TABLE products ADD COLUMN sale_price INTEGER")
@@ -803,6 +819,66 @@ def add_to_cart(
         )
 
 
+def add_money_to_cart(
+    user_id: int,
+    product_id: int,
+    *,
+    amount: int,
+    grams: int,
+    label: str,
+    quantity: int = 1,
+) -> None:
+    """Kg mahsulotdan so‘mlik (variant_id = -amount)."""
+    amount = max(100, int(amount))
+    grams = max(1, int(grams))
+    label = (label or "").strip() or f"#{product_id}"
+    variant_id = -amount
+    add_to_cart(user_id, product_id, max(1, int(quantity)), variant_id)
+    with get_connection() as conn:
+        conn.execute(
+            """
+            UPDATE cart_items
+            SET custom_name = ?, grams = ?
+            WHERE user_id = ? AND product_id = ? AND variant_id = ?
+            """,
+            (label, grams, user_id, product_id, variant_id),
+        )
+
+
+def get_ai_memory(user_id: int) -> list[dict[str, Any]]:
+    import json
+
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT history_json FROM ai_memory WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()
+    if not row:
+        return []
+    try:
+        data = json.loads(row["history_json"] or "[]")
+    except json.JSONDecodeError:
+        return []
+    return data if isinstance(data, list) else []
+
+
+def save_ai_memory(user_id: int, history: list[dict[str, Any]]) -> None:
+    import json
+
+    payload = json.dumps(history[-16:], ensure_ascii=False)
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO ai_memory (user_id, history_json, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                history_json = excluded.history_json,
+                updated_at = excluded.updated_at
+            """,
+            (user_id, payload, _now_iso()),
+        )
+
+
 def set_cart_quantity(
     user_id: int,
     product_id: int,
@@ -859,10 +935,12 @@ def get_cart(user_id: int) -> list[sqlite3.Row]:
                 p.name AS product_name,
                 p.description,
                 CASE
+                    WHEN c.variant_id < 0 THEN COALESCE(NULLIF(c.custom_name, ''), p.name)
                     WHEN c.variant_id > 0 THEN v.name
                     ELSE NULL
                 END AS variant_name,
                 CASE
+                    WHEN c.variant_id < 0 THEN abs(c.variant_id)
                     WHEN c.variant_id > 0 THEN v.price
                     WHEN p.sale_price IS NOT NULL
                          AND p.sale_price > 0
@@ -872,6 +950,7 @@ def get_cart(user_id: int) -> list[sqlite3.Row]:
                     ELSE p.price
                 END AS price,
                 CASE
+                    WHEN c.variant_id < 0 THEN COALESCE(NULLIF(c.custom_name, ''), p.name)
                     WHEN c.variant_id > 0 THEN p.name || ' (' || v.name || ')'
                     ELSE p.name
                 END AS name
@@ -880,7 +959,7 @@ def get_cart(user_id: int) -> list[sqlite3.Row]:
             LEFT JOIN product_variants v ON v.id = c.variant_id
             WHERE c.user_id = ?
               AND p.is_active = 1
-              AND (c.variant_id = 0 OR v.is_active = 1)
+              AND (c.variant_id <= 0 OR v.is_active = 1)
             ORDER BY name
             """,
             (user_id,),
