@@ -116,20 +116,108 @@ def admin_order_keyboard(order_id: int, status: str = "new") -> InlineKeyboardMa
     return InlineKeyboardMarkup([row])
 
 
+def admin_products_manage_keyboard(products: list) -> InlineKeyboardMarkup:
+    """Toifa bo‘yicha mahsulotlar — tahrirlash uchun."""
+    from collections import defaultdict
+
+    grouped: dict[str, list] = defaultdict(list)
+    for p in products:
+        grouped[str(p["category"] or "Umumiy")].append(p)
+
+    rows: list[list[InlineKeyboardButton]] = []
+    for cat in sorted(grouped.keys(), key=lambda x: x.casefold()):
+        items = sorted(
+            grouped[cat],
+            key=lambda p: (str(p["name"] or "").casefold(), int(p["id"])),
+        )
+        header = f"📁 {cat} · {len(items)}"
+        if len(header) > 64:
+            header = header[:61] + "…"
+        rows.append([InlineKeyboardButton(header, callback_data="noop")])
+        for p in items:
+            mark = "✅" if p["is_active"] else "🚫"
+            label = f"{mark} {p['name']} — {money(int(p['price']))}"
+            if len(label) > 64:
+                label = label[:61] + "…"
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        label, callback_data=f"ap:edit:{int(p['id'])}"
+                    )
+                ]
+            )
+    if not rows:
+        rows = [[InlineKeyboardButton("Bo‘sh", callback_data="noop")]]
+    return InlineKeyboardMarkup(rows)
+
+
 def admin_product_keyboard(product_id: int, active: bool = True) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [
                 InlineKeyboardButton(
-                    "Narxni o‘zgartirish", callback_data=f"ap:price:{product_id}"
+                    "✏️ Tahrirlash", callback_data=f"ap:edit:{product_id}"
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "Narx", callback_data=f"ap:price:{product_id}"
                 ),
                 InlineKeyboardButton(
                     "Yashirish" if active else "Yoqish",
                     callback_data=f"ap:toggle:{product_id}",
                 ),
-            ]
+            ],
         ]
     )
+
+
+def admin_product_edit_keyboard(product_id: int, active: bool = True) -> InlineKeyboardMarkup:
+    """To‘liq tahrirlash menyusi."""
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("📝 Nom", callback_data=f"ap:name:{product_id}"),
+                InlineKeyboardButton("💰 Narx", callback_data=f"ap:price:{product_id}"),
+            ],
+            [
+                InlineKeyboardButton("📁 Toifa", callback_data=f"ap:cat:{product_id}"),
+                InlineKeyboardButton("🖼 Rasm", callback_data=f"ap:photo:{product_id}"),
+            ],
+            [
+                InlineKeyboardButton(
+                    "📄 Izoh", callback_data=f"ap:desc:{product_id}"
+                ),
+                InlineKeyboardButton(
+                    "🚫 Yashirish" if active else "✅ Yoqish",
+                    callback_data=f"ap:toggle:{product_id}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "← Spiskaga", callback_data="ap:list:0"
+                ),
+            ],
+        ]
+    )
+
+
+def admin_edit_category_keyboard(product_id: int, categories: list[str] | tuple[str, ...]) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    row: list[InlineKeyboardButton] = []
+    for cat in categories:
+        row.append(
+            InlineKeyboardButton(cat, callback_data=f"ap:setcat:{product_id}:{cat}")
+        )
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append(
+        [InlineKeyboardButton("← Orqaga", callback_data=f"ap:edit:{product_id}")]
+    )
+    return InlineKeyboardMarkup(rows)
 
 
 def my_order_keyboard(order_id: int) -> InlineKeyboardMarkup:

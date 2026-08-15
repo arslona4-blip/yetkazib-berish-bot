@@ -429,6 +429,73 @@ def set_product_active(product_id: int, active: bool) -> bool:
         return cur.rowcount > 0
 
 
+def set_product_name(product_id: int, name: str) -> bool:
+    name = (name or "").strip()
+    if len(name) < 2:
+        return False
+    with get_connection() as conn:
+        cur = conn.execute(
+            "UPDATE products SET name = ? WHERE id = ?",
+            (name, int(product_id)),
+        )
+        ok = cur.rowcount > 0
+        if ok:
+            stem = _weight_family_stem(name)
+            if stem and _pack_grams_from_name(name) is not None:
+                _ensure_weight_packs_for_stem(conn, stem)
+                _sync_weight_pack_prices(conn, stem=stem)
+        return ok
+
+
+def set_product_category(product_id: int, category: str) -> bool:
+    category = (category or "").strip() or "Umumiy"
+    with get_connection() as conn:
+        cur = conn.execute(
+            "UPDATE products SET category = ? WHERE id = ?",
+            (category, int(product_id)),
+        )
+        return cur.rowcount > 0
+
+
+def set_product_description(product_id: int, description: str) -> bool:
+    with get_connection() as conn:
+        cur = conn.execute(
+            "UPDATE products SET description = ? WHERE id = ?",
+            ((description or "").strip(), int(product_id)),
+        )
+        return cur.rowcount > 0
+
+
+def update_product(
+    product_id: int,
+    *,
+    name: str | None = None,
+    price: int | None = None,
+    category: str | None = None,
+    description: str | None = None,
+    image_file_id: str | None = None,
+    is_active: bool | None = None,
+) -> bool:
+    """Mahsulot maydonlarini yangilash. True = kamida bitta o‘zgarish."""
+    product = get_product(product_id)
+    if not product:
+        return False
+    changed = False
+    if name is not None and name.strip() and name.strip() != product["name"]:
+        changed = set_product_name(product_id, name) or changed
+    if price is not None and int(price) != int(product["price"]):
+        changed = set_product_price(product_id, int(price)) or changed
+    if category is not None and category.strip() != str(product["category"] or ""):
+        changed = set_product_category(product_id, category) or changed
+    if description is not None and description != str(product["description"] or ""):
+        changed = set_product_description(product_id, description) or changed
+    if image_file_id is not None:
+        changed = set_product_image(product_id, image_file_id) or changed
+    if is_active is not None and bool(is_active) != bool(product["is_active"]):
+        changed = set_product_active(product_id, bool(is_active)) or changed
+    return changed
+
+
 def list_categories() -> list[str]:
     with get_connection() as conn:
         rows = conn.execute(

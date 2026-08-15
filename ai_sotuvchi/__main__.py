@@ -40,6 +40,7 @@ from ai_sotuvchi.handlers import (
     callback_router,
     cancel_add_product,
     cancel_order_flow,
+    on_admin_photo,
     on_text,
     order_address,
     order_name,
@@ -186,6 +187,7 @@ def main() -> None:
     app.add_handler(order_conv)
     app.add_handler(broadcast_conv)
     app.add_handler(CallbackQueryHandler(callback_router))
+    app.add_handler(MessageHandler(filters.PHOTO, on_admin_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
 
     logger.info("AI Sotuvchi (pro+) ishga tushdi")

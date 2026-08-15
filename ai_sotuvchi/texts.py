@@ -130,6 +130,29 @@ def admin_home(stats: dict) -> str:
         f"Yetkazilgan: <b>{stats['delivered']}</b>\n"
         f"Tushum: <b>{money(stats['revenue'])}</b>\n"
         "————————————\n"
-        "➕ Mahsulot · /orders · /stats\n"
+        "➕ Mahsulot · ✏️ Tahrirlash · /orders · /stats\n"
         "📢 Xabar — /broadcast"
     )
+
+
+def admin_product_card(product) -> str:
+    """Admin uchun mahsulot kartochkasi."""
+    active = bool(product["is_active"])
+    mark = "✅ Faol" if active else "🚫 Yashirin"
+    cat = product["category"] or "Umumiy"
+    desc = (product["description"] or "").strip()
+    try:
+        has_photo = bool(product["image_file_id"])
+    except (KeyError, IndexError):
+        has_photo = False
+    lines = [
+        f"<b>{product['name']}</b>",
+        f"{mark} · #{product['id']}",
+        "————————————",
+        f"💰 {money(int(product['price']))}",
+        f"📁 {cat}",
+        f"🖼 {'Bor' if has_photo else 'Yo‘q'}",
+    ]
+    if desc:
+        lines.append(f"📄 {desc}")
+    return "\n".join(lines)

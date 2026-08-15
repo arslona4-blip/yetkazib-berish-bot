@@ -18,8 +18,11 @@ from ai_sotuvchi.config import (
 )
 from ai_sotuvchi import database as db
 from ai_sotuvchi.keyboards import (
+    admin_edit_category_keyboard,
     admin_order_keyboard,
+    admin_product_edit_keyboard,
     admin_product_keyboard,
+    admin_products_manage_keyboard,
     cancel_keyboard,
     cart_keyboard,
     catalog_keyboard,
@@ -31,6 +34,7 @@ from ai_sotuvchi.keyboards import (
 )
 from ai_sotuvchi.texts import (
     admin_home,
+    admin_product_card,
     cart_text,
     order_receipt,
     shop_card,
@@ -241,9 +245,9 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int | N
     if action == "order":
         return await start_order(update, context)
 
-    # Admin narx kiritish
-    if context.user_data.get("await_price_for"):
-        return await admin_price_input(update, context)
+    # Admin tahrirlash (nom/narx/izoh/rasm)
+    if context.user_data.get("edit_product") or context.user_data.get("await_price_for"):
+        return await admin_edit_input(update, context)
 
     m = re.match(r"^\+(\d+)$", text)
     if m:
@@ -384,26 +388,106 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     if data.startswith("ap:") and is_admin(uid):
         parts = data.split(":")
-        action, pid = parts[1], int(parts[2])
+        action = parts[1] if len(parts) > 1 else ""
+        if action == "list":
+            await _send_admin_products(update, context, edit=True)
+            return
+        if len(parts) < 3:
+            return
+        pid = int(parts[2])
         product = db.get_product(pid)
-        if not product:
+        if not product and action != "list":
             await query.answer("Topilmadi", show_alert=True)
             return
+
+        if action == "edit":
+            await query.edit_message_text(
+                admin_product_card(product) + "\n\n<i>Nimani o‘zgartiramiz?</i>",
+                parse_mode="HTML",
+                reply_markup=admin_product_edit_keyboard(
+                    pid, bool(product["is_active"])
+                ),
+            )
+            return
+
         if action == "toggle":
             new_active = not bool(product["is_active"])
             db.set_product_active(pid, new_active)
+            product = db.get_product(pid)
             await query.answer("Yoqildi" if new_active else "Yashirildi")
-            await query.edit_message_reply_markup(
-                reply_markup=admin_product_keyboard(pid, new_active)
+            await query.edit_message_text(
+                admin_product_card(product),
+                parse_mode="HTML",
+                reply_markup=admin_product_edit_keyboard(pid, new_active),
             )
             return
+
         if action == "price":
-            context.user_data["await_price_for"] = pid
+            context.user_data.pop("await_price_for", None)
+            context.user_data["edit_product"] = {"id": pid, "field": "price"}
             await context.bot.send_message(
                 uid,
-                f"<b>{product['name']}</b> uchun yangi narxni yozing:",
+                f"<b>{product['name']}</b>\nYangi narxni yozing (so‘m):\n"
+                f"<i>Hozirgi: {money(int(product['price']))}</i>",
                 parse_mode="HTML",
                 reply_markup=cancel_keyboard(),
+            )
+            return
+
+        if action == "name":
+            context.user_data["edit_product"] = {"id": pid, "field": "name"}
+            await context.bot.send_message(
+                uid,
+                f"Yangi nomni yozing:\n<i>Hozirgi: {product['name']}</i>",
+                parse_mode="HTML",
+                reply_markup=cancel_keyboard(),
+            )
+            return
+
+        if action == "desc":
+            context.user_data["edit_product"] = {"id": pid, "field": "desc"}
+            await context.bot.send_message(
+                uid,
+                f"Yangi izohni yozing:\n"
+                f"<i>Hozirgi: {product['description'] or '—'}</i>",
+                parse_mode="HTML",
+                reply_markup=cancel_keyboard(),
+            )
+            return
+
+        if action == "photo":
+            context.user_data["edit_product"] = {"id": pid, "field": "photo"}
+            await context.bot.send_message(
+                uid,
+                f"<b>{product['name']}</b>\nYangi rasm yuboring:",
+                parse_mode="HTML",
+                reply_markup=cancel_keyboard(),
+            )
+            return
+
+        if action == "cat":
+            await query.edit_message_text(
+                f"<b>{product['name']}</b>\nToifani tanlang:",
+                parse_mode="HTML",
+                reply_markup=admin_edit_category_keyboard(pid, PRODUCT_CATEGORIES),
+            )
+            return
+
+        if action == "setcat":
+            # ap:setcat:{pid}:{category}
+            cat = parts[3] if len(parts) > 3 else ""
+            if not cat:
+                await query.answer("Toifa yo‘q", show_alert=True)
+                return
+            db.set_product_category(pid, cat)
+            product = db.get_product(pid)
+            await query.answer(f"Toifa: {cat}")
+            await query.edit_message_text(
+                admin_product_card(product),
+                parse_mode="HTML",
+                reply_markup=admin_product_edit_keyboard(
+                    pid, bool(product["is_active"])
+                ),
             )
             return
 
@@ -446,32 +530,150 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
 
-async def admin_price_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    text = (update.message.text or "").strip()
+async def admin_edit_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Nom / narx / izoh / rasm tahrirlash."""
     uid = update.effective_user.id
+    text = (update.message.text or "").strip() if update.message.text else ""
+
+    # Eski await_price_for → edit_product ga ko‘chirish
+    if context.user_data.get("await_price_for") and not context.user_data.get(
+        "edit_product"
+    ):
+        context.user_data["edit_product"] = {
+            "id": int(context.user_data.pop("await_price_for")),
+            "field": "price",
+        }
+
+    edit = context.user_data.get("edit_product") or {}
+    pid = int(edit.get("id") or 0)
+    field = str(edit.get("field") or "")
+
     if text in {"Bekor qilish", "Bekor", "❌ Bekor", "/cancel"}:
+        context.user_data.pop("edit_product", None)
         context.user_data.pop("await_price_for", None)
         await update.message.reply_text(
             "Bekor qilindi.",
             reply_markup=main_keyboard(is_admin(uid)),
         )
         return ConversationHandler.END
-    pid = int(context.user_data.get("await_price_for") or 0)
-    digits = re.sub(r"\D", "", text)
-    if not digits or not pid:
-        await update.message.reply_text("Raqam yozing, masalan: 15000")
-        return WAIT_ADMIN_PRICE
-    price = int(digits)
-    db.set_product_price(pid, price)
-    context.user_data.pop("await_price_for", None)
+
+    if not pid or not field:
+        context.user_data.pop("edit_product", None)
+        await update.message.reply_text(
+            "Tahrirlash sessiyasi tugadi.",
+            reply_markup=main_keyboard(is_admin(uid)),
+        )
+        return ConversationHandler.END
+
     product = db.get_product(pid)
-    name = product["name"] if product else f"#{pid}"
+    if not product:
+        context.user_data.pop("edit_product", None)
+        await update.message.reply_text(
+            "Mahsulot topilmadi.",
+            reply_markup=main_keyboard(is_admin(uid)),
+        )
+        return ConversationHandler.END
+
+    if field == "price":
+        digits = re.sub(r"\D", "", text)
+        if not digits:
+            await update.message.reply_text("Raqam yozing, masalan: 15000")
+            return WAIT_ADMIN_PRICE
+        price = int(digits)
+        db.set_product_price(pid, price)
+        msg = f"Narx yangilandi: <b>{product['name']}</b> — {money(price)}"
+    elif field == "name":
+        if len(text) < 2:
+            await update.message.reply_text("Nom kamida 2 belgi bo‘lsin:")
+            return WAIT_ADMIN_PRICE
+        db.set_product_name(pid, text)
+        msg = f"Nom yangilandi: <b>{text}</b>"
+    elif field == "desc":
+        db.set_product_description(pid, text)
+        msg = f"Izoh yangilandi: <b>{product['name']}</b>"
+    elif field == "photo":
+        if not update.message.photo:
+            await update.message.reply_text("Rasm yuboring (foto).")
+            return WAIT_ADMIN_PRICE
+        file_id = update.message.photo[-1].file_id
+        db.set_product_image(pid, file_id)
+        msg = f"Rasm yangilandi: <b>{product['name']}</b>"
+    else:
+        context.user_data.pop("edit_product", None)
+        await update.message.reply_text(
+            "Noma’lum maydon.",
+            reply_markup=main_keyboard(is_admin(uid)),
+        )
+        return ConversationHandler.END
+
+    context.user_data.pop("edit_product", None)
+    product = db.get_product(pid)
     await update.message.reply_text(
-        f"Narx yangilandi: <b>{name}</b> — {money(price)}",
+        msg + "\n\n" + admin_product_card(product),
         parse_mode="HTML",
+        reply_markup=admin_product_edit_keyboard(pid, bool(product["is_active"])),
+    )
+    await update.message.reply_text(
+        "Asosiy menyu.",
         reply_markup=main_keyboard(True),
     )
     return ConversationHandler.END
+
+
+# orqaga moslik
+async def admin_price_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    return await admin_edit_input(update, context)
+
+
+async def on_admin_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Tahrirlashda rasm qabul qilish."""
+    edit = context.user_data.get("edit_product") or {}
+    if not edit or edit.get("field") != "photo":
+        return
+    if not is_admin(update.effective_user.id):
+        return
+    await admin_edit_input(update, context)
+
+
+async def _send_admin_products(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, *, edit: bool = False
+) -> None:
+    """Admin mahsulotlar spiskasi (toifa + alifbo) — tugmadan tahrirlash."""
+    products = db.list_products(active_only=False)
+    products = sorted(
+        products,
+        key=lambda p: (
+            str(p["category"] or "Umumiy").casefold(),
+            str(p["name"] or "").casefold(),
+            int(p["id"]),
+        ),
+    )
+    kb = admin_products_manage_keyboard(products)
+    if not products:
+        text = "Mahsulot yo‘q. ➕ Mahsulot bilan qo‘shing."
+    else:
+        text = (
+            f"<b>Mahsulotlar</b> · {len(products)} ta\n"
+            "Toifa + alifbo tartibida.\n"
+            "✏️ Tahrirlash: mahsulotni bosing."
+        )
+    if edit and update.callback_query:
+        try:
+            await update.callback_query.edit_message_text(
+                text, parse_mode="HTML", reply_markup=kb
+            )
+        except Exception:
+            await context.bot.send_message(
+                update.effective_user.id,
+                text,
+                parse_mode="HTML",
+                reply_markup=kb,
+            )
+        return
+    if update.message:
+        await update.message.reply_text(
+            text, parse_mode="HTML", reply_markup=kb
+        )
 
 
 async def _begin_checkout(context: ContextTypes.DEFAULT_TYPE, uid: int, reply) -> int:
@@ -651,16 +853,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         parse_mode="HTML",
         reply_markup=main_keyboard(True),
     )
-    # Oxirgi mahsulotlar
-    products = db.list_products(active_only=False)[:8]
-    for p in products:
-        active = bool(p["is_active"])
-        mark = "" if active else " (yashirin)"
-        await update.message.reply_text(
-            f"<b>{p['name']}</b>{mark}\n{money(int(p['price']))} · #{p['id']}",
-            parse_mode="HTML",
-            reply_markup=admin_product_keyboard(int(p["id"]), active),
-        )
+    await _send_admin_products(update, context, edit=False)
 
 
 async def start_add_product(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
