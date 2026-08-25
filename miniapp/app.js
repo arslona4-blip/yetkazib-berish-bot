@@ -286,7 +286,7 @@
       addBtn.className = "btn add";
       const pieces = product.piece_packs || [];
       addBtn.textContent = product.ask_qty
-        ? "Nechta dona?"
+        ? "2 / 5 / 15 dona"
         : !hasSizeChoice(product)
           ? "Qo'shish"
           : pieces.length

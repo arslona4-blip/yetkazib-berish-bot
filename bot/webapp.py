@@ -928,7 +928,13 @@ async def serve_index(_request: web.Request) -> web.FileResponse:
     index = MINIAPP_DIR / "index.html"
     if not index.is_file():
         raise web.HTTPNotFound(text="index.html topilmadi")
-    return web.FileResponse(index)
+    return web.FileResponse(
+        index,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Pragma": "no-cache",
+        },
+    )
 
 
 async def serve_shajara_index(_request: web.Request) -> web.FileResponse:
