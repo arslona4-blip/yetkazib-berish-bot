@@ -60,6 +60,7 @@ from bot.handlers import (
     payment_callback,
     precheckout_callback,
     product_callback,
+    qty_add_callback,
     share_invite,
     show_cart_message,
     show_catalog,
@@ -217,6 +218,7 @@ def main() -> None:
     )
 
     app.add_handler(CallbackQueryHandler(product_callback, pattern=r"^(product:|catalog:)"))
+    app.add_handler(CallbackQueryHandler(qty_add_callback, pattern=r"^qty_add:"))
     app.add_handler(CallbackQueryHandler(cart_callback, pattern=r"^cart"))
     app.add_handler(CallbackQueryHandler(fav_callback, pattern=r"^fav:\d+$"))
     app.add_handler(CallbackQueryHandler(reorder_callback, pattern=r"^reorder:\d+$"))

@@ -87,7 +87,8 @@
       (product.kg_packs && product.kg_packs.length > 0) ||
       (product.kg_money && product.kg_money.length > 0) ||
       (product.liter_packs && product.liter_packs.length > 0) ||
-      (product.piece_packs && product.piece_packs.length > 0)
+      (product.piece_packs && product.piece_packs.length > 0) ||
+      product.ask_qty
     );
   }
 
@@ -261,7 +262,12 @@
         product.card_name || product.name;
       body.querySelector(".card-price").textContent =
         product.display_price || formatMoney(product.price);
-      if (
+      if (product.ask_qty && product.qty_presets && product.qty_presets.length) {
+        const hint = document.createElement("p");
+        hint.className = "card-packs muted";
+        hint.textContent = product.qty_presets.map((n) => `${n} dona`).join(" · ");
+        body.appendChild(hint);
+      } else if (
         (product.kg_packs && product.kg_packs.length) ||
         (product.liter_packs && product.liter_packs.length) ||
         (product.piece_packs && product.piece_packs.length)
@@ -279,11 +285,13 @@
       addBtn.type = "button";
       addBtn.className = "btn add";
       const pieces = product.piece_packs || [];
-      addBtn.textContent = !hasSizeChoice(product)
-        ? "Qo'shish"
-        : pieces.length
-          ? "Tanlash"
-          : "Hajm tanlash";
+      addBtn.textContent = product.ask_qty
+        ? "Nechta dona?"
+        : !hasSizeChoice(product)
+          ? "Qo'shish"
+          : pieces.length
+            ? "Tanlash"
+            : "Hajm tanlash";
       addBtn.addEventListener("click", () => addProduct(product));
       body.appendChild(addBtn);
 
@@ -300,6 +308,10 @@
     const pieces = product.piece_packs || [];
     if (variants.length) {
       openVariantPicker(product);
+      return;
+    }
+    if (product.ask_qty) {
+      openQtyPicker(product);
       return;
     }
     if (packs.length || money.length || liters.length || pieces.length) {
@@ -341,6 +353,65 @@
       });
     });
     els.variantDialog.showModal();
+  }
+
+  function openQtyPicker(product) {
+    const title = product.card_name || product.name;
+    els.variantTitle.textContent = `${title} — nechta dona?`;
+    els.variantOptions.innerHTML = "";
+    const unit = Number(product.price) || 0;
+    const presets = product.qty_presets || [2, 5, 10, 15, 30];
+    presets.forEach((n) => {
+      const qty = Number(n);
+      addOptionButton(`${qty} dona — ${formatMoney(unit * qty)}`, () => {
+        upsertCartItem({
+          product_id: product.id,
+          variant_id: 0,
+          name: product.name,
+          price: unit,
+          quantity: qty,
+        });
+      });
+    });
+    const wrap = document.createElement("div");
+    wrap.className = "qty-custom";
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "1";
+    input.max = "200";
+    input.step = "1";
+    input.inputMode = "numeric";
+    input.placeholder = "Boshqa son";
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.textContent = "Qo'shish";
+    const addCustom = () => {
+      const qty = Math.floor(Number(input.value));
+      if (!Number.isFinite(qty) || qty < 1 || qty > 200) {
+        input.focus();
+        return;
+      }
+      upsertCartItem({
+        product_id: product.id,
+        variant_id: 0,
+        name: product.name,
+        price: unit,
+        quantity: qty,
+      });
+      els.variantDialog.close();
+    };
+    addBtn.addEventListener("click", addCustom);
+    input.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        addCustom();
+      }
+    });
+    wrap.appendChild(input);
+    wrap.appendChild(addBtn);
+    els.variantOptions.appendChild(wrap);
+    els.variantDialog.showModal();
+    input.focus();
   }
 
   function productStem(name) {

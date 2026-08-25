@@ -72,6 +72,7 @@ _ALIASES = {
     "water": "suv",
     "non": "non",
     "нон": "non",
+    "tuxum": "tuxum",
 }
 
 
@@ -743,6 +744,42 @@ def piece_family_for_product(product: Any) -> tuple[str, list[Any]]:
 
 def piece_card_name(key: str, product: Any) -> str:
     return _PIECE_CARD_NAMES.get(key) or display_stem_name(str(product["name"]))
+
+
+PIECE_QTY_PRESETS = (2, 5, 10, 15, 30)
+_QTY_TOKENS = {"tuxum"}
+
+
+def _dona_count_in_name(name: str) -> int | None:
+    n = _norm(name)
+    m = re.search(r"(\d+)\s*(?:dona|ta)\b", n)
+    if not m:
+        return None
+    return int(m.group(1))
+
+
+def asks_piece_qty(product: Any) -> bool:
+    """Tuxum 1 dona — savatga 2/5/15 dona qo‘shish mumkin."""
+    name = str(product["name"])
+    tokens = [t for t in re.split(r"\W+", _norm(name)) if t]
+    mapped = {_ALIASES.get(t, t) for t in tokens}
+    is_tuxum = bool(mapped & _QTY_TOKENS)
+    dona = _dona_count_in_name(name)
+    if is_tuxum:
+        return dona is None or dona == 1
+    return dona == 1
+
+
+def qty_card_name(product: Any) -> str:
+    stem = re.sub(
+        r"\(?\s*\d+\s*(?:dona|ta)\s*\)?",
+        "",
+        str(product["name"]),
+        flags=re.I,
+    )
+    stem = re.sub(r"[-_/]+", " ", stem)
+    stem = re.sub(r"\s+", " ", stem).strip()
+    return stem or str(product["name"])
 
 
 def _has_product_photo(product: Any) -> bool:

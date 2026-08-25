@@ -476,6 +476,29 @@ main {
   background: var(--accent-soft);
 }
 
+.qty-custom {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.qty-custom input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  font: inherit;
+  font-weight: 650;
+}
+
+.qty-custom button {
+  flex: 0 0 auto;
+  text-align: center;
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
 @media (min-width: 640px) {
   .products {
     grid-template-columns: repeat(3, minmax(0, 1fr));

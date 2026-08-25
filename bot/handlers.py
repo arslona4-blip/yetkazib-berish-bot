@@ -128,6 +128,7 @@ from bot.keyboards import (
     payment_keyboard,
     product_keyboard,
     promo_keyboard,
+    qty_pick_keyboard,
     rating_keyboard,
     new_product_barcode_keyboard,
     scan_sale_keyboard,
@@ -786,7 +787,38 @@ async def product_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if await show_kg_product_options(update, product):
         return
 
+    from bot.shop_ai import asks_piece_qty, qty_card_name
+
     variants = get_variants(product_id)
+
+    if not variants and asks_piece_qty(product):
+        await query.answer()
+        title = qty_card_name(product)
+        price_text = product_display_price(product)
+        text = (
+            f"✨ <b>{title}</b>\n"
+            f"💰 {price_text} / dona\n\n"
+            "Nechta dona olasiz?"
+        )
+        kb = qty_pick_keyboard(product_id, product["category_id"])
+        image_id = None
+        try:
+            image_id = product["image_file_id"]
+        except (KeyError, IndexError):
+            image_id = None
+        if image_id:
+            try:
+                await query.message.reply_photo(
+                    photo=image_id,
+                    caption=text,
+                    reply_markup=kb,
+                    parse_mode="HTML",
+                )
+                return
+            except Exception:
+                pass
+        await edit_or_reply(query, text, reply_markup=kb, parse_mode="HTML")
+        return
 
     # O'lchamsiz mahsulot — rasm bo'lsa kartochka, yo'qsa tezkor savatga
     if not variants:
@@ -881,6 +913,34 @@ async def product_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             )
     else:
         await edit_or_reply(query, text, reply_markup=size_kb, parse_mode="HTML")
+
+
+async def qty_add_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """qty_add:{product_id}:{qty} — tuxum va 1 donalik mahsulot."""
+    query = update.callback_query
+    parts = (query.data or "").split(":")
+    if len(parts) < 3:
+        await query.answer()
+        return
+    product_id = int(parts[1])
+    qty = int(parts[2])
+    if qty < 1 or qty > 200:
+        await query.answer("Miqdor noto‘g‘ri", show_alert=True)
+        return
+    product = get_product(product_id)
+    if not product:
+        await query.answer("Mahsulot topilmadi.", show_alert=True)
+        return
+    add_to_cart(query.from_user.id, product_id, qty, 0)
+    count, _ = get_cart_totals(query.from_user.id)
+    await query.answer(
+        f"✅ {qty} dona savatchaga · {count} ta",
+        show_alert=False,
+    )
+    if product["category_id"]:
+        await show_category_products(update, context, product["category_id"])
+    else:
+        await show_catalog(update, context)
 
 
 async def cart_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int | None:

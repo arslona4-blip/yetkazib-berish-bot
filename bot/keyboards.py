@@ -307,6 +307,8 @@ def catalog_keyboard(
         liter_family_for_product,
         piece_card_name,
         piece_family_for_product,
+        asks_piece_qty,
+        qty_card_name,
         _product_ml,
     )
 
@@ -337,6 +339,8 @@ def catalog_keyboard(
                 )
                 if real_n >= 2:
                     label_name = display_stem_name(str(product["name"]))
+        if asks_piece_qty(product):
+            label_name = qty_card_name(product)
         rows.append(
             [
                 InlineKeyboardButton(
@@ -398,6 +402,30 @@ def product_keyboard(
             InlineKeyboardButton("🛒", callback_data="cart:view"),
         ]
     )
+    return InlineKeyboardMarkup(rows)
+
+
+def qty_pick_keyboard(product_id: int, category_id: int | None = None) -> InlineKeyboardMarkup:
+    from bot.shop_ai import PIECE_QTY_PRESETS
+
+    back_data = (
+        f"catalog:cat:{category_id}" if category_id else "catalog:list"
+    )
+    rows: list[list[InlineKeyboardButton]] = []
+    row: list[InlineKeyboardButton] = []
+    for n in (1, *PIECE_QTY_PRESETS):
+        row.append(
+            InlineKeyboardButton(
+                f"{n} dona",
+                callback_data=f"qty_add:{product_id}:{n}",
+            )
+        )
+        if len(row) == 3:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append([InlineKeyboardButton("⬅️ Orqaga", callback_data=back_data)])
     return InlineKeyboardMarkup(rows)
 
 

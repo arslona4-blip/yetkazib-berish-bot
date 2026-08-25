@@ -391,6 +391,16 @@ def _product_api_payload(product: Any, *, extra: dict[str, Any] | None = None) -
             )
     if extra:
         payload.update(extra)
+    from bot.shop_ai import PIECE_QTY_PRESETS, asks_piece_qty, qty_card_name
+
+    if asks_piece_qty(product) and not payload.get("variants"):
+        payload["ask_qty"] = True
+        payload["qty_unit"] = "dona"
+        payload["qty_presets"] = list(PIECE_QTY_PRESETS)
+        payload["card_name"] = qty_card_name(product)
+        payload["display_price"] = (
+            f"{int(product['price']):,} so'm / dona".replace(",", " ")
+        )
     return payload
 
 
