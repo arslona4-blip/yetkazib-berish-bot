@@ -165,10 +165,14 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 # Admin PWA brauzer kirishi (kodsiz). Railway’da o‘zgartirish mumkin.
 ADMIN_APP_PIN = os.getenv("ADMIN_APP_PIN", "7788").strip()
 
-# /start da chiqadigan rasm (bo‘sh bo‘lsa — faqat matn)
+# /start da chiqadigan rasm / GIF (bo‘sh bo‘lsa — faqat matn)
 _WELCOME_DEFAULT = BASE_DIR / "bot" / "assets" / "welcome.jpg"
 WELCOME_PHOTO_PATH = Path(
     os.getenv("WELCOME_PHOTO_PATH", str(_WELCOME_DEFAULT))
+).expanduser()
+_WELCOME_GIF_DEFAULT = BASE_DIR / "bot" / "assets" / "welcome.gif"
+WELCOME_ANIMATION_PATH = Path(
+    os.getenv("WELCOME_ANIMATION_PATH", str(_WELCOME_GIF_DEFAULT))
 ).expanduser()
 
 # Eski konstanta — endi bot.timeutil.get_delivery_slots() ishlatiladi

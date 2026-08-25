@@ -36,6 +36,7 @@ from bot.config import (
     SHOP_NAME,
     SHOP_PHONE,
     SHOP_TELEGRAM,
+    WELCOME_ANIMATION_PATH,
     WELCOME_PHOTO_PATH,
     card_payment_enabled,
     delivery_rates_html,
@@ -297,8 +298,29 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
     markup = menu_for(user.id)
 
-    photo_sent = False
-    if WELCOME_PHOTO_PATH.is_file():
+    media_sent = False
+    gif_path = None
+    try:
+        from bot.welcome_anim import ensure_welcome_gif
+
+        gif_path = ensure_welcome_gif()
+    except Exception:
+        gif_path = WELCOME_ANIMATION_PATH if WELCOME_ANIMATION_PATH.is_file() else None
+
+    if gif_path is not None and gif_path.is_file():
+        try:
+            with gif_path.open("rb") as anim:
+                await update.message.reply_animation(
+                    animation=anim,
+                    caption=welcome_caption,
+                    reply_markup=markup,
+                    parse_mode="HTML",
+                )
+            media_sent = True
+        except Exception:
+            media_sent = False
+
+    if not media_sent and WELCOME_PHOTO_PATH.is_file():
         try:
             with WELCOME_PHOTO_PATH.open("rb") as photo:
                 await update.message.reply_photo(
@@ -307,11 +329,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     reply_markup=markup,
                     parse_mode="HTML",
                 )
-            photo_sent = True
+            media_sent = True
         except Exception:
-            photo_sent = False
+            media_sent = False
 
-    if not photo_sent:
+    if not media_sent:
         await update.message.reply_text(
             welcome_text_fallback,
             reply_markup=markup,
