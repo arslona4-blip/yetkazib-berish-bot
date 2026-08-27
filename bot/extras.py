@@ -604,25 +604,6 @@ def build_extra_conversations() -> list:
         ),
         ConversationHandler(
             entry_points=[
-                CallbackQueryHandler(
-                    start_barcode, pattern=r"^admin_prod:barcode:\d+$"
-                )
-            ],
-            states={
-                ExtraState.BARCODE: [
-                    MessageHandler(
-                        filters.StatusUpdate.WEB_APP_DATA, do_barcode_webapp
-                    ),
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, do_barcode),
-                ]
-            },
-            fallbacks=[
-                MessageHandler(filters.Regex("^❌ Bekor qilish$"), cancel_extra),
-            ],
-            allow_reentry=True,
-        ),
-        ConversationHandler(
-            entry_points=[
                 CallbackQueryHandler(start_sale, pattern=r"^admin_prod:sale:\d+$")
             ],
             states={

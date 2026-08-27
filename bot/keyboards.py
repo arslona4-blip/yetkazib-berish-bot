@@ -955,9 +955,6 @@ def admin_product_item_keyboard(product_id: int, is_active: bool) -> InlineKeybo
             ],
             [
                 InlineKeyboardButton(
-                    "📷 Shtrix-kod", callback_data=f"admin_prod:barcode:{product_id}"
-                ),
-                InlineKeyboardButton(
                     "🔥 Aksiya", callback_data=f"admin_prod:sale:{product_id}"
                 ),
             ],
