@@ -132,7 +132,6 @@ from bot.keyboards import (
     qty_pick_keyboard,
     rating_keyboard,
     new_product_barcode_keyboard,
-    scan_sale_keyboard,
     shop_inline_button,
     suggested_name_keyboard,
     is_main_menu_text,
@@ -396,15 +395,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         if MINIAPP_URL
         else ""
     )
-    scan_line = (
-        "📷 <b>Skaner</b> — shtrix-kod bilan tezkor savatga\n"
-        if MINIAPP_URL
-        else ""
-    )
     await update.message.reply_text(
         "🧭 <b>Qanday buyurtma beriladi?</b>\n\n"
         f"{shop_line}"
-        f"{scan_line}"
         "1️⃣ <b>Katalog</b> — yoqqan mahsulotni bosing\n"
         "    (avtomatik savatchaga tushadi ✅)\n"
         "2️⃣ <b>Savatcha</b> — miqdorni sozlang\n"
@@ -422,7 +415,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def webapp_scan_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Kamera skaner / Mini App buyurtma (sendData)."""
+    """Mini App buyurtma (sendData) va admin kod biriktirish."""
     user = update.effective_user
     msg = update.effective_message
     if not user or not msg or not msg.web_app_data:
@@ -498,72 +491,11 @@ async def webapp_scan_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 pass
         return
 
-    barcodes: list[str] = []
-    if action == "scan_many":
-        barcodes = [
-            str(x).strip() for x in (payload.get("barcodes") or []) if str(x).strip()
-        ]
-    else:
-        one = str(payload.get("barcode") or "").strip()
-        if one:
-            barcodes = [one]
-    if not barcodes:
-        await msg.reply_text("Kod bo‘sh.")
-        return
-
-    await _sale_add_barcodes(update, context, barcodes)
-
-
-async def _sale_add_barcodes(
-    update: Update, context: ContextTypes.DEFAULT_TYPE, barcodes: list[str]
-) -> None:
-    user = update.effective_user
-    msg = update.effective_message
-    if not user or not msg:
-        return
-
-    added: list[str] = []
-    need_size: list[tuple] = []
-    missing: list[str] = []
-
-    for code in barcodes:
-        product = get_product_by_barcode(code)
-        if not product:
-            missing.append(code)
-            continue
-        variants = get_variants(int(product["id"]))
-        if variants:
-            need_size.append((product, variants))
-            continue
-        add_to_cart(user.id, int(product["id"]), 1, 0)
-        added.append(str(product["name"]))
-
-    parts: list[str] = []
-    if added:
-        parts.append("📷 Savatchaga:\n" + "\n".join(f"• {n}" for n in added[-20:]))
-    if missing:
-        parts.append("❌ Topilmadi:\n" + "\n".join(f"• `{c}`" for c in missing[:10]))
-    if not parts and not need_size:
-        parts.append("Hech narsa qo‘shilmadi.")
-
-    kb = scan_sale_keyboard() or menu_for(user.id)
     await msg.reply_text(
-        "\n\n".join(parts) + f"\n\n{format_cart(user.id)}",
-        parse_mode="Markdown",
-        reply_markup=kb,
+        "📷 Kamera skaner o‘chirilgan.\n"
+        "Mahsulotni katalogdan tanlang yoki kodni yozib yuboring.",
+        reply_markup=menu_for(user.id),
     )
-
-    for product, variants in need_size[:5]:
-        await msg.reply_text(
-            f"📐 <b>{product['name']}</b> — o‘lcham tanlang:",
-            parse_mode="HTML",
-            reply_markup=product_keyboard(
-                int(product["id"]),
-                product["category_id"],
-                variants,
-                cart_variant_qty={},
-            ),
-        )
 
 
 async def share_invite(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1629,7 +1561,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         f"🛠 <b>Admin panel</b>\n"
         f"{format_now_html()}\n\n"
         "🛒 Do'kon — mijoz ko‘rinishi\n"
-        "📷 Skaner — kod bilan savatga",
+        "🛍 Mahsulotlar — qo‘shish / tahrirlash",
         reply_markup=admin_menu_keyboard(),
         parse_mode="HTML",
     )
@@ -2032,7 +1964,7 @@ async def admin_product_callback(
         return None
 
     if action == "addin":
-        # Toifa ichidan yangi mahsulot — avval skaner / kod
+        # Toifa ichidan yangi mahsulot — avval nom / kod
         category_id = int(parts[2])
         category = get_category(category_id)
         if not category:
@@ -2294,7 +2226,7 @@ async def _apply_new_product_barcode(
         if existing:
             await msg.reply_text(
                 f"❌ Bu kod allaqachon bor: #{existing['id']} {existing['name']}\n"
-                "Boshqa kod skanerlang yoki «⏭ O'tkazib yuborish».",
+                "Boshqa kod yozing yoki «⏭ O'tkazib yuborish».",
                 reply_markup=new_product_barcode_keyboard(),
             )
             return ProductAdminState.BARCODE
@@ -2333,14 +2265,14 @@ async def admin_product_barcode_webapp(
         payload = json.loads(msg.web_app_data.data)
     except json.JSONDecodeError:
         await msg.reply_text(
-            "Skaner o‘qimadi. Qayta urinib ko‘ring.",
+            "Kod o‘qilmadi. Kodni yozib yuboring.",
             reply_markup=new_product_barcode_keyboard(),
         )
         return ProductAdminState.BARCODE
     code = _barcode_payload_code(payload)
     if not code:
         await msg.reply_text(
-            "Kod bo‘sh. Qayta skanerlang.",
+            "Kod bo‘sh. Qayta yozing.",
             reply_markup=new_product_barcode_keyboard(),
         )
         return ProductAdminState.BARCODE

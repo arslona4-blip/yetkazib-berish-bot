@@ -356,7 +356,7 @@ async def apply_barcode_from_payload(
         return ConversationHandler.END
     code = _barcode_from_payload(payload)
     if not code:
-        await msg.reply_text("Kod bo‘sh. Qayta skanerlang.")
+        await msg.reply_text("Kod bo‘sh. Qayta yozing.")
         return ExtraState.BARCODE
     try:
         set_product_barcode(int(pid), code)
@@ -392,11 +392,7 @@ async def start_barcode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         current = product["barcode"] or "—"
     except (KeyError, IndexError):
         current = "—"
-    hint = (
-        "Kamerani oching yoki kodni yozing."
-        if MINIAPP_URL
-        else "Kodni yozing (o‘chirish uchun 0)."
-    )
+    hint = "Kodni yozing (o‘chirish uchun 0)."
     await query.message.reply_text(
         f"📷 «{product['name']}» uchun shtrix-kod\n"
         f"Hozirgi: {current}\n\n{hint}",
@@ -447,7 +443,7 @@ async def do_barcode_webapp(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     try:
         payload = json.loads(msg.web_app_data.data)
     except json.JSONDecodeError:
-        await msg.reply_text("Skaner o‘qimadi.")
+        await msg.reply_text("Kod o‘qilmadi. Kodni yozib yuboring.")
         return ExtraState.BARCODE
     return await apply_barcode_from_payload(update, context, payload)
 

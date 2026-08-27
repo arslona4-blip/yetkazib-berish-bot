@@ -61,15 +61,6 @@ def admin_app_reply_button(
     return KeyboardButton(label, web_app=WebAppInfo(url=url))
 
 
-def scan_inline_button(label: str = "📷 Skaner") -> InlineKeyboardButton | None:
-    url = miniapp_shop_url()
-    if not url:
-        return None
-    return InlineKeyboardButton(
-        label, web_app=WebAppInfo(url=f"{url}/scan.html?mode=sale")
-    )
-
-
 def is_main_menu_text(text: str) -> bool:
     """Asosiy / qo‘shimcha menyu tugmasi — admin FSM ni to‘xtatish uchun."""
     t = (text or "").strip()
@@ -78,7 +69,6 @@ def is_main_menu_text(text: str) -> bool:
         "🛒 Savatcha",
         "📞 Aloqa",
         "⋯ Ko'proq",
-        "📷 Skaner",
         "🖥 Admin ilova",
         "📦 Buyurtmalar",
         "🛠 Admin panel",
@@ -104,18 +94,8 @@ def main_menu_keyboard(is_admin: bool = False, is_courier: bool = False) -> Repl
     if shop_btn:
         rows.append([shop_btn])
         rows.append(["🛒 Savatcha", "📋 Mening buyurtmalarim"])
-        rows.append(
-            [
-                KeyboardButton(
-                    "📷 Skaner",
-                    web_app=WebAppInfo(
-                        url=f"{miniapp_shop_url()}/scan.html?mode=sale"
-                    ),
-                ),
-                "🛍 Katalog",
-            ]
-        )
-        rows.append(["📞 Aloqa", "⋯ Ko'proq"])
+        rows.append(["🛍 Katalog", "📞 Aloqa"])
+        rows.append(["⋯ Ko'proq"])
     else:
         rows.append(["🛍 Katalog", "🛒 Savatcha"])
         rows.append(["📋 Mening buyurtmalarim", "📞 Aloqa"])
@@ -134,54 +114,16 @@ def main_menu_keyboard(is_admin: bool = False, is_courier: bool = False) -> Repl
     return ReplyKeyboardMarkup(rows, resize_keyboard=True)
 
 
-def scan_sale_keyboard() -> ReplyKeyboardMarkup | None:
-    url = miniapp_shop_url()
-    if not url:
-        return None
-    shop = shop_reply_button("🛒 Do'kon")
-    rows: list[list] = []
-    if shop:
-        rows.append([shop])
-    rows.append(
-        [
-            KeyboardButton(
-                "📷 Yana skan",
-                web_app=WebAppInfo(url=f"{url}/scan.html?mode=sale"),
-            )
-        ]
-    )
-    rows.extend([["🛒 Savatcha", "🛍 Katalog"], ["⬅️ Asosiy menyu"]])
-    return ReplyKeyboardMarkup(rows, resize_keyboard=True)
-
-
 def barcode_attach_keyboard() -> ReplyKeyboardMarkup:
     rows: list[list] = []
-    if MINIAPP_URL:
-        rows.append(
-            [
-                KeyboardButton(
-                    "📷 Kodni skanerlash",
-                    web_app=WebAppInfo(url=f"{MINIAPP_URL}/scan.html?mode=add"),
-                )
-            ]
-        )
     rows.append(["⏭ O‘chirish (0)"])
     rows.append(["❌ Bekor qilish"])
     return ReplyKeyboardMarkup(rows, resize_keyboard=True)
 
 
 def new_product_barcode_keyboard() -> ReplyKeyboardMarkup:
-    """Yangi mahsulot: avval shtrix-kod (skan yoki o'tkazib yuborish)."""
+    """Yangi mahsulot: shtrix-kod yozish yoki o'tkazib yuborish."""
     rows: list[list] = []
-    if MINIAPP_URL:
-        rows.append(
-            [
-                KeyboardButton(
-                    "📷 Kodni skanerlash",
-                    web_app=WebAppInfo(url=f"{MINIAPP_URL}/scan.html?mode=add"),
-                )
-            ]
-        )
     rows.append(["⏭ O'tkazib yuborish"])
     rows.append(["❌ Bekor qilish"])
     return ReplyKeyboardMarkup(rows, resize_keyboard=True)
@@ -276,15 +218,6 @@ def catalog_categories_keyboard(categories) -> InlineKeyboardMarkup:
             InlineKeyboardButton("⭐ Sevimlilar", callback_data="catalog:favs"),
         ]
     )
-    if MINIAPP_URL:
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    "📷 Skaner",
-                    web_app=WebAppInfo(url=f"{MINIAPP_URL}/scan.html?mode=sale"),
-                )
-            ]
-        )
     rows.append(
         [InlineKeyboardButton("🛒 Savatchaga o'tish", callback_data="cart:view")]
     )
@@ -677,11 +610,8 @@ def admin_orders_keyboard() -> InlineKeyboardMarkup:
 def admin_menu_keyboard() -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     shop = shop_inline_button("🛒 Do'kon")
-    scan = scan_inline_button()
     admin_app = admin_app_inline_button()
-    if shop and scan:
-        rows.append([shop, scan])
-    elif shop:
+    if shop:
         rows.append([shop])
     if admin_app:
         rows.append([admin_app])

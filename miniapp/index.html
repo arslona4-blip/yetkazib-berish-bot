@@ -3,15 +3,27 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <title>Do'kon</title>
+  <title>Baraka Market</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <link rel="stylesheet" href="styles.css?v=10" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css?v=13" />
 </head>
 <body>
   <header class="topbar">
-    <div>
-      <h1 id="shopName">Do'kon</h1>
-      <p id="shopMeta" class="muted"></p>
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32" width="28" height="28" fill="none">
+          <path d="M8 22c0-6 4-10 8-14 4 4 8 8 8 14a8 8 0 1 1-16 0Z" fill="#8dc63f"/>
+          <path d="M16 10c-1.2 3.5-1.5 6.2-.8 9.2" stroke="#006837" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <div class="brand-text">
+        <p class="brand-eyebrow">Yetkazib berish</p>
+        <h1 id="shopName">Baraka Market</h1>
+        <p id="shopMeta" class="muted"></p>
+      </div>
     </div>
   </header>
 
@@ -58,12 +70,12 @@
         <label>
           To'lov usuli
           <select id="paymentMethod">
-            <option value="cash">💵 Naqd</option>
+            <option value="cash">Naqd</option>
             <option value="pending">Keyinroq tanlayman</option>
-            <option value="card_waiting">💳 Karta</option>
+            <option value="card_waiting">Karta</option>
           </select>
         </label>
-        <p class="pay-note">💵 To‘lov faqat naqd. Qarzga berilmaydi — tushunganingiz uchun rahmat.</p>
+        <p class="pay-note">To‘lov faqat naqd. Qarzga berilmaydi — tushunganingiz uchun rahmat.</p>
         <label>
           Izoh (ixtiyoriy)
           <textarea id="note" rows="2" placeholder="Qo'ng'iroq qiling / eshik oldida qoldiring"></textarea>
@@ -75,9 +87,23 @@
   </main>
 
   <nav class="bottom-nav">
-    <button type="button" class="nav-btn active" data-view="catalog">Katalog</button>
+    <button type="button" class="nav-btn active" data-view="catalog">
+      <svg class="nav-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+        <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+        <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+        <rect x="14" y="14" width="7" height="7" rx="1.5"/>
+      </svg>
+      <span>Katalog</span>
+    </button>
     <button type="button" class="nav-btn" data-view="cart">
-      Savatcha
+      <svg class="nav-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 6h15l-1.5 9h-12z"/>
+        <circle cx="9" cy="20" r="1.25" fill="currentColor" stroke="none"/>
+        <circle cx="17" cy="20" r="1.25" fill="currentColor" stroke="none"/>
+        <path d="M6 6 5 3H2"/>
+      </svg>
+      <span>Savatcha</span>
       <span id="cartBadge" class="badge" hidden>0</span>
     </button>
   </nav>
@@ -92,6 +118,6 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=12"></script>
+  <script src="app.js?v=13"></script>
 </body>
 </html>

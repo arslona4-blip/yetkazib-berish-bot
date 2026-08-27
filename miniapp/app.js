@@ -4,8 +4,8 @@
     tg.ready();
     tg.expand();
     try {
-      tg.setHeaderColor("#e8f5ee");
-      tg.setBackgroundColor("#f3f7f0");
+      tg.setHeaderColor("#e8f5e4");
+      tg.setBackgroundColor("#eef6ea");
     } catch (_) {
       /* eski klientlar */
     }
@@ -140,6 +140,172 @@
     return (
       `🎁 Yana ${formatMoney(left)} qo‘shsangiz — BEPUL 🥤 Coca-Cola / 🔵 Pepsi / 🧡 Fanta 1L!`
     );
+  }
+
+  function fireCelebration() {
+    const DURATION_MS = 5000;
+    // 1) Full-screen overlay (kamida 4–5 soniya)
+    const overlay = document.createElement("div");
+    overlay.setAttribute("aria-hidden", "true");
+    Object.assign(overlay.style, {
+      position: "fixed",
+      inset: "0",
+      zIndex: "10000",
+      pointerEvents: "none",
+      display: "grid",
+      placeItems: "center",
+      background:
+        "radial-gradient(ellipse at center, rgba(0,80,60,0.55), rgba(0,0,0,0.72))",
+      fontSize: "clamp(2.8rem, 12vw, 4.5rem)",
+      textAlign: "center",
+      lineHeight: "1.35",
+      animation: "celebratePop 0.55s ease",
+    });
+    overlay.innerHTML =
+      "🎊🎆🎈<br/><b style='color:#fff;font-size:0.42em;font-family:system-ui,sans-serif;" +
+      "letter-spacing:0.04em;text-shadow:0 2px 12px rgba(0,0,0,.5)'>BONUS SOHIBI!</b>" +
+      "<br/><span style='color:#ffe9a8;font-size:0.28em;font-family:system-ui,sans-serif;" +
+      "text-shadow:0 2px 10px rgba(0,0,0,.55)'>🎁 1L Coca-Cola / Pepsi / Fanta</span>" +
+      "<br/>🎆🎉🎈";
+    if (!document.getElementById("celebrate-style")) {
+      const style = document.createElement("style");
+      style.id = "celebrate-style";
+      style.textContent = `
+        @keyframes celebratePop {
+          from { opacity: 0; transform: scale(0.65); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        @keyframes celebrateFloat {
+          0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+          100% { transform: translateY(-120vh) rotate(48deg); opacity: 0; }
+        }
+        @keyframes celebratePulse {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.06); }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    overlay.style.animation =
+      "celebratePop 0.55s ease, celebratePulse 1.2s ease-in-out 0.55s infinite";
+    document.body.appendChild(overlay);
+
+    // 2) Floating emojis (juda ko‘rinadigan)
+    const emojis = ["🎈", "🎉", "✨", "💎", "🎊", "⭐", "🎆", "🎇", "💫"];
+    const floatNodes = [];
+    for (let i = 0; i < 42; i++) {
+      const span = document.createElement("span");
+      span.textContent = emojis[i % emojis.length];
+      Object.assign(span.style, {
+        position: "fixed",
+        left: `${Math.random() * 100}%`,
+        bottom: "-2.5rem",
+        fontSize: `${1.4 + Math.random() * 2.2}rem`,
+        zIndex: "10001",
+        pointerEvents: "none",
+        animation: `celebrateFloat ${2.4 + Math.random() * 2.2}s ease-out forwards`,
+        animationDelay: `${Math.random() * 1.1}s`,
+      });
+      document.body.appendChild(span);
+      floatNodes.push(span);
+    }
+
+    // 3) Canvas confetti (katta, to‘liq ekran)
+    const canvas = document.createElement("canvas");
+    Object.assign(canvas.style, {
+      position: "fixed",
+      inset: "0",
+      width: "100%",
+      height: "100%",
+      pointerEvents: "none",
+      zIndex: "9999",
+    });
+    document.body.appendChild(canvas);
+    const ctx = canvas.getContext("2d");
+    let raf = 0;
+    if (ctx) {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.floor(window.innerWidth * dpr);
+      canvas.height = Math.floor(window.innerHeight * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const palette = [
+        "#e63946",
+        "#f4a261",
+        "#2a9d8f",
+        "#457b9d",
+        "#e9c46a",
+        "#ff006e",
+        "#ffffff",
+      ];
+      const parts = [];
+      const spawnBurst = (ox, oy) => {
+        for (let i = 0; i < 55; i++) {
+          const ang = -Math.PI / 2 + (Math.random() - 0.5) * 1.6;
+          const sp = 5 + Math.random() * 11;
+          parts.push({
+            x: ox,
+            y: oy,
+            vx: Math.cos(ang) * sp,
+            vy: Math.sin(ang) * sp,
+            r: 2.5 + Math.random() * 5,
+            c: palette[(Math.random() * palette.length) | 0],
+            a: 1,
+            rot: Math.random() * Math.PI,
+            vr: (Math.random() - 0.5) * 0.3,
+          });
+        }
+      };
+      for (let b = 0; b < 6; b++) {
+        spawnBurst(window.innerWidth * (0.1 + 0.16 * b), window.innerHeight * 0.78);
+      }
+      // mid-burst for visibility
+      setTimeout(() => {
+        spawnBurst(window.innerWidth * 0.5, window.innerHeight * 0.55);
+        spawnBurst(window.innerWidth * 0.25, window.innerHeight * 0.65);
+        spawnBurst(window.innerWidth * 0.75, window.innerHeight * 0.65);
+      }, 900);
+
+      const start = performance.now();
+      const tick = (now) => {
+        const elapsed = now - start;
+        ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+        for (const p of parts) {
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vy += 0.18;
+          p.vx *= 0.995;
+          p.rot += p.vr;
+          p.a *= 0.988;
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot);
+          ctx.globalAlpha = Math.max(0, p.a);
+          ctx.fillStyle = p.c;
+          ctx.fillRect(-p.r, -p.r * 0.4, p.r * 2, p.r * 0.8);
+          ctx.restore();
+        }
+        ctx.globalAlpha = 1;
+        if (elapsed < DURATION_MS) raf = requestAnimationFrame(tick);
+        else canvas.remove();
+      };
+      raf = requestAnimationFrame(tick);
+    }
+
+    setTimeout(() => {
+      overlay.remove();
+      floatNodes.forEach((n) => n.remove());
+      if (raf) cancelAnimationFrame(raf);
+      if (canvas.parentNode) canvas.remove();
+    }, DURATION_MS);
+
+    try {
+      if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+    } catch (_) {}
+  }
+
+  function shouldCelebrateOrder(subtotal, total) {
+    const thr = giftThreshold();
+    return Number(subtotal || 0) >= thr || Number(total || 0) >= thr;
   }
 
   function deliveryFeeFor(subtotal) {
@@ -767,6 +933,11 @@
     els.submit.textContent = "Yuborilmoqda...";
 
     // 1) Eng ishonchli: botga sendData (klaviatura Do'kon tugmasi)
+    const checkoutTotals = calcTotals();
+    const willCelebrate = shouldCelebrateOrder(
+      checkoutTotals.subtotal,
+      checkoutTotals.total
+    );
     if (checkoutViaSendData(payload)) {
       state.cart = [];
       state.discount = 0;
@@ -776,18 +947,25 @@
       renderCart();
       els.status.hidden = false;
       els.status.classList.remove("error");
-      els.status.textContent = "Buyurtma botga yuborildi…";
+      if (willCelebrate) {
+        fireCelebration();
+        els.status.textContent =
+          "🎊 Tabriklaymiz! Sovg‘angiz: 1L Coca-Cola / Pepsi / Fanta — yetkazishda tanlaysiz! Buyurtma botga yuborildi…";
+      } else {
+        els.status.textContent = "Buyurtma botga yuborildi…";
+      }
       els.submit.disabled = true;
       els.submit.textContent = "Yuborildi ✓";
       if (tg) {
         try {
           tg.HapticFeedback && tg.HapticFeedback.notificationOccurred("success");
         } catch (_) {}
+        // Celebrating bo‘lsa animatsiya tugaguncha yopilmasin (~5s)
         setTimeout(() => {
           try {
             tg.close();
           } catch (_) {}
-        }, 1200);
+        }, willCelebrate ? 5200 : 1200);
       }
       return;
     }
@@ -817,7 +995,16 @@
       await loadUserBonus();
       renderCart();
       els.status.hidden = false;
-      els.status.textContent = `Buyurtma #${result.order_id} qabul qilindi!`;
+      const celebrate =
+        result.celebrate ||
+        shouldCelebrateOrder(result.subtotal, result.total);
+      if (celebrate) {
+        fireCelebration();
+        els.status.textContent =
+          `🎊 Tabriklaymiz! Buyurtma #${result.order_id} — sovg‘angiz 1L Coca-Cola / Pepsi / Fanta (yetkazishda tanlaysiz)!`;
+      } else {
+        els.status.textContent = `Buyurtma #${result.order_id} qabul qilindi!`;
+      }
       els.submit.disabled = true;
       els.submit.textContent = "Yuborildi ✓";
       if (tg) {
@@ -828,7 +1015,7 @@
           try {
             tg.close();
           } catch (_) {}
-        }, 1800);
+        }, celebrate ? 5200 : 1800);
       }
     } catch (err) {
       els.status.hidden = false;
