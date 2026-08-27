@@ -863,6 +863,17 @@ async def api_order(request: web.Request) -> web.Response:
             )
         except Exception as exc:
             logger.warning("Mijoz xabar xatosi %s: %s", user_id, exc)
+        try:
+            from bot.voice_confirm import send_order_voice_confirm
+
+            await send_order_voice_confirm(
+                _bot,
+                user_id,
+                order_id=order_id,
+                total=total,
+            )
+        except Exception as exc:
+            logger.warning("Ovozli tasdiq xato %s: %s", user_id, exc)
 
     return web.json_response(
         {

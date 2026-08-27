@@ -476,6 +476,17 @@ async def webapp_scan_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             reply_markup=payment_keyboard(order_id, amount=total),
             parse_mode="HTML",
         )
+        try:
+            from bot.voice_confirm import send_order_voice_confirm
+
+            await send_order_voice_confirm(
+                context.bot,
+                user.id,
+                order_id=order_id,
+                total=total,
+            )
+        except Exception:
+            pass
         for admin_id in ADMIN_IDS:
             try:
                 await context.bot.send_message(
@@ -1535,6 +1546,17 @@ async def confirm_order_callback(
         reply_markup=payment_keyboard(order_id),
         parse_mode="HTML",
     )
+    try:
+        from bot.voice_confirm import send_order_voice_confirm
+
+        await send_order_voice_confirm(
+            context.bot,
+            user_id,
+            order_id=order_id,
+            total=total,
+        )
+    except Exception:
+        pass
 
     order = get_order(order_id)
     for admin_id in ADMIN_IDS:

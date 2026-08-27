@@ -175,6 +175,13 @@ WELCOME_ANIMATION_PATH = Path(
     os.getenv("WELCOME_ANIMATION_PATH", str(_WELCOME_GIF_DEFAULT))
 ).expanduser()
 
+# Buyurtma qabulida o‘zbekcha ovoz (edge-tts)
+_VOICE_CONFIRM_RAW = os.getenv("VOICE_CONFIRM", "1").strip().lower()
+VOICE_CONFIRM_ENABLED = _VOICE_CONFIRM_RAW not in {"0", "false", "no", "off"}
+VOICE_CONFIRM_VOICE = os.getenv(
+    "VOICE_CONFIRM_VOICE", "uz-UZ-MadinaNeural"
+).strip() or "uz-UZ-MadinaNeural"
+
 # Eski konstanta — endi bot.timeutil.get_delivery_slots() ishlatiladi
 DELIVERY_SLOTS = []
 
