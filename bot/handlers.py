@@ -1992,6 +1992,7 @@ async def admin_product_callback(
             return ConversationHandler.END
         context.user_data.setdefault("admin_product", {})["category_id"] = category_id
         context.user_data["admin_product"]["_picked_category"] = True
+        context.user_data["awaiting_admin"] = "product_price"
         category = get_category(category_id)
         await query.edit_message_text(
             f"Toifa: {category_label(category) if category else category_id}"
@@ -2171,9 +2172,14 @@ async def _ask_new_product_name(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> int:
     msg = update.effective_message
+    if not msg and update.callback_query:
+        msg = update.callback_query.message
+    if not msg:
+        return ConversationHandler.END
     data = context.user_data.setdefault("admin_product", {})
     data.pop("barcode", None)
     data.pop("suggested_name", None)
+    context.user_data["awaiting_admin"] = "product_name"
     await msg.reply_text(
         "① Mahsulot nomini yozing:",
         reply_markup=cancel_keyboard(),
@@ -2209,39 +2215,24 @@ async def _apply_new_product_barcode(
 async def admin_product_barcode(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> int:
+    """Eski shtrix bosqichi — endi to‘g‘ridan-to‘g‘ri nom so‘raladi."""
     left = await exit_admin_if_menu(update, context)
     if left is not None:
         return left
     text = (update.message.text or "").strip()
     if _is_cancel_text(text):
         return await cancel_product_admin(update, context)
-    if _is_skip_text(text):
-        return await _apply_new_product_barcode(update, context, None)
-    return await _apply_new_product_barcode(update, context, text)
+    return await _ask_new_product_name(update, context)
 
 
 async def admin_product_barcode_webapp(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> int:
-    msg = update.effective_message
-    if not msg or not msg.web_app_data:
-        return ProductAdminState.BARCODE
-    try:
-        payload = json.loads(msg.web_app_data.data)
-    except json.JSONDecodeError:
-        await msg.reply_text(
-            "Kod o‘qilmadi. Kodni yozib yuboring.",
-            reply_markup=new_product_barcode_keyboard(),
-        )
-        return ProductAdminState.BARCODE
-    code = _barcode_payload_code(payload)
-    if not code:
-        await msg.reply_text(
-            "Kod bo‘sh. Qayta yozing.",
-            reply_markup=new_product_barcode_keyboard(),
-        )
-        return ProductAdminState.BARCODE
-    return await _apply_new_product_barcode(update, context, code)
+    """Eski skaner bosqichi — endi to‘g‘ridan-to‘g‘ri nom so‘raladi."""
+    left = await exit_admin_if_menu(update, context)
+    if left is not None:
+        return left
+    return await _ask_new_product_name(update, context)
 
 
 async def admin_product_name(
@@ -2269,6 +2260,7 @@ async def admin_product_name(
     preset_cat = context.user_data["admin_product"].get("category_id")
     if preset_cat:
         category = get_category(preset_cat)
+        context.user_data["awaiting_admin"] = "product_price"
         await update.message.reply_text(
             f"🗂 Toifa: {category_label(category) if category else preset_cat}\n"
             "② Narxni yozing (so‘m):",
@@ -2278,6 +2270,7 @@ async def admin_product_name(
 
     categories = get_categories()
     if not categories:
+        context.user_data.pop("awaiting_admin", None)
         await update.message.reply_text(
             "Avval toifa yarating (Admin → Mahsulotlar → Yangi toifa).",
             reply_markup=main_menu_keyboard(is_admin(update.effective_user.id)),
@@ -2285,8 +2278,34 @@ async def admin_product_name(
         context.user_data.pop("admin_product", None)
         return ConversationHandler.END
 
+    context.user_data["awaiting_admin"] = "product_pick_category"
     await update.message.reply_text(
         "② Toifani tanlang:",
+        reply_markup=category_pick_keyboard(categories),
+    )
+    return ProductAdminState.PICK_CATEGORY
+
+
+async def admin_product_pick_category_hint(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    left = await exit_admin_if_menu(update, context)
+    if left is not None:
+        return left
+    text = (update.message.text or "").strip()
+    if _is_cancel_text(text):
+        return await cancel_product_admin(update, context)
+    categories = get_categories()
+    if not categories:
+        context.user_data.pop("admin_product", None)
+        context.user_data.pop("awaiting_admin", None)
+        await update.message.reply_text(
+            "Toifa topilmadi. Avval toifa qo‘shing.",
+            reply_markup=main_menu_keyboard(is_admin(update.effective_user.id)),
+        )
+        return ConversationHandler.END
+    await update.message.reply_text(
+        "Toifani pastdagi tugmalardan tanlang 👇",
         reply_markup=category_pick_keyboard(categories),
     )
     return ProductAdminState.PICK_CATEGORY
@@ -2585,39 +2604,39 @@ async def admin_category_name(
 async def admin_awaiting_text(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
-    """ConversationHandler ishlamasa ham admin matnini qabul qilish."""
-    from telegram.ext import ApplicationHandlerStop
-
+    """ConversationHandler ushlamasa — admin matnini qabul qilish (zaxira)."""
     if not update.message or not is_admin(update.effective_user.id):
         return
 
     text = update.message.text or ""
     if is_main_menu_text(text):
         _clear_admin_draft(context)
-        if await dispatch_main_menu(update, context):
-            raise ApplicationHandlerStop
+        await dispatch_main_menu(update, context)
         return
 
     mode = context.user_data.get("awaiting_admin")
-    draft = context.user_data.get("admin_product") or {}
-    has_product_draft = bool(draft.get("name") and draft.get("price") is not None)
-
-    # Stuck recovery: eski ombor/izoh bosqichi
-    if mode not in {"category_name", "product_stock", "product_description"}:
-        if has_product_draft and (_is_skip_text(text) or _is_cancel_text(text) or text.strip().isdigit()):
+    if not mode:
+        draft = context.user_data.get("admin_product") or {}
+        if draft.get("name") and draft.get("price") is not None:
             mode = "product_stock"
         else:
             return
 
-    if mode == "category_name":
+    if mode == "product_name":
+        await admin_product_name(update, context)
+    elif mode == "product_price":
+        await admin_product_price(update, context)
+    elif mode == "product_pick_category":
+        await admin_product_pick_category_hint(update, context)
+    elif mode == "category_name":
         await admin_category_name(update, context)
     elif mode == "product_description":
         await admin_product_description(update, context)
-    else:
-        # Eski ombor bosqichi — to‘g‘ridan saqlash
+    elif mode == "product_stock":
         context.user_data.setdefault("admin_product", {})["stock"] = 100
         await _save_new_product(update, context)
-    raise ApplicationHandlerStop
+    else:
+        return
 
 
 async def admin_size_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -3102,14 +3121,24 @@ def build_product_admin_conversation() -> ConversationHandler:
                 pattern=r"^admin_prod:(add|addin:\d+|price:\d+|size:\d+|setcat:\d+|name:\d+|desc:\d+|cat:\d+)$",
             ),
         ],
+        name="product_admin",
         states={
+            ProductAdminState.BARCODE: [
+                MessageHandler(
+                    filters.StatusUpdate.WEB_APP_DATA, admin_product_barcode_webapp
+                ),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, admin_product_barcode),
+            ],
             ProductAdminState.NAME: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, admin_product_name)
             ],
             ProductAdminState.PICK_CATEGORY: [
                 CallbackQueryHandler(
                     admin_product_callback, pattern=r"^admin_prod:setcat:\d+$"
-                )
+                ),
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND, admin_product_pick_category_hint
+                ),
             ],
             ProductAdminState.PRICE: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, admin_product_price)

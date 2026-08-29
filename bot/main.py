@@ -174,11 +174,6 @@ def main() -> None:
 
     app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
 
-    app.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, admin_awaiting_text),
-        group=-1,
-    )
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("id", show_my_id))
@@ -252,6 +247,9 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(shop_ai_money_callback, pattern=r"^ai_m:"))
     app.add_handler(CallbackQueryHandler(shop_ai_pack_callback, pattern=r"^ai_p:"))
     app.add_handler(CallbackQueryHandler(shop_ai_liter_callback, pattern=r"^ai_l:"))
+    app.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, admin_awaiting_text)
+    )
     app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, shop_ai_message)
     )
