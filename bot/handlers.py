@@ -1670,7 +1670,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     if action == "products":
-        await show_admin_products_list(update, context)
+        await show_admin_products_menu(update, context)
         return
 
     if action == "contacts":
@@ -1726,6 +1726,28 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 
+async def show_admin_products_menu(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Mahsulotlar bosh menyu — qo'shish / spiska / toifalar."""
+    query = update.callback_query
+    products = get_products(active_only=False)
+    categories = get_categories(active_only=False)
+    text = (
+        "🛍 <b>Mahsulotlar</b>\n"
+        f"📦 Jami: <b>{len(products)}</b> ta · "
+        f"📁 Toifa: <b>{len(categories)}</b> ta\n\n"
+        "➕ Yangi mahsulot — qo'shish\n"
+        "📋 Spiska — tahrirlash\n"
+        "🗂 Toifalar — guruhlar"
+    )
+    markup = admin_products_keyboard()
+    if query:
+        await query.edit_message_text(text, reply_markup=markup, parse_mode="HTML")
+    elif update.message:
+        await update.message.reply_text(text, reply_markup=markup, parse_mode="HTML")
+
+
 async def show_admin_products_list(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -1753,7 +1775,8 @@ async def show_admin_products_list(
             f"🖼 Rasmli: <b>{len(products) - no_photo}</b> · "
             f"📷· Rasmsiz: <b>{no_photo}</b>\n\n"
             f"<b>━━ 📁 TOIFA ━━</b> — toifani ochish\n"
-            f"　　✅🖼 mahsulot — tahrirlash / rasm"
+            f"　　✅🖼 mahsulot — tahrirlash / rasm\n\n"
+            f"⬆️ <b>Yuqorida</b> — ➕ Yangi mahsulot"
         )
         markup = admin_all_products_list_keyboard(products)
 

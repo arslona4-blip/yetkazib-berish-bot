@@ -754,8 +754,23 @@ def admin_all_products_list_keyboard(products) -> InlineKeyboardMarkup:
         cat_name = product["category_name"] or "Toifasiz"
         grouped[cat_name].append(product)
 
-    rows = []
+    rows = [
+        [
+            InlineKeyboardButton(
+                "➕ Yangi mahsulot", callback_data="admin_prod:add"
+            )
+        ],
+        [
+            InlineKeyboardButton("🗂 Toifalar", callback_data="admin_prod:cats"),
+            InlineKeyboardButton("⬅️ Orqaga", callback_data="admin:products"),
+        ],
+    ]
+    max_buttons = 100
+    truncated = False
     for cat_name in sorted(grouped.keys(), key=lambda x: x.casefold()):
+        if len(rows) >= max_buttons - 2:
+            truncated = True
+            break
         items = sorted(
             grouped[cat_name],
             key=lambda p: (p["name"] or "").casefold(),
@@ -778,6 +793,9 @@ def admin_all_products_list_keyboard(products) -> InlineKeyboardMarkup:
             ]
         )
         for product in items:
+            if len(rows) >= max_buttons - 1:
+                truncated = True
+                break
             mark = "✅" if product["is_active"] else "🚫"
             try:
                 has_photo = bool(product["image_file_id"])
@@ -796,20 +814,19 @@ def admin_all_products_list_keyboard(products) -> InlineKeyboardMarkup:
                     )
                 ]
             )
+        if truncated:
+            break
 
-    rows.append(
-        [
-            InlineKeyboardButton(
-                "➕ Yangi mahsulot", callback_data="admin_prod:add"
-            )
-        ]
-    )
-    rows.append(
-        [
-            InlineKeyboardButton("🗂 Toifalar", callback_data="admin_prod:cats"),
-            InlineKeyboardButton("⬅️ Admin", callback_data="admin:menu"),
-        ]
-    )
+    if truncated:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    "📁 Toifadan ko‘ring — to‘liq ro‘yxat",
+                    callback_data="admin_prod:cats",
+                )
+            ]
+        )
+
     return InlineKeyboardMarkup(rows)
 
 
@@ -854,7 +871,7 @@ def admin_category_item_keyboard(category_id: int) -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    "📷➕ Mahsulot (skan)",
+                    "➕ Mahsulot qo'shish",
                     callback_data=f"admin_prod:addin:{category_id}",
                 )
             ],
@@ -872,8 +889,24 @@ def admin_category_products_list_keyboard(
     category_id: int, products
 ) -> InlineKeyboardMarkup:
     """Toifa ichidagi mahsulotlar — bitta spiska."""
-    rows = []
+    rows = [
+        [
+            InlineKeyboardButton(
+                "➕ Mahsulot qo'shish",
+                callback_data=f"admin_prod:addin:{category_id}",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "⬅️ Toifalar",
+                callback_data="admin_prod:cats",
+            ),
+        ],
+    ]
+    max_buttons = 100
     for product in products:
+        if len(rows) >= max_buttons - 1:
+            break
         mark = "✅" if product["is_active"] else "🚫"
         rows.append(
             [
@@ -886,20 +919,8 @@ def admin_category_products_list_keyboard(
     rows.append(
         [
             InlineKeyboardButton(
-                "📷➕ Mahsulot (skan)",
-                callback_data=f"admin_prod:addin:{category_id}",
-            )
-        ]
-    )
-    rows.append(
-        [
-            InlineKeyboardButton(
                 "🗑 Toifani o'chirish",
                 callback_data=f"admin_prod:delcat:{category_id}",
-            ),
-            InlineKeyboardButton(
-                "⬅️ Toifalar",
-                callback_data="admin_prod:cats",
             ),
         ]
     )
@@ -911,7 +932,7 @@ def admin_category_products_header_keyboard(category_id: int) -> InlineKeyboardM
         [
             [
                 InlineKeyboardButton(
-                    "📷➕ Mahsulot (skan)",
+                    "➕ Mahsulot qo'shish",
                     callback_data=f"admin_prod:addin:{category_id}",
                 )
             ],
