@@ -13,10 +13,12 @@ from bot.shop_ai import (
     _product_ml,
     display_stem_name,
     expand_kg_packs,
+    expand_exact_name_packs,
     expand_liter_packs,
     expand_line_packs,
     expand_piece_packs,
     format_variants,
+    exact_name_family_for_product,
     grams_for_money,
     kg_family_for_product,
     line_family_for_product,
@@ -171,6 +173,20 @@ async def show_kg_product_options(update: Update, product) -> bool:
         await query.answer()
         text = format_variants(title, tfamily)
         kb = shop_ai_results_keyboard(tfamily)
+        uid = query.from_user.id
+        await query.message.reply_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=kb,
+        )
+        await query.message.reply_text("Menyu:", reply_markup=_menu(uid))
+        return True
+
+    _etitle, efamily = exact_name_family_for_product(product)
+    if expand_exact_name_packs(efamily):
+        await query.answer()
+        text = format_variants(_etitle, efamily)
+        kb = shop_ai_results_keyboard(efamily)
         uid = query.from_user.id
         await query.message.reply_text(
             text,

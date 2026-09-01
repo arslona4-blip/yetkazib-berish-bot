@@ -383,6 +383,7 @@ def shop_ai_results_keyboard(products) -> InlineKeyboardMarkup | None:
         _tier_brand_stems,
         catalog_tier_key,
         expand_kg_packs,
+        expand_exact_name_packs,
         expand_liter_packs,
         kg_money_options,
         money,
@@ -419,17 +420,32 @@ def shop_ai_results_keyboard(products) -> InlineKeyboardMarkup | None:
                 cb = f"cart_add:{opt['product_id']}:0"
             buttons.append([InlineKeyboardButton(btn, callback_data=cb)])
     else:
-        sorted_products = sorted(
-            products, key=lambda p: (int(p["price"]), str(p["name"]))
-        )
-        for p in sorted_products[:20]:
-            show = str(p["name"])
-            btn = f"{show} — {money(int(p['price']))}"
-            if len(btn) > 64:
-                btn = btn[:61] + "…"
-            buttons.append(
-                [InlineKeyboardButton(btn, callback_data=f"cart_add:{int(p['id'])}:0")]
+        exact_packs = expand_exact_name_packs(products)
+        if exact_packs:
+            for opt in exact_packs:
+                btn = str(opt["label"])
+                if len(btn) > 64:
+                    btn = btn[:61] + "…"
+                buttons.append(
+                    [
+                        InlineKeyboardButton(
+                            btn,
+                            callback_data=f"cart_add:{int(opt['product_id'])}:0",
+                        )
+                    ]
+                )
+        else:
+            sorted_products = sorted(
+                products, key=lambda p: (int(p["price"]), str(p["name"]))
             )
+            for p in sorted_products[:20]:
+                show = str(p["name"])
+                btn = f"{show} — {money(int(p['price']))}"
+                if len(btn) > 64:
+                    btn = btn[:61] + "…"
+                buttons.append(
+                    [InlineKeyboardButton(btn, callback_data=f"cart_add:{int(p['id'])}:0")]
+                )
     for opt in kg_money_options(products):
         btn = f"{opt['label']} · {opt['detail']}"
         if len(btn) > 64:

@@ -284,6 +284,8 @@ def _kg_api_fields(product: Any) -> dict[str, Any]:
         kg_family_for_product,
         kg_money_options,
         liter_family_for_product,
+        exact_name_family_for_product,
+        expand_exact_name_packs,
         line_family_for_product,
         expand_line_packs,
         piece_family_for_product,
@@ -297,13 +299,18 @@ def _kg_api_fields(product: Any) -> dict[str, Any]:
         _key, family = liter_family_for_product(product)
         liter_packs = expand_liter_packs(family)
     else:
-        _lkey, lfamily = line_family_for_product(product)
-        line_packs = expand_line_packs(lfamily)
-        if line_packs:
-            piece_packs = line_packs
+        _etitle, efamily = exact_name_family_for_product(product)
+        exact_packs = expand_exact_name_packs(efamily)
+        if exact_packs:
+            piece_packs = exact_packs
         else:
-            _pkey, pfamily = piece_family_for_product(product)
-            piece_packs = expand_piece_packs(pfamily)
+            _lkey, lfamily = line_family_for_product(product)
+            line_packs = expand_line_packs(lfamily)
+            if line_packs:
+                piece_packs = line_packs
+            else:
+                _pkey, pfamily = piece_family_for_product(product)
+                piece_packs = expand_piece_packs(pfamily)
         if not piece_packs:
             _query, family = kg_family_for_product(product)
             packs = expand_kg_packs(family)

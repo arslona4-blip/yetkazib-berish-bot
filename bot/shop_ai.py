@@ -850,6 +850,71 @@ def line_card_name(key: str, product: Any) -> str:
     return key.title() if key else display_stem_name(str(product["name"]))
 
 
+def catalog_exact_name_key(product: Any) -> tuple[int, str] | None:
+    """Bir xil toifada bir xil nom (dublikat SKUlar)."""
+    try:
+        cid = int(product["category_id"]) if product["category_id"] else None
+    except (KeyError, TypeError, ValueError):
+        cid = None
+    if not cid:
+        return None
+    name = _norm(str(product["name"]).strip())
+    if len(name) < 2:
+        return None
+    return cid, name
+
+
+def exact_name_family_for_product(product: Any) -> tuple[str, list[Any]]:
+    """Katalogdagi bir xil nomli takroriy mahsulotlar."""
+    ek = catalog_exact_name_key(product)
+    if not ek:
+        return "", []
+    family: list[Any] = []
+    seen: set[int] = set()
+    for p in db.get_products(category_id=ek[0]):
+        if catalog_exact_name_key(p) != ek:
+            continue
+        pid = int(p["id"])
+        if pid in seen:
+            continue
+        seen.add(pid)
+        family.append(p)
+    if int(product["id"]) not in seen:
+        family.insert(0, product)
+    if len(family) < 2:
+        return "", []
+    family.sort(key=lambda p: (int(p["price"]), int(p["id"])))
+    return str(family[0]["name"]).strip(), family
+
+
+def expand_exact_name_packs(products: list[Any]) -> list[dict[str, Any]]:
+    """Bir xil nom — narx yoki ID bo‘yicha tanlash."""
+    items: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    same_label = len({_norm(str(p["name"])) for p in products}) == 1
+    for p in products:
+        pid = int(p["id"])
+        if pid in seen:
+            continue
+        seen.add(pid)
+        price = int(p["price"])
+        label = str(p["name"])
+        if same_label:
+            label = money(price)
+        items.append(
+            {
+                "product_id": pid,
+                "price": price,
+                "label": label,
+                "name": str(p["name"]),
+            }
+        )
+    items.sort(key=lambda x: (int(x["price"]), int(x["product_id"])))
+    if len(items) < 2:
+        return []
+    return items
+
+
 def liter_stem_key(name: str) -> str:
     """Bir xil ichimlik: «Coca Cola 1L» va «Cola 1.5L» → cola; Pepsi alohida."""
     stem = _norm(display_stem_name(name))
@@ -1144,6 +1209,30 @@ def _try_append_tier_group(
     return True
 
 
+def _try_append_exact_name_group(
+    p: Any,
+    exact_groups: dict[tuple[int, str], list[Any]],
+    list_ids: set[int],
+    used: set[int],
+    out: list[Any],
+) -> bool:
+    ek = catalog_exact_name_key(p)
+    if not ek:
+        return False
+    members = [
+        x
+        for x in exact_groups.get(ek, [])
+        if int(x["id"]) in list_ids and int(x["id"]) not in used
+    ]
+    if len(expand_exact_name_packs(members)) < 2:
+        return False
+    rep = _pick_family_rep(members)
+    out.append(rep)
+    for m in members:
+        used.add(int(m["id"]))
+    return True
+
+
 def _try_append_line_group(
     p: Any,
     line_groups: dict[tuple[int, str], list[Any]],
@@ -1181,7 +1270,11 @@ def collapse_catalog_families(products: list[Any]) -> list[Any]:
     kg_groups: dict[str, list[Any]] = {}
     tier_groups: dict[tuple[int, str], list[Any]] = {}
     line_groups: dict[tuple[int, str], list[Any]] = {}
+    exact_groups: dict[tuple[int, str], list[Any]] = {}
     for p in products:
+        enk = catalog_exact_name_key(p)
+        if enk:
+            exact_groups.setdefault(enk, []).append(p)
         fk = line_family_key(p)
         if fk:
             line_groups.setdefault(fk, []).append(p)
@@ -1246,6 +1339,8 @@ def collapse_catalog_families(products: list[Any]) -> list[Any]:
                 continue
             if _try_append_tier_group(p, tier_groups, list_ids, used, out):
                 continue
+            if _try_append_exact_name_group(p, exact_groups, list_ids, used, out):
+                continue
             if _try_append_line_group(p, line_groups, list_ids, used, out):
                 continue
             out.append(p)
@@ -1260,6 +1355,8 @@ def collapse_catalog_families(products: list[Any]) -> list[Any]:
                 for m in members:
                     used.add(int(m["id"]))
                 continue
+        if _try_append_exact_name_group(p, exact_groups, list_ids, used, out):
+            continue
         if _try_append_line_group(p, line_groups, list_ids, used, out):
             continue
         # Kg oila — faqat bir xil stem (Sardor semechka ≠ SEMECHKA)
@@ -1270,6 +1367,8 @@ def collapse_catalog_families(products: list[Any]) -> list[Any]:
             members = []
         if len(members) < 2:
             if _try_append_tier_group(p, tier_groups, list_ids, used, out):
+                continue
+            if _try_append_exact_name_group(p, exact_groups, list_ids, used, out):
                 continue
             if _try_append_line_group(p, line_groups, list_ids, used, out):
                 continue
@@ -1287,6 +1386,8 @@ def collapse_catalog_families(products: list[Any]) -> list[Any]:
         }
         if len(real_ids) < 2:
             if _try_append_tier_group(p, tier_groups, list_ids, used, out):
+                continue
+            if _try_append_exact_name_group(p, exact_groups, list_ids, used, out):
                 continue
             if _try_append_line_group(p, line_groups, list_ids, used, out):
                 continue
@@ -1321,7 +1422,8 @@ def format_variants(query: str, products: list[Any]) -> str:
         packs = []
     else:
         packs = (
-            expand_kg_packs(products)
+            expand_exact_name_packs(products)
+            or expand_kg_packs(products)
             or expand_real_gram_packs(products)
             or expand_liter_packs(products)
             or expand_piece_packs(products)
