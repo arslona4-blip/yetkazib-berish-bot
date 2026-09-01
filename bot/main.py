@@ -45,6 +45,7 @@ from bot.features_handlers import (
 from bot.handlers import (
     admin_awaiting_text,
     admin_callback,
+    admin_category_awaiting_text,
     admin_delete_order_callback,
     admin_orders_panel,
     admin_panel,
@@ -175,6 +176,11 @@ def main() -> None:
     app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
 
     app.add_handler(CommandHandler("start", start))
+
+    app.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, admin_category_awaiting_text),
+        group=-1,
+    )
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("id", show_my_id))
     app.add_handler(CommandHandler("stop_recur", stop_recur_command))

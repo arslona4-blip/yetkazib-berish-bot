@@ -1936,7 +1936,7 @@ async def admin_product_callback(
         return None
 
     if action == "addcat":
-        # ConversationHandler ga bog'liq emas — ishonchliroq
+        _force_end_product_admin(update, context)
         context.user_data["awaiting_admin"] = "category_name"
         context.user_data.pop("admin_product", None)
         await query.edit_message_text("🗂 Yangi toifa qo'shish")
@@ -2348,6 +2348,24 @@ def _clear_admin_draft(context: ContextTypes.DEFAULT_TYPE) -> None:
     context.user_data.pop("awaiting_admin", None)
 
 
+def _force_end_product_admin(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Mahsulot admin conversation — toifa qo'shish bilan aralashmasin."""
+    app = getattr(context, "application", None)
+    if not app or not update.effective_chat or not update.effective_user:
+        return
+    for handlers in app.handlers.values():
+        for handler in handlers:
+            if (
+                isinstance(handler, ConversationHandler)
+                and getattr(handler, "name", None) == "product_admin"
+            ):
+                key = handler._get_key(update)
+                handler._update_state(ConversationHandler.END, key)
+                return
+
+
 async def dispatch_main_menu(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> bool:
@@ -2591,19 +2609,21 @@ async def _save_new_product(
 async def admin_category_name(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> int:
+    from bot.category_emoji import parse_category_name
+
     left = await exit_admin_if_menu(update, context)
     if left is not None:
         return left
     text = (update.message.text or "").strip()
-    context.user_data.pop("awaiting_admin", None)
-
     if text == "❌ Bekor qilish":
+        context.user_data.pop("awaiting_admin", None)
         return await cancel_product_admin(update, context)
 
-    if len(text) < 2:
+    emoji, clean_name = parse_category_name(text)
+    if len(clean_name.strip()) < 2 and not emoji:
         context.user_data["awaiting_admin"] = "category_name"
         await update.message.reply_text("Toifa nomi juda qisqa. Qayta yozing:")
-        return ProductAdminState.CATEGORY_NAME
+        return ConversationHandler.END
 
     try:
         category_id = create_category(text)
@@ -2612,16 +2632,46 @@ async def admin_category_name(
         await update.message.reply_text(
             f"❌ Toifa qo'shilmadi: {exc}\nBoshqa nom yozing:"
         )
-        return ProductAdminState.CATEGORY_NAME
+        return ConversationHandler.END
 
+    context.user_data.pop("awaiting_admin", None)
     cat = get_category(category_id)
     label = category_label(cat) if cat else text
+    categories = get_categories(active_only=False)
+    if categories:
+        with_counts = [
+            (
+                category,
+                len(get_products(active_only=False, category_id=category["id"])),
+            )
+            for category in categories
+        ]
+        markup = admin_categories_list_keyboard(with_counts)
+        list_text = f"🗂 Toifalar ({len(categories)} ta)\nKeraklisini tanlang:"
+    else:
+        markup = admin_products_keyboard()
+        list_text = "Toifalar yo'q."
+
     await update.message.reply_text(
-        f"✅ Toifa qo'shildi!\n#{category_id} · {label}",
-        reply_markup=main_menu_keyboard(is_admin(update.effective_user.id)),
+        f"✅ Toifa qo'shildi!\n#{category_id} · {label}\n\n{list_text}",
+        reply_markup=markup,
     )
-    await show_admin_categories(update, context)
     return ConversationHandler.END
+
+
+async def admin_category_awaiting_text(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Toifa qo'shish — mahsulot conversationidan oldin ishlashi kerak."""
+    from telegram.ext import ApplicationHandlerStop
+
+    if not update.message or not is_admin(update.effective_user.id):
+        return
+    if context.user_data.get("awaiting_admin") != "category_name":
+        return
+    _force_end_product_admin(update, context)
+    await admin_category_name(update, context)
+    raise ApplicationHandlerStop
 
 
 async def admin_awaiting_text(
