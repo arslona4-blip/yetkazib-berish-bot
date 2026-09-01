@@ -73,7 +73,11 @@ _ALIASES = {
     "non": "non",
     "нон": "non",
     "tuxum": "tuxum",
+    "эклер": "ekler",
 }
+
+# Bir xil kartochkada — turli ta'm/hajm (EKLER oq, shokolad, ...)
+_LINE_FAMILY_BASES = frozenset({"ekler"})
 
 
 def catalog_text(limit: int = 40, category: str | None = None) -> str:
@@ -767,10 +771,13 @@ def _strip_line_variant_markers(stem: str, *, trailing_age: bool = True) -> str:
 
 
 def line_stem_key(name: str) -> str:
-    """Bir xil brend/qator: BELLAKT (0-6) va BELLAKT 12 → bellakt."""
+    """Bir xil brend/qator: BELLAKT (0-6) va BELLAKT 12 → bellakt; EKLER oq/shokolad → ekler."""
     stem = _norm(display_stem_name(name))
     tokens = [t for t in re.split(r"\W+", stem) if t and t not in _STOP]
     mapped = [_ALIASES.get(t, t) for t in tokens]
+    for tok in mapped:
+        if tok in _LINE_FAMILY_BASES:
+            return tok
     out: list[str] = []
     for tok in mapped:
         if not out or out[-1] != tok:
