@@ -278,8 +278,10 @@ def _liter_line_from_pack(product: Any, pack_ml: int) -> tuple[str, int]:
 def _kg_api_fields(product: Any) -> dict[str, Any]:
     from bot.shop_ai import (
         _product_ml,
+        catalog_tier_family_for_product,
         expand_kg_packs,
         expand_liter_packs,
+        expand_line_packs,
         expand_piece_packs,
         kg_family_for_product,
         kg_money_options,
@@ -287,15 +289,21 @@ def _kg_api_fields(product: Any) -> dict[str, Any]:
         exact_name_family_for_product,
         expand_exact_name_packs,
         line_family_for_product,
-        expand_line_packs,
         piece_family_for_product,
+        tier_catalog_button_label,
     )
 
     packs: list = []
     money_opts: list = []
     liter_packs: list = []
     piece_packs: list = []
-    if _product_ml(product):
+    tier_label: str | None = None
+
+    _ttitle, tfamily = catalog_tier_family_for_product(product)
+    if tfamily:
+        piece_packs = expand_line_packs(tfamily)
+        tier_label = tier_catalog_button_label(product)
+    elif _product_ml(product):
         _key, family = liter_family_for_product(product)
         liter_packs = expand_liter_packs(family)
     else:
@@ -314,8 +322,11 @@ def _kg_api_fields(product: Any) -> dict[str, Any]:
         if not piece_packs:
             _query, family = kg_family_for_product(product)
             packs = expand_kg_packs(family)
+            if not packs and len(family) >= 2:
+                from bot.shop_ai import expand_real_gram_packs
+                packs = expand_real_gram_packs(family)
             money_opts = kg_money_options(family)
-    return {
+    result = {
         "kg_packs": [
             {
                 "grams": int(opt["grams"]),
@@ -358,6 +369,9 @@ def _kg_api_fields(product: Any) -> dict[str, Any]:
             for opt in piece_packs
         ],
     }
+    if tier_label:
+        result["tier_label"] = tier_label
+    return result
 
 
 def _product_api_payload(product: Any, *, extra: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -387,8 +401,22 @@ def _product_api_payload(product: Any, *, extra: dict[str, Any] | None = None) -
     liters = payload.get("liter_packs") or []
     pieces = payload.get("piece_packs") or []
     real_kg = [x for x in (payload.get("kg_packs") or []) if not x.get("virtual")]
-    priced = liters if len(liters) >= 2 else pieces if len(pieces) >= 2 else real_kg
-    if len(priced) >= 2:
+    mixed = real_kg + liters if (real_kg and liters) else []
+    priced = (
+        mixed
+        if len(mixed) >= 2
+        else liters
+        if len(liters) >= 2
+        else pieces
+        if len(pieces) >= 2
+        else real_kg
+    )
+    tier_label = (payload.get("tier_label") or "").strip()
+    if tier_label:
+        payload["card_name"] = tier_label.split(" — ")[0].strip()
+        if " — " in tier_label:
+            payload["display_price"] = tier_label.split(" — ", 1)[1].strip()
+    elif len(priced) >= 2:
         from bot.shop_ai import display_stem_name, line_card_name, line_family_for_product, expand_line_packs, piece_card_name, piece_stem_key
 
         key = piece_stem_key(str(product["name"]))

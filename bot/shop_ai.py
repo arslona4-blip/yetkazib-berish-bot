@@ -95,6 +95,7 @@ _ALIASES = {
 # NESTOGEN 1/2/3 alohida — bosqich raqami mahsulot nomining bir qismi
 _LINE_FAMILY_BASES = frozenset({
     "ekler", "kolonka", "fonex", "moloko", "ryabina", "antijir", "colgate", "salfetka",
+    "bellakt",
 })
 _LINE_FAMILY_CARD_NAMES = {
     "ekler": "Ekler",
@@ -105,6 +106,7 @@ _LINE_FAMILY_CARD_NAMES = {
     "antijir": "Antijir",
     "colgate": "Colgate tish pastasi",
     "salfetka": "Nam salfetkalar",
+    "bellakt": "Bellakt",
 }
 # Ikki so‘zli nomlar → bitta qator
 _LINE_FAMILY_PHRASE_BASES = {
@@ -115,6 +117,23 @@ _LINE_FAMILY_PHRASE_BASES = {
 }
 # Faqat shu brendlarda oxirgi raqam variant (BELLAKT 12 → BELLAKT)
 _TRAILING_VARIANT_STRIP_HEADS = frozenset({"bellakt"})
+# Guruch/shakar/semechka — tier guruhlamaydi (har biri alohida kartochka)
+_TIER_EXCLUDE_TOKENS = frozenset({
+    "guruch",
+    "shakar",
+    "qand",
+    "oqqand",
+    "novvot",
+    "novot",
+    "semechka",
+    "non",
+    "sut",
+    "moy",
+    "un",
+    "makaron",
+    "asal",
+    "yog",
+})
 
 
 def catalog_text(limit: int = 40, category: str | None = None) -> str:
@@ -870,7 +889,7 @@ def line_family_key(product: Any) -> tuple[int, str] | None:
 def line_family_for_product(product: Any) -> tuple[str, list[Any]]:
     """Bir xil brend, turli variant (BELLAKT 0-6 / 12)."""
     fk = line_family_key(product)
-    if not fk:
+    if not fk or fk[1] not in _LINE_FAMILY_BASES:
         return "", []
     _cid, lkey = fk
     family: list[Any] = []
@@ -1169,8 +1188,28 @@ def _pick_family_rep(members: list[Any]) -> Any:
     return max(members, key=score)
 
 
+def _tier_excluded(product: Any) -> bool:
+    """Asosiy oziq-ovqat — bir xil hajmda ham aralash tier guruh bo‘lmasin."""
+    name = str(product["name"])
+    if _product_grams(product) or _product_ml(product):
+        stem = (
+            kg_stem_key(name)
+            if _product_grams(product)
+            else liter_stem_key(name)
+        )
+    else:
+        stem = line_stem_key(name)
+    tokens = set(stem.split()) if stem else set()
+    if tokens & _TIER_EXCLUDE_TOKENS:
+        return True
+    norm = _norm(name)
+    return any(f" {tok} " in f" {norm} " for tok in _TIER_EXCLUDE_TOKENS)
+
+
 def catalog_tier_key(product: Any) -> tuple[int, str] | None:
     """Bir toifada bir xil qadoq — turli brendlar (1 kg shokoladlar)."""
+    if _tier_excluded(product):
+        return None
     try:
         cid = int(product["category_id"]) if product["category_id"] else None
     except (KeyError, TypeError, ValueError):
@@ -1312,7 +1351,7 @@ def _try_append_line_group(
     out: list[Any],
 ) -> bool:
     fk = line_family_key(p)
-    if not fk:
+    if not fk or fk[1] not in _LINE_FAMILY_BASES:
         return False
     members = [
         x
@@ -1479,6 +1518,12 @@ def collapse_catalog_families(products: list[Any]) -> list[Any]:
         out.append(rep)
         for m in members:
             used.add(int(m["id"]))
+    # Xavfsizlik: hech qachon mahsulot yo‘qolmasin
+    for p in products:
+        pid = int(p["id"])
+        if pid not in used:
+            out.append(p)
+            used.add(pid)
     return out
 
 
