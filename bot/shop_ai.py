@@ -97,9 +97,10 @@ def catalog_text(limit: int = 40, category: str | None = None) -> str:
 
 
 def _norm(s: str) -> str:
+    # «2OO GR» / «20OOO» → raqam (kirill/lotin O chalkashligi)
+    s = _fix_lookalike_digits(s or "")
     return (
-        (s or "")
-        .lower()
+        s.lower()
         .replace("‘", "'")
         .replace("’", "'")
         .replace("ё", "e")
@@ -481,10 +482,23 @@ def _product_grams(product: Any) -> int | None:
     return None
 
 
+def _has_retail_gram_packs(products: list[Any]) -> bool:
+    """Katalogda 1kg dan kichik haqiqiy qadoq bor (Sardor 100/150/200)."""
+    for p in products:
+        grams = _product_grams(p)
+        if grams is not None and 0 < grams < 1000:
+            return True
+    return False
+
+
 def expand_kg_packs(products: list[Any]) -> list[dict[str, Any]]:
-    """1kg (yoki boshqa kg) bor bo‘lsa — 250g / 500g / 1kg (va katalogdagi boshqa og‘irliklar)."""
+    """1kg oilasi: 250/500/1kg (virtual). Retail qadoqlar bo‘lsa — faqat haqiqiy SKUlar."""
     if not products:
         return []
+    # SARDOR/OLE: katalogdagi 100/150/200/500 + 1kg — virtual ixtiro yo‘q
+    # (1kg ni chiqarib yubormang — OLE 500+1kg bir kartochkada birlashishi kerak)
+    if _has_retail_gram_packs(products):
+        return expand_real_gram_packs(products)
     kg = _find_1kg_product(products)
     ref = kg
     ref_grams = 1000
@@ -531,20 +545,46 @@ def expand_kg_packs(products: list[Any]) -> list[dict[str, Any]]:
     return out
 
 
+def kg_stem_key(name: str) -> str:
+    """«SARDOR SEMECHKA 200 GR» → sardor semechka; «SEMECHKA 1 KG» → semechka.
+
+    Fuzzy «semechka» o‘xshashligi bilan BRANDAR farq qiladi — aralashmaydi.
+    """
+    return _norm(display_stem_name(name)).strip()
+
+
 def kg_family_for_product(product: Any) -> tuple[str, list[Any]]:
-    """Katalogdagi kg mahsulot uchun oila (guruch 1kg → 250g/500g/1kg)."""
-    raw_name = str(product["name"])
-    query = _base_name(raw_name) or raw_name
-    family = find_variants(query)
-    if not family:
-        family = [product]
-    elif not any(int(p["id"]) == int(product["id"]) for p in family):
-        family = [product, *family]
-    return query, family
+    """Katalog oilasi: faqat BIR XIL stem (Guruch 250g+1kg).
+
+    Eski fuzzy find_variants «Sardor semechka»ni «SEMECHKA 1KG»ga yopishtirardi.
+    """
+    if not _product_grams(product):
+        return "", [product]
+    key = kg_stem_key(str(product["name"]))
+    if not key:
+        return "", [product]
+    family: list[Any] = []
+    seen: set[int] = set()
+    for p in db.get_products():
+        if not _product_grams(p):
+            continue
+        if kg_stem_key(str(p["name"])) != key:
+            continue
+        pid = int(p["id"])
+        if pid in seen:
+            continue
+        seen.add(pid)
+        family.append(p)
+    if int(product["id"]) not in seen:
+        family.insert(0, product)
+    family.sort(key=lambda p: (_product_grams(p) or 0, int(p["id"])))
+    return key, family
 
 
 def kg_money_options(products: list[Any]) -> list[dict[str, Any]]:
-    """1kg bor bo‘lsa — 5000 / 10000 so‘mlik variantlar."""
+    """1kg bulk oilasi uchun 5000 / 10000 so‘mlik. Retail qadoqda yo‘q."""
+    if _has_retail_gram_packs(products):
+        return []
     kg = _find_1kg_product(products)
     if not kg:
         return []
@@ -583,7 +623,9 @@ def _liter_label(ml: int) -> str:
     return text.replace(".", ",") + "L"
 
 
-def expand_liter_packs(products: list[Any]) -> list[dict[str, Any]]:
+def expand_liter_packs(
+    products: list[Any], *, allow_single: bool = False
+) -> list[dict[str, Any]]:
     """Faqat katalogdagi ichimlik hajmlari — har biri o‘z narxi bilan. Virtual yo‘q."""
     if not products:
         return []
@@ -609,17 +651,98 @@ def expand_liter_packs(products: list[Any]) -> list[dict[str, Any]]:
             }
         )
     items.sort(key=lambda x: int(x["ml"]))
-    if len(items) < 2:
+    if len(items) < 2 and not allow_single:
         return []
     return items
 
 
+def expand_real_gram_packs(products: list[Any]) -> list[dict[str, Any]]:
+    """Faqat katalogdagi gramm/kg mahsulotlar (virtual 250g yo‘q)."""
+    items: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    for p in products:
+        grams = _product_grams(p)
+        if not grams or grams in seen:
+            continue
+        seen.add(grams)
+        if grams >= 1000 and grams % 1000 == 0:
+            label = f"{grams // 1000} kg"
+        else:
+            label = f"{grams} gramm"
+        pid = int(p["id"])
+        items.append(
+            {
+                "grams": grams,
+                "price": int(p["price"]),
+                "label": label,
+                "product_id": pid,
+                "virtual": False,
+                "kg_product_id": pid,
+            }
+        )
+    items.sort(key=lambda x: int(x["grams"]))
+    return items
+
+
+def sized_stem_key(name: str) -> str:
+    """«MOLOKO 500 GR» va «MOLOKO 1L» → moloko."""
+    return liter_stem_key(name)
+
+
+def sized_family_for_product(product: Any) -> tuple[str, list[Any]]:
+    """Bir nom ostidagi gramm + litr variantlar (sgushyenka 500g / 1L)."""
+    if not (_product_ml(product) or _product_grams(product)):
+        return "", []
+    key = sized_stem_key(str(product["name"]))
+    if not key:
+        return "", [product]
+    family: list[Any] = []
+    seen: set[int] = set()
+    for p in db.get_products():
+        if not (_product_ml(p) or _product_grams(p)):
+            continue
+        if sized_stem_key(str(p["name"])) != key:
+            continue
+        pid = int(p["id"])
+        if pid in seen:
+            continue
+        seen.add(pid)
+        family.append(p)
+    if int(product["id"]) not in seen:
+        family.insert(0, product)
+    family.sort(
+        key=lambda p: (
+            0 if _product_ml(p) else 1,
+            _product_ml(p) or _product_grams(p) or 0,
+            int(p["id"]),
+        )
+    )
+    return key, family
+
+
+def mixed_size_packs(family: list[Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Gramm + litr oilasi uchun paketlar (har biri kamida 1 ta bo‘lishi mumkin)."""
+    gram_members = [p for p in family if _product_grams(p)]
+    liter_members = [p for p in family if _product_ml(p)]
+    packs = expand_kg_packs(gram_members) if gram_members else []
+    if not packs and gram_members:
+        packs = expand_real_gram_packs(gram_members)
+    allow_single = bool(gram_members) and bool(liter_members)
+    liter_packs = (
+        expand_liter_packs(liter_members, allow_single=allow_single)
+        if liter_members
+        else []
+    )
+    return packs, liter_packs
+
+
 def display_stem_name(name: str) -> str:
-    """«Coca Cola 1L» → «Coca Cola»."""
+    """«Coca Cola 1L» → «Coca Cola»; «SARDOR … 2OO GR» → «SARDOR …»."""
+    raw = _fix_lookalike_digits(str(name or ""))
     stem = re.sub(
         r"\d+(?:[.,]\d+)?\s*(kg|l|lt|litr|gr|g|ml|gramm)\b",
         "",
-        str(name),
+        raw,
         flags=re.I,
     )
     stem = re.sub(r"[-_/]+", " ", stem)
@@ -790,6 +913,8 @@ def _has_product_photo(product: Any) -> bool:
 
 
 def _pick_family_rep(members: list[Any]) -> Any:
+    """Katalog kartasi: avvalo rasmli (eng yangi), keyin odatiy hajm."""
+
     def score(p: Any) -> tuple:
         photo = 1 if _has_product_photo(p) else 0
         ml = _product_ml(p) or 0
@@ -801,34 +926,186 @@ def _pick_family_rep(members: list[Any]) -> Any:
             size_pref = 2
         elif ml or grams:
             size_pref = 1
-        return (photo, size_pref, -int(p["id"]))
+        # Rasm bo‘lsa — yangiroq mahsulot (Sardor 200g) 1kg eski rasmni bosmasin
+        newer = int(p["id"]) if photo else 0
+        return (photo, newer, size_pref)
 
     return max(members, key=score)
 
 
+def catalog_tier_key(product: Any) -> tuple[int, str] | None:
+    """Bir toifada bir xil qadoq — turli brendlar (1 kg shokoladlar)."""
+    try:
+        cid = int(product["category_id"]) if product["category_id"] else None
+    except (KeyError, TypeError, ValueError):
+        cid = None
+    if not cid:
+        return None
+    size, unit = _pack_size_from_name(str(product["name"]))
+    if not size or not unit:
+        return None
+    if unit in {"g", "gr"}:
+        return cid, f"g:{int(round(size))}"
+    if unit == "kg":
+        return cid, f"g:{int(round(size * 1000))}"
+    if unit == "ml":
+        return cid, f"ml:{int(round(size))}"
+    if unit in {"l", "lt", "litr"}:
+        return cid, f"ml:{int(round(size * 1000))}"
+    return None
+
+
+def _tier_size_label(size_sig: str) -> str:
+    kind, raw = size_sig.split(":", 1)
+    n = int(raw)
+    if kind == "g":
+        if n >= 1000 and n % 1000 == 0:
+            return f"{n // 1000} kg"
+        return f"{n} g"
+    if kind == "ml":
+        if n >= 1000 and n % 1000 == 0:
+            return f"{n // 1000} L"
+        return f"{n} ml"
+    return size_sig
+
+
+def _tier_brand_stems(members: list[Any]) -> set[str]:
+    stems: set[str] = set()
+    for p in members:
+        if _product_ml(p):
+            stems.add(liter_stem_key(str(p["name"])) or f"id:{p['id']}")
+        elif _product_grams(p):
+            stems.add(kg_stem_key(str(p["name"])) or f"id:{p['id']}")
+        else:
+            stems.add(piece_stem_key(str(p["name"])) or f"id:{p['id']}")
+    return stems
+
+
+def catalog_tier_family_for_product(product: Any) -> tuple[str, list[Any]]:
+    """Turli brend, bir xil toifa+hajm — narx bo‘yicha tanlash."""
+    key = catalog_tier_key(product)
+    if not key:
+        return "", []
+    cid, _size_sig = key
+    family: list[Any] = []
+    seen: set[int] = set()
+    for p in db.get_products(category_id=cid):
+        if catalog_tier_key(p) != key:
+            continue
+        pid = int(p["id"])
+        if pid in seen:
+            continue
+        seen.add(pid)
+        family.append(p)
+    if int(product["id"]) not in seen:
+        family.insert(0, product)
+    if len(family) < 2 or len(_tier_brand_stems(family)) < 2:
+        return "", []
+    family.sort(key=lambda p: (int(p["price"]), str(p["name"])))
+    from bot.category_emoji import category_label
+
+    cat = db.get_category(cid)
+    title = f"{category_label(cat) if cat else 'Mahsulot'} · {_tier_size_label(_size_sig)}"
+    return title, family
+
+
+def tier_catalog_button_label(product: Any) -> str | None:
+    title, family = catalog_tier_family_for_product(product)
+    if not family:
+        return None
+    prices = sorted(int(p["price"]) for p in family)
+    lo, hi = prices[0], prices[-1]
+    if lo == hi:
+        return f"{title} — {money(lo)}"
+    return f"{title} — {money(lo)} dan"
+
+
+def _try_append_tier_group(
+    p: Any,
+    tier_groups: dict[tuple[int, str], list[Any]],
+    list_ids: set[int],
+    used: set[int],
+    out: list[Any],
+) -> bool:
+    key = catalog_tier_key(p)
+    if not key:
+        return False
+    members = [
+        x
+        for x in tier_groups.get(key, [])
+        if int(x["id"]) in list_ids and int(x["id"]) not in used
+    ]
+    if len(members) < 2 or len(_tier_brand_stems(members)) < 2:
+        return False
+    rep = _pick_family_rep(members)
+    out.append(rep)
+    for m in members:
+        used.add(int(m["id"]))
+    return True
+
+
 def collapse_catalog_families(products: list[Any]) -> list[Any]:
-    """Cola/Fanta va Non 3000/4000 — katalogda bitta kartochka."""
+    """Cola/Fanta, Non 3000/4000, MOLOKO 500g+1L — katalogda bitta kartochka."""
     if not products:
         return []
     list_ids = {int(p["id"]) for p in products}
     used: set[int] = set()
     out: list[Any] = []
+    size_groups: dict[str, list[Any]] = {}
     liter_groups: dict[str, list[Any]] = {}
     piece_groups: dict[str, list[Any]] = {}
+    kg_groups: dict[str, list[Any]] = {}
+    tier_groups: dict[tuple[int, str], list[Any]] = {}
     for p in products:
+        tk = catalog_tier_key(p)
+        if tk:
+            tier_groups.setdefault(tk, []).append(p)
+        if _product_ml(p) or _product_grams(p):
+            skey = sized_stem_key(str(p["name"]))
+            if skey:
+                size_groups.setdefault(skey, []).append(p)
         if _product_ml(p):
             key = liter_stem_key(str(p["name"]))
             if key:
                 liter_groups.setdefault(key, []).append(p)
             continue
+        if _product_grams(p):
+            kkey = kg_stem_key(str(p["name"]))
+            if kkey:
+                kg_groups.setdefault(kkey, []).append(p)
         key = piece_stem_key(str(p["name"]))
         if key and _is_piece_product(p):
             piece_groups.setdefault(key, []).append(p)
+
+    def _size_signature(p: Any) -> tuple[str, int]:
+        ml = _product_ml(p)
+        if ml:
+            return ("ml", ml)
+        grams = _product_grams(p)
+        if grams:
+            return ("g", grams)
+        return ("?", int(p["id"]))
 
     for p in products:
         pid = int(p["id"])
         if pid in used:
             continue
+        # Gramm + litr bir oila (MOLOKO 500 GR + MOLOKO 1L)
+        if _product_ml(p) or _product_grams(p):
+            skey = sized_stem_key(str(p["name"]))
+            sized = [x for x in (size_groups.get(skey) or []) if int(x["id"]) in list_ids]
+            sigs = {_size_signature(x) for x in sized}
+            has_g = any(_product_grams(x) for x in sized)
+            has_l = any(_product_ml(x) for x in sized)
+            if len(sized) >= 2 and len(sigs) >= 2:
+                packs, liters = mixed_size_packs(sized)
+                real_n = len([x for x in packs if not x.get("virtual")]) + len(liters)
+                if real_n >= 2 or (has_g and has_l):
+                    rep = _pick_family_rep(sized)
+                    out.append(rep)
+                    for m in sized:
+                        used.add(int(m["id"]))
+                    continue
         if _product_ml(p):
             key = liter_stem_key(str(p["name"]))
             members = liter_groups.get(key) or [p]
@@ -838,6 +1115,8 @@ def collapse_catalog_families(products: list[Any]) -> list[Any]:
                 out.append(rep)
                 for m in members:
                     used.add(int(m["id"]))
+                continue
+            if _try_append_tier_group(p, tier_groups, list_ids, used, out):
                 continue
             out.append(p)
             used.add(pid)
@@ -851,19 +1130,30 @@ def collapse_catalog_families(products: list[Any]) -> list[Any]:
                 for m in members:
                     used.add(int(m["id"]))
                 continue
-        _query, family = kg_family_for_product(p)
-        members = [x for x in family if int(x["id"]) in list_ids]
+        # Kg oila — faqat bir xil stem (Sardor semechka ≠ SEMECHKA)
+        if _product_grams(p):
+            kkey = kg_stem_key(str(p["name"]))
+            members = [x for x in (kg_groups.get(kkey) or [p]) if int(x["id"]) in list_ids]
+        else:
+            members = []
         if len(members) < 2:
+            if _try_append_tier_group(p, tier_groups, list_ids, used, out):
+                continue
             out.append(p)
             used.add(pid)
             continue
         packs = expand_kg_packs(members)
+        if not packs:
+            # 150g + 200g kabi — 1kg yo‘q, faqat katalogdagi haqiqiy qadoqlar
+            packs = expand_real_gram_packs(members)
         real_ids = {
             int(opt["product_id"])
             for opt in packs
             if not opt.get("virtual")
         }
         if len(real_ids) < 2:
+            if _try_append_tier_group(p, tier_groups, list_ids, used, out):
+                continue
             out.append(p)
             used.add(pid)
             continue
@@ -883,12 +1173,23 @@ def collapse_catalog_families(products: list[Any]) -> list[Any]:
 
 def format_variants(query: str, products: list[Any]) -> str:
     title = query.strip().title() if query else "Mahsulot"
-    money_opts = kg_money_options(products)
-    packs = (
-        expand_kg_packs(products)
-        or expand_liter_packs(products)
-        or expand_piece_packs(products)
+    tier_keys = {catalog_tier_key(p) for p in products}
+    is_tier = (
+        len(products) >= 2
+        and None not in tier_keys
+        and len(tier_keys) == 1
+        and len(_tier_brand_stems(products)) >= 2
     )
+    money_opts = [] if is_tier else kg_money_options(products)
+    if is_tier:
+        packs = []
+    else:
+        packs = (
+            expand_kg_packs(products)
+            or expand_real_gram_packs(products)
+            or expand_liter_packs(products)
+            or expand_piece_packs(products)
+        )
 
     # Bitta oddiy (kg emas) mahsulot
     if len(products) == 1 and not money_opts and not packs:
@@ -908,8 +1209,7 @@ def format_variants(query: str, products: list[Any]) -> str:
             lines.append(f"• <b>{opt['label']}</b> — {money(int(opt['price']))}")
     else:
         for p in products:
-            label = _human_pack_label(str(p["name"]))
-            show = label if label != str(p["name"]) else str(p["name"])
+            show = str(p["name"])
             lines.append(f"• <b>{show}</b> — {money(int(p['price']))}")
 
     if money_opts:

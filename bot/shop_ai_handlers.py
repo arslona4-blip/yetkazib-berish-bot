@@ -156,12 +156,28 @@ async def shop_ai_liter_callback(
 
 
 async def show_kg_product_options(update: Update, product) -> bool:
-    """Kg yoki ichimlik oilasi bo‘lsa barcha hajmlarni chiqaradi. True = ko‘rsatildi."""
+    """Kg, ichimlik yoki bir xil hajmdagi turli brendlar — narx bo‘yicha tanlash."""
     query = update.callback_query
     from bot.database import get_variants
+    from bot.shop_ai import catalog_tier_family_for_product
 
     if get_variants(int(product["id"]), active_only=True):
         return False
+
+    title, tfamily = catalog_tier_family_for_product(product)
+    if tfamily:
+        await query.answer()
+        text = format_variants(title, tfamily)
+        kb = shop_ai_results_keyboard(tfamily)
+        uid = query.from_user.id
+        await query.message.reply_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=kb,
+        )
+        await query.message.reply_text("Menyu:", reply_markup=_menu(uid))
+        return True
+
     if _product_ml(product):
         _key, family = liter_family_for_product(product)
         packs = expand_liter_packs(family)
