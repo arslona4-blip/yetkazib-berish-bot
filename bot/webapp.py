@@ -284,6 +284,8 @@ def _kg_api_fields(product: Any) -> dict[str, Any]:
         kg_family_for_product,
         kg_money_options,
         liter_family_for_product,
+        line_family_for_product,
+        expand_line_packs,
         piece_family_for_product,
     )
 
@@ -295,8 +297,13 @@ def _kg_api_fields(product: Any) -> dict[str, Any]:
         _key, family = liter_family_for_product(product)
         liter_packs = expand_liter_packs(family)
     else:
-        _pkey, pfamily = piece_family_for_product(product)
-        piece_packs = expand_piece_packs(pfamily)
+        _lkey, lfamily = line_family_for_product(product)
+        line_packs = expand_line_packs(lfamily)
+        if line_packs:
+            piece_packs = line_packs
+        else:
+            _pkey, pfamily = piece_family_for_product(product)
+            piece_packs = expand_piece_packs(pfamily)
         if not piece_packs:
             _query, family = kg_family_for_product(product)
             packs = expand_kg_packs(family)
@@ -375,14 +382,16 @@ def _product_api_payload(product: Any, *, extra: dict[str, Any] | None = None) -
     real_kg = [x for x in (payload.get("kg_packs") or []) if not x.get("virtual")]
     priced = liters if len(liters) >= 2 else pieces if len(pieces) >= 2 else real_kg
     if len(priced) >= 2:
-        from bot.shop_ai import display_stem_name, piece_card_name, piece_stem_key
+        from bot.shop_ai import display_stem_name, line_card_name, line_family_for_product, expand_line_packs, piece_card_name, piece_stem_key
 
         key = piece_stem_key(str(product["name"]))
-        payload["card_name"] = (
-            piece_card_name(key, product)
-            if pieces and key
-            else display_stem_name(str(product["name"]))
-        )
+        _lkey, lfamily = line_family_for_product(product)
+        if expand_line_packs(lfamily):
+            payload["card_name"] = line_card_name(_lkey, product)
+        elif pieces and key:
+            payload["card_name"] = piece_card_name(key, product)
+        else:
+            payload["card_name"] = display_stem_name(str(product["name"]))
         prices = [int(x["price"]) for x in priced]
         lo, hi = min(prices), max(prices)
         if lo != hi:

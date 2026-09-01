@@ -240,9 +240,12 @@ def catalog_keyboard(
         liter_family_for_product,
         piece_card_name,
         piece_family_for_product,
+        line_family_for_product,
+        expand_line_packs,
+        line_card_name,
+        tier_catalog_button_label,
         asks_piece_qty,
         qty_card_name,
-        tier_catalog_button_label,
         _product_ml,
     )
 
@@ -258,7 +261,10 @@ def catalog_keyboard(
             btn_text = f"{tier_label}{mark}"
         else:
             label_name = str(product["name"])
-            if _product_ml(product):
+            _lkey, lfamily = line_family_for_product(product)
+            if expand_line_packs(lfamily):
+                label_name = line_card_name(_lkey, product)
+            elif _product_ml(product):
                 _key, family = liter_family_for_product(product)
                 packs = expand_liter_packs(family)
                 real_n = len({int(x["product_id"]) for x in packs if not x.get("virtual")})

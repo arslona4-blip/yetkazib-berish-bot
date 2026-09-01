@@ -737,8 +737,9 @@ def mixed_size_packs(family: list[Any]) -> tuple[list[dict[str, Any]], list[dict
 
 
 def display_stem_name(name: str) -> str:
-    """«Coca Cola 1L» → «Coca Cola»; «SARDOR … 2OO GR» → «SARDOR …»."""
+    """«Coca Cola 1L» → «Coca Cola»; «BELLAKT (0-6)» → «BELLAKT»."""
     raw = _fix_lookalike_digits(str(name or ""))
+    raw = _strip_line_variant_markers(raw, trailing_age=False)
     stem = re.sub(
         r"\d+(?:[.,]\d+)?\s*(kg|l|lt|litr|gr|g|ml|gramm)\b",
         "",
@@ -747,7 +748,99 @@ def display_stem_name(name: str) -> str:
     )
     stem = re.sub(r"[-_/]+", " ", stem)
     stem = re.sub(r"\s+", " ", stem).strip()
+    stem = _strip_line_variant_markers(stem, trailing_age=True)
     return stem or str(name)
+
+
+def _strip_line_variant_markers(stem: str, *, trailing_age: bool = True) -> str:
+    """BELLAKT (0-6), BELLAKT 12, BELLAKT 12 plus → BELLAKT."""
+    s = str(stem or "")
+    s = re.sub(r"\(\s*\d+\s*[-–—]\s*\d+\s*\)", " ", s, flags=re.I)
+    s = re.sub(r"\(\s*\d+\s+\d+\s*\)", " ", s)
+    s = re.sub(r"\(\s*\d+\s*\)", " ", s)
+    s = re.sub(r"\b\d+\s*plus\b", " ", s, flags=re.I)
+    s = re.sub(r"\bplus\b", " ", s, flags=re.I)
+    if trailing_age:
+        s = re.sub(r"\b(\d{1,2})\s*$", " ", s.strip())
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+
+def line_stem_key(name: str) -> str:
+    """Bir xil brend/qator: BELLAKT (0-6) va BELLAKT 12 → bellakt."""
+    stem = _norm(display_stem_name(name))
+    tokens = [t for t in re.split(r"\W+", stem) if t and t not in _STOP]
+    mapped = [_ALIASES.get(t, t) for t in tokens]
+    out: list[str] = []
+    for tok in mapped:
+        if not out or out[-1] != tok:
+            out.append(tok)
+    return " ".join(out)
+
+
+def line_family_key(product: Any) -> tuple[int, str] | None:
+    try:
+        cid = int(product["category_id"]) if product["category_id"] else None
+    except (KeyError, TypeError, ValueError):
+        cid = None
+    if not cid:
+        return None
+    key = line_stem_key(str(product["name"]))
+    if not key or len(key) < 2:
+        return None
+    return cid, key
+
+
+def line_family_for_product(product: Any) -> tuple[str, list[Any]]:
+    """Bir xil brend, turli variant (BELLAKT 0-6 / 12)."""
+    fk = line_family_key(product)
+    if not fk:
+        return "", []
+    _cid, lkey = fk
+    family: list[Any] = []
+    seen: set[int] = set()
+    for p in db.get_products(category_id=fk[0]):
+        if line_family_key(p) != fk:
+            continue
+        pid = int(p["id"])
+        if pid in seen:
+            continue
+        seen.add(pid)
+        family.append(p)
+    if int(product["id"]) not in seen:
+        family.insert(0, product)
+    names = {_norm(str(p["name"])) for p in family}
+    if len(family) < 2 or len(names) < 2:
+        return "", []
+    family.sort(key=lambda p: (int(p["price"]), str(p["name"])))
+    return lkey, family
+
+
+def expand_line_packs(products: list[Any]) -> list[dict[str, Any]]:
+    """BELLAKT (0-6) / BELLAKT 12 — har biri o‘z nomi va narxi."""
+    items: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    for p in products:
+        pid = int(p["id"])
+        if pid in seen:
+            continue
+        seen.add(pid)
+        items.append(
+            {
+                "product_id": pid,
+                "price": int(p["price"]),
+                "label": str(p["name"]),
+                "name": str(p["name"]),
+            }
+        )
+    items.sort(key=lambda x: (int(x["price"]), str(x["label"])))
+    if len(items) < 2:
+        return []
+    return items
+
+
+def line_card_name(key: str, product: Any) -> str:
+    return key.title() if key else display_stem_name(str(product["name"]))
 
 
 def liter_stem_key(name: str) -> str:
@@ -1044,6 +1137,30 @@ def _try_append_tier_group(
     return True
 
 
+def _try_append_line_group(
+    p: Any,
+    line_groups: dict[tuple[int, str], list[Any]],
+    list_ids: set[int],
+    used: set[int],
+    out: list[Any],
+) -> bool:
+    fk = line_family_key(p)
+    if not fk:
+        return False
+    members = [
+        x
+        for x in line_groups.get(fk, [])
+        if int(x["id"]) in list_ids and int(x["id"]) not in used
+    ]
+    if len(expand_line_packs(members)) < 2:
+        return False
+    rep = _pick_family_rep(members)
+    out.append(rep)
+    for m in members:
+        used.add(int(m["id"]))
+    return True
+
+
 def collapse_catalog_families(products: list[Any]) -> list[Any]:
     """Cola/Fanta, Non 3000/4000, MOLOKO 500g+1L — katalogda bitta kartochka."""
     if not products:
@@ -1056,7 +1173,11 @@ def collapse_catalog_families(products: list[Any]) -> list[Any]:
     piece_groups: dict[str, list[Any]] = {}
     kg_groups: dict[str, list[Any]] = {}
     tier_groups: dict[tuple[int, str], list[Any]] = {}
+    line_groups: dict[tuple[int, str], list[Any]] = {}
     for p in products:
+        fk = line_family_key(p)
+        if fk:
+            line_groups.setdefault(fk, []).append(p)
         tk = catalog_tier_key(p)
         if tk:
             tier_groups.setdefault(tk, []).append(p)
@@ -1118,6 +1239,8 @@ def collapse_catalog_families(products: list[Any]) -> list[Any]:
                 continue
             if _try_append_tier_group(p, tier_groups, list_ids, used, out):
                 continue
+            if _try_append_line_group(p, line_groups, list_ids, used, out):
+                continue
             out.append(p)
             used.add(pid)
             continue
@@ -1130,6 +1253,8 @@ def collapse_catalog_families(products: list[Any]) -> list[Any]:
                 for m in members:
                     used.add(int(m["id"]))
                 continue
+        if _try_append_line_group(p, line_groups, list_ids, used, out):
+            continue
         # Kg oila — faqat bir xil stem (Sardor semechka ≠ SEMECHKA)
         if _product_grams(p):
             kkey = kg_stem_key(str(p["name"]))
@@ -1138,6 +1263,8 @@ def collapse_catalog_families(products: list[Any]) -> list[Any]:
             members = []
         if len(members) < 2:
             if _try_append_tier_group(p, tier_groups, list_ids, used, out):
+                continue
+            if _try_append_line_group(p, line_groups, list_ids, used, out):
                 continue
             out.append(p)
             used.add(pid)
@@ -1153,6 +1280,8 @@ def collapse_catalog_families(products: list[Any]) -> list[Any]:
         }
         if len(real_ids) < 2:
             if _try_append_tier_group(p, tier_groups, list_ids, used, out):
+                continue
+            if _try_append_line_group(p, line_groups, list_ids, used, out):
                 continue
             out.append(p)
             used.add(pid)
