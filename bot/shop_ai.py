@@ -74,10 +74,22 @@ _ALIASES = {
     "нон": "non",
     "tuxum": "tuxum",
     "эклер": "ekler",
+    "нестоген": "nestogen",
+    "nestojen": "nestogen",
+    "kolonkalar": "kolonka",
+    "колонка": "kolonka",
+    "fonex": "fonex",
+    "фонex": "fonex",
 }
 
-# Bir xil kartochkada — turli ta'm/hajm (EKLER oq, shokolad, ...)
-_LINE_FAMILY_BASES = frozenset({"ekler"})
+# Bir xil kartochkada — turli variant/ta'm/model (EKLER, NESTOGEN, KOLONKA, LED Fonex)
+_LINE_FAMILY_BASES = frozenset({"ekler", "nestogen", "kolonka", "fonex"})
+_LINE_FAMILY_CARD_NAMES = {
+    "ekler": "Ekler",
+    "nestogen": "Nestogen",
+    "kolonka": "Kolonkalar",
+    "fonex": "LED Fonex",
+}
 
 
 def catalog_text(limit: int = 40, category: str | None = None) -> str:
@@ -743,6 +755,7 @@ def mixed_size_packs(family: list[Any]) -> tuple[list[dict[str, Any]], list[dict
 def display_stem_name(name: str) -> str:
     """«Coca Cola 1L» → «Coca Cola»; «BELLAKT (0-6)» → «BELLAKT»."""
     raw = _fix_lookalike_digits(str(name or ""))
+    raw = re.sub(r"\b\d+\s*(?:w|vt|watt|vat)\b", " ", raw, flags=re.I)
     raw = _strip_line_variant_markers(raw, trailing_age=False)
     stem = re.sub(
         r"\d+(?:[.,]\d+)?\s*(kg|l|lt|litr|gr|g|ml|gramm)\b",
@@ -762,6 +775,7 @@ def _strip_line_variant_markers(stem: str, *, trailing_age: bool = True) -> str:
     s = re.sub(r"\(\s*\d+\s*[-–—]\s*\d+\s*\)", " ", s, flags=re.I)
     s = re.sub(r"\(\s*\d+\s+\d+\s*\)", " ", s)
     s = re.sub(r"\(\s*\d+\s*\)", " ", s)
+    s = re.sub(r"[№#]\s*\d+\b", " ", s)
     s = re.sub(r"\b\d+\s*plus\b", " ", s, flags=re.I)
     s = re.sub(r"\bplus\b", " ", s, flags=re.I)
     if trailing_age:
@@ -847,6 +861,8 @@ def expand_line_packs(products: list[Any]) -> list[dict[str, Any]]:
 
 
 def line_card_name(key: str, product: Any) -> str:
+    if key in _LINE_FAMILY_CARD_NAMES:
+        return _LINE_FAMILY_CARD_NAMES[key]
     return key.title() if key else display_stem_name(str(product["name"]))
 
 
