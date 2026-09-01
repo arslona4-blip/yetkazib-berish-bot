@@ -80,15 +80,38 @@ _ALIASES = {
     "колонка": "kolonka",
     "fonex": "fonex",
     "фонex": "fonex",
+    "молоко": "moloko",
+    "moloko": "moloko",
+    "ryabina": "ryabina",
+    "рябина": "ryabina",
+    "antijir": "antijir",
+    "colgate": "colgate",
+    "salfetka": "salfetka",
+    "salfetkalar": "salfetka",
+    "salfetki": "salfetka",
 }
 
-# Bir xil kartochkada — turli variant/ta'm/model (EKLER, KOLONKA, LED Fonex)
+# Bir xil kartochkada — turli variant/hajm/ta'm
 # NESTOGEN 1/2/3 alohida — bosqich raqami mahsulot nomining bir qismi
-_LINE_FAMILY_BASES = frozenset({"ekler", "kolonka", "fonex"})
+_LINE_FAMILY_BASES = frozenset({
+    "ekler", "kolonka", "fonex", "moloko", "ryabina", "antijir", "colgate", "salfetka",
+})
 _LINE_FAMILY_CARD_NAMES = {
     "ekler": "Ekler",
     "kolonka": "Kolonkalar",
     "fonex": "LED Fonex",
+    "moloko": "Moloko",
+    "ryabina": "Ryabina",
+    "antijir": "Antijir",
+    "colgate": "Colgate tish pastasi",
+    "salfetka": "Nam salfetkalar",
+}
+# Ikki so‘zli nomlar → bitta qator
+_LINE_FAMILY_PHRASE_BASES = {
+    "anti jir": "antijir",
+    "nam salfetka": "salfetka",
+    "vlajnye salfetki": "salfetka",
+    "nam salfetkalar": "salfetka",
 }
 # Faqat shu brendlarda oxirgi raqam variant (BELLAKT 12 → BELLAKT)
 _TRAILING_VARIANT_STRIP_HEADS = frozenset({"bellakt"})
@@ -273,10 +296,17 @@ def find_products(user_text: str, limit: int = 6) -> list[Any]:
     return [p for s, p in scored[:limit] if s > 0]
 
 
+def _normalize_spaced_dots(s: str) -> str:
+    """«NESTOGEN 1 . 600GR» → «NESTOGEN 1 600GR»; «0.5L» o‘zgarmaydi."""
+    s = re.sub(r"(\d)\s+\.\s+(?=\d)", r"\1 ", s)
+    s = re.sub(r"\s+\.\s+", " ", s)
+    return s
+
+
 def _pack_size_from_name(name: str) -> tuple[float | None, str | None]:
     n = _norm(name)
     n = n.replace("gramm", "g").replace("грамм", "g")
-    n = re.sub(r"\s*\.\s*", " ", n)
+    n = _normalize_spaced_dots(n)
     matches = list(
         re.finditer(r"(\d+(?:\.\d+)?)\s*(kg|l|lt|litr|gr|g|ml)\b", n)
     )
@@ -761,7 +791,8 @@ def mixed_size_packs(family: list[Any]) -> tuple[list[dict[str, Any]], list[dict
 def display_stem_name(name: str) -> str:
     """«Coca Cola 1L» → «Coca Cola»; «BELLAKT (0-6)» → «BELLAKT»; «NESTOGEN 1» saqlanadi."""
     raw = _fix_lookalike_digits(str(name or ""))
-    raw = re.sub(r"\s*\.\s*", " ", raw)
+    raw = _normalize_spaced_dots(raw)
+    raw = re.sub(r"\b\d+(?:[.,]\d+)?\s*%+\b", " ", raw)
     raw = re.sub(r"\b\d+\s*(?:w|vt|watt|vat)\b", " ", raw, flags=re.I)
     raw = _strip_line_variant_markers(raw, trailing_age=False)
     stem = re.sub(
@@ -804,8 +835,13 @@ def _strip_line_variant_markers(stem: str, *, trailing_age: bool = True) -> str:
 
 
 def line_stem_key(name: str) -> str:
-    """Bir xil brend/qator: BELLAKT (0-6) va BELLAKT 12 → bellakt; EKLER oq/shokolad → ekler."""
+    """Bir xil brend/qator: EKLER oq/shokolad → ekler; MOLOKO 500g/1L → moloko."""
     stem = _norm(display_stem_name(name))
+    for phrase, base in sorted(
+        _LINE_FAMILY_PHRASE_BASES.items(), key=lambda x: -len(x[0])
+    ):
+        if phrase in stem:
+            return base
     tokens = [t for t in re.split(r"\W+", stem) if t and t not in _STOP]
     mapped = [_ALIASES.get(t, t) for t in tokens]
     for tok in mapped:
@@ -1345,6 +1381,9 @@ def collapse_catalog_families(products: list[Any]) -> list[Any]:
     for p in products:
         pid = int(p["id"])
         if pid in used:
+            continue
+        # MOLOKO/Ryabina/Colgate — turli hajm va ta'mlar bir kartochkada
+        if _try_append_line_group(p, line_groups, list_ids, used, out):
             continue
         # Gramm + litr bir oila (MOLOKO 500 GR + MOLOKO 1L)
         if _product_ml(p) or _product_grams(p):
