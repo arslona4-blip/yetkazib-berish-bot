@@ -82,14 +82,16 @@ _ALIASES = {
     "фонex": "fonex",
 }
 
-# Bir xil kartochkada — turli variant/ta'm/model (EKLER, NESTOGEN, KOLONKA, LED Fonex)
-_LINE_FAMILY_BASES = frozenset({"ekler", "nestogen", "kolonka", "fonex"})
+# Bir xil kartochkada — turli variant/ta'm/model (EKLER, KOLONKA, LED Fonex)
+# NESTOGEN 1/2/3 alohida — bosqich raqami mahsulot nomining bir qismi
+_LINE_FAMILY_BASES = frozenset({"ekler", "kolonka", "fonex"})
 _LINE_FAMILY_CARD_NAMES = {
     "ekler": "Ekler",
-    "nestogen": "Nestogen",
     "kolonka": "Kolonkalar",
     "fonex": "LED Fonex",
 }
+# Faqat shu brendlarda oxirgi raqam variant (BELLAKT 12 → BELLAKT)
+_TRAILING_VARIANT_STRIP_HEADS = frozenset({"bellakt"})
 
 
 def catalog_text(limit: int = 40, category: str | None = None) -> str:
@@ -142,9 +144,9 @@ def _fix_lookalike_digits(s: str) -> str:
         return m.group(0).translate(_LOOKALIKE_ZERO)
 
     s = re.sub(r"(?i)\b[\dOОoо]+\b", _token, s)
-    # minglik ajratgich: 20 000 yoki 20.000
-    s = re.sub(r"(\d)[\s.](\d{3})(?=\D|$)", r"\1\2", s)
-    s = re.sub(r"(\d)[\s.](\d{3})(?=\D|$)", r"\1\2", s)
+    # minglik ajratgich: 20 000 — «NESTOGEN 1 600» aralashmasin
+    s = re.sub(r"(\d{2,})[\s.](\d{3})(?=\D|$)", r"\1\2", s)
+    s = re.sub(r"(\d{2,})[\s.](\d{3})(?=\D|$)", r"\1\2", s)
     return s
 
 
@@ -274,9 +276,13 @@ def find_products(user_text: str, limit: int = 6) -> list[Any]:
 def _pack_size_from_name(name: str) -> tuple[float | None, str | None]:
     n = _norm(name)
     n = n.replace("gramm", "g").replace("грамм", "g")
-    m = re.search(r"(\d+(?:\.\d+)?)\s*(kg|l|lt|litr|gr|g|ml)\b", n)
-    if not m:
+    n = re.sub(r"\s*\.\s*", " ", n)
+    matches = list(
+        re.finditer(r"(\d+(?:\.\d+)?)\s*(kg|l|lt|litr|gr|g|ml)\b", n)
+    )
+    if not matches:
         return None, None
+    m = matches[-1]
     size = float(m.group(1))
     unit = m.group(2)
     if unit == "gr":
@@ -753,8 +759,9 @@ def mixed_size_packs(family: list[Any]) -> tuple[list[dict[str, Any]], list[dict
 
 
 def display_stem_name(name: str) -> str:
-    """«Coca Cola 1L» → «Coca Cola»; «BELLAKT (0-6)» → «BELLAKT»."""
+    """«Coca Cola 1L» → «Coca Cola»; «BELLAKT (0-6)» → «BELLAKT»; «NESTOGEN 1» saqlanadi."""
     raw = _fix_lookalike_digits(str(name or ""))
+    raw = re.sub(r"\s*\.\s*", " ", raw)
     raw = re.sub(r"\b\d+\s*(?:w|vt|watt|vat)\b", " ", raw, flags=re.I)
     raw = _strip_line_variant_markers(raw, trailing_age=False)
     stem = re.sub(
@@ -765,12 +772,24 @@ def display_stem_name(name: str) -> str:
     )
     stem = re.sub(r"[-_/]+", " ", stem)
     stem = re.sub(r"\s+", " ", stem).strip()
-    stem = _strip_line_variant_markers(stem, trailing_age=True)
+    stem = _strip_trailing_variant_age(stem)
     return stem or str(name)
 
 
+def _strip_trailing_variant_age(stem: str) -> str:
+    """BELLAKT 12 → BELLAKT; NESTOGEN 1/2/3 raqami saqlanadi."""
+    s = str(stem or "").strip()
+    if not s:
+        return s
+    head = _ALIASES.get(_norm(s).split()[0], _norm(s).split()[0])
+    if head not in _TRAILING_VARIANT_STRIP_HEADS:
+        return s
+    s = re.sub(r"\b(\d{1,2})\s*$", " ", s.strip())
+    return re.sub(r"\s+", " ", s).strip()
+
+
 def _strip_line_variant_markers(stem: str, *, trailing_age: bool = True) -> str:
-    """BELLAKT (0-6), BELLAKT 12, BELLAKT 12 plus → BELLAKT."""
+    """BELLAKT (0-6), BELLAKT 12 plus → tozalash."""
     s = str(stem or "")
     s = re.sub(r"\(\s*\d+\s*[-–—]\s*\d+\s*\)", " ", s, flags=re.I)
     s = re.sub(r"\(\s*\d+\s+\d+\s*\)", " ", s)
@@ -779,7 +798,7 @@ def _strip_line_variant_markers(stem: str, *, trailing_age: bool = True) -> str:
     s = re.sub(r"\b\d+\s*plus\b", " ", s, flags=re.I)
     s = re.sub(r"\bplus\b", " ", s, flags=re.I)
     if trailing_age:
-        s = re.sub(r"\b(\d{1,2})\s*$", " ", s.strip())
+        s = _strip_trailing_variant_age(s)
     s = re.sub(r"\s+", " ", s).strip()
     return s
 
