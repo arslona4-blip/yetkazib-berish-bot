@@ -232,21 +232,8 @@ def catalog_keyboard(
     from bot.database import product_display_price
     from bot.shop_ai import (
         collapse_catalog_families,
-        display_stem_name,
-        expand_kg_packs,
-        expand_liter_packs,
-        expand_piece_packs,
-        kg_family_for_product,
-        liter_family_for_product,
-        piece_card_name,
-        piece_family_for_product,
-        line_family_for_product,
-        expand_line_packs,
-        line_card_name,
-        tier_catalog_button_label,
         asks_piece_qty,
         qty_card_name,
-        _product_ml,
     )
 
     cart_qty = cart_qty or {}
@@ -256,36 +243,12 @@ def catalog_keyboard(
         callback = f"product:{product['id']}"
         qty = cart_qty.get(product["id"], 0)
         mark = f" ✅ x{qty}" if qty else ""
-        tier_label = tier_catalog_button_label(product)
-        if tier_label:
-            btn_text = f"{tier_label}{mark}"
-        else:
-            label_name = str(product["name"])
-            _lkey, lfamily = line_family_for_product(product)
-            if expand_line_packs(lfamily):
-                label_name = line_card_name(_lkey, product)
-            elif _product_ml(product):
-                _key, family = liter_family_for_product(product)
-                packs = expand_liter_packs(family)
-                real_n = len({int(x["product_id"]) for x in packs if not x.get("virtual")})
-                if real_n >= 2:
-                    label_name = display_stem_name(str(product["name"]))
-            else:
-                pkey, pfamily = piece_family_for_product(product)
-                ppacks = expand_piece_packs(pfamily)
-                if len(ppacks) >= 2:
-                    label_name = piece_card_name(pkey, product)
-                else:
-                    _query, family = kg_family_for_product(product)
-                    packs = expand_kg_packs(family)
-                    real_n = len(
-                        {int(x["product_id"]) for x in packs if not x.get("virtual")}
-                    )
-                    if real_n >= 2:
-                        label_name = display_stem_name(str(product["name"]))
-            if asks_piece_qty(product):
-                label_name = qty_card_name(product)
-            btn_text = f"{label_name} — {product_display_price(product)}{mark}"
+        label_name = (
+            qty_card_name(product)
+            if asks_piece_qty(product)
+            else str(product["name"])
+        )
+        btn_text = f"{label_name} — {product_display_price(product)}{mark}"
         rows.append(
             [
                 InlineKeyboardButton(

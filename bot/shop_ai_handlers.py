@@ -12,19 +12,9 @@ from bot.shop_ai import (
     _money_label,
     _product_ml,
     display_stem_name,
-    expand_kg_packs,
-    expand_exact_name_packs,
-    expand_liter_packs,
-    expand_line_packs,
-    expand_piece_packs,
     format_variants,
-    exact_name_family_for_product,
     grams_for_money,
-    kg_family_for_product,
-    line_family_for_product,
     liter_family_for_product,
-    piece_card_name,
-    piece_family_for_product,
     money,
     reply_to_user,
 )
@@ -160,76 +150,21 @@ async def shop_ai_liter_callback(
 
 
 async def show_kg_product_options(update: Update, product) -> bool:
-    """Kg, ichimlik yoki bir xil hajmdagi turli brendlar — narx bo‘yicha tanlash."""
+    """Faqat shu mahsulot uchun so‘mlik variantlari (1 kg bulk)."""
     query = update.callback_query
     from bot.database import get_variants
-    from bot.shop_ai import catalog_tier_family_for_product
+    from bot.shop_ai import display_stem_name, kg_money_options
 
     if get_variants(int(product["id"]), active_only=True):
         return False
 
-    title, tfamily = catalog_tier_family_for_product(product)
-    if tfamily:
-        await query.answer()
-        text = format_variants(title, tfamily)
-        kb = shop_ai_results_keyboard(tfamily)
-        uid = query.from_user.id
-        await query.message.reply_text(
-            text,
-            parse_mode="HTML",
-            reply_markup=kb,
-        )
-        await query.message.reply_text("Menyu:", reply_markup=_menu(uid))
-        return True
-
-    _etitle, efamily = exact_name_family_for_product(product)
-    if expand_exact_name_packs(efamily):
-        await query.answer()
-        text = format_variants(_etitle, efamily)
-        kb = shop_ai_results_keyboard(efamily)
-        uid = query.from_user.id
-        await query.message.reply_text(
-            text,
-            parse_mode="HTML",
-            reply_markup=kb,
-        )
-        await query.message.reply_text("Menyu:", reply_markup=_menu(uid))
-        return True
-
-    _lkey, lfamily = line_family_for_product(product)
-    if expand_line_packs(lfamily):
-        await query.answer()
-        from bot.shop_ai import line_card_name
-
-        text = format_variants(line_card_name(_lkey, product), lfamily)
-        kb = shop_ai_results_keyboard(lfamily)
-        uid = query.from_user.id
-        await query.message.reply_text(
-            text,
-            parse_mode="HTML",
-            reply_markup=kb,
-        )
-        await query.message.reply_text("Menyu:", reply_markup=_menu(uid))
-        return True
-
-    if _product_ml(product):
-        _key, family = liter_family_for_product(product)
-        packs = expand_liter_packs(family)
-        title = display_stem_name(str(product["name"])) or _key
-    else:
-        pkey, pfamily = piece_family_for_product(product)
-        packs = expand_piece_packs(pfamily)
-        if packs:
-            family = pfamily
-            title = piece_card_name(pkey, product)
-        else:
-            title, family = kg_family_for_product(product)
-            packs = expand_kg_packs(family)
-    if not packs:
+    if not kg_money_options([product]):
         return False
+
     await query.answer()
-    text = format_variants(title, family)
-    kb = shop_ai_results_keyboard(family)
+    title = display_stem_name(str(product["name"])) or str(product["name"])
+    text = format_variants(title, [product])
+    kb = shop_ai_results_keyboard([product])
     uid = query.from_user.id
     await query.message.reply_text(
         text,

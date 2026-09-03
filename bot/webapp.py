@@ -276,68 +276,11 @@ def _liter_line_from_pack(product: Any, pack_ml: int) -> tuple[str, int]:
 
 
 def _kg_api_fields(product: Any) -> dict[str, Any]:
-    from bot.shop_ai import (
-        _product_ml,
-        catalog_tier_family_for_product,
-        expand_kg_packs,
-        expand_liter_packs,
-        expand_line_packs,
-        expand_piece_packs,
-        kg_family_for_product,
-        kg_money_options,
-        liter_family_for_product,
-        exact_name_family_for_product,
-        expand_exact_name_packs,
-        line_family_for_product,
-        piece_family_for_product,
-        tier_catalog_button_label,
-    )
+    from bot.shop_ai import kg_money_options
 
-    packs: list = []
-    money_opts: list = []
-    liter_packs: list = []
-    piece_packs: list = []
-    tier_label: str | None = None
-
-    _ttitle, tfamily = catalog_tier_family_for_product(product)
-    if tfamily:
-        piece_packs = expand_line_packs(tfamily)
-        tier_label = tier_catalog_button_label(product)
-    elif _product_ml(product):
-        _key, family = liter_family_for_product(product)
-        liter_packs = expand_liter_packs(family)
-    else:
-        _etitle, efamily = exact_name_family_for_product(product)
-        exact_packs = expand_exact_name_packs(efamily)
-        if exact_packs:
-            piece_packs = exact_packs
-        else:
-            _lkey, lfamily = line_family_for_product(product)
-            line_packs = expand_line_packs(lfamily)
-            if line_packs:
-                piece_packs = line_packs
-            else:
-                _pkey, pfamily = piece_family_for_product(product)
-                piece_packs = expand_piece_packs(pfamily)
-        if not piece_packs:
-            _query, family = kg_family_for_product(product)
-            packs = expand_kg_packs(family)
-            if not packs and len(family) >= 2:
-                from bot.shop_ai import expand_real_gram_packs
-                packs = expand_real_gram_packs(family)
-            money_opts = kg_money_options(family)
-    result = {
-        "kg_packs": [
-            {
-                "grams": int(opt["grams"]),
-                "price": int(opt["price"]),
-                "label": opt["label"],
-                "virtual": bool(opt["virtual"]),
-                "product_id": int(opt["product_id"]),
-                "kg_product_id": int(opt["kg_product_id"]),
-            }
-            for opt in packs
-        ],
+    money_opts = kg_money_options([product])
+    return {
+        "kg_packs": [],
         "kg_money": [
             {
                 "product_id": int(opt["product_id"]),
@@ -348,30 +291,9 @@ def _kg_api_fields(product: Any) -> dict[str, Any]:
             }
             for opt in money_opts
         ],
-        "liter_packs": [
-            {
-                "ml": int(opt["ml"]),
-                "price": int(opt["price"]),
-                "label": opt["label"],
-                "virtual": bool(opt["virtual"]),
-                "product_id": int(opt["product_id"]),
-                "liter_product_id": int(opt["liter_product_id"]),
-            }
-            for opt in liter_packs
-        ],
-        "piece_packs": [
-            {
-                "product_id": int(opt["product_id"]),
-                "price": int(opt["price"]),
-                "label": opt["label"],
-                "name": opt["name"],
-            }
-            for opt in piece_packs
-        ],
+        "liter_packs": [],
+        "piece_packs": [],
     }
-    if tier_label:
-        result["tier_label"] = tier_label
-    return result
 
 
 def _product_api_payload(product: Any, *, extra: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -398,43 +320,6 @@ def _product_api_payload(product: Any, *, extra: dict[str, Any] | None = None) -
         ],
     }
     payload.update(_kg_api_fields(product))
-    liters = payload.get("liter_packs") or []
-    pieces = payload.get("piece_packs") or []
-    real_kg = [x for x in (payload.get("kg_packs") or []) if not x.get("virtual")]
-    mixed = real_kg + liters if (real_kg and liters) else []
-    priced = (
-        mixed
-        if len(mixed) >= 2
-        else liters
-        if len(liters) >= 2
-        else pieces
-        if len(pieces) >= 2
-        else real_kg
-    )
-    tier_label = (payload.get("tier_label") or "").strip()
-    if tier_label:
-        payload["card_name"] = tier_label.split(" — ")[0].strip()
-        if " — " in tier_label:
-            payload["display_price"] = tier_label.split(" — ", 1)[1].strip()
-    elif len(priced) >= 2:
-        from bot.shop_ai import display_stem_name, line_card_name, line_family_for_product, expand_line_packs, piece_card_name, piece_stem_key
-
-        key = piece_stem_key(str(product["name"]))
-        _lkey, lfamily = line_family_for_product(product)
-        if expand_line_packs(lfamily):
-            payload["card_name"] = line_card_name(_lkey, product)
-        elif pieces and key:
-            payload["card_name"] = piece_card_name(key, product)
-        else:
-            payload["card_name"] = display_stem_name(str(product["name"]))
-        prices = [int(x["price"]) for x in priced]
-        lo, hi = min(prices), max(prices)
-        if lo != hi:
-            payload["display_price"] = (
-                f"{lo:,} – {hi:,} so'm".replace(",", " ")
-            )
-    if extra:
-        payload.update(extra)
     from bot.shop_ai import PIECE_QTY_PRESETS, asks_piece_qty, qty_card_name
 
     if asks_piece_qty(product) and not payload.get("variants"):
@@ -445,6 +330,8 @@ def _product_api_payload(product: Any, *, extra: dict[str, Any] | None = None) -
         payload["display_price"] = (
             f"{int(product['price']):,} so'm / dona".replace(",", " ")
         )
+    if extra:
+        payload.update(extra)
     return payload
 
 
