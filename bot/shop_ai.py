@@ -619,25 +619,27 @@ def expand_kg_packs(products: list[Any]) -> list[dict[str, Any]]:
 def kg_stem_key(name: str) -> str:
     """«SARDOR SEMECHKA 200 GR» → sardor semechka; «SEMECHKA 1 KG» → semechka.
 
-    Fuzzy «semechka» o‘xshashligi bilan BRANDAR farq qiladi — aralashmaydi.
+    Tinish belgilari tashlanadi: «NESTOGEN 3 600GR.» va «NESTOGEN 3 (600 GR)»
+    bir xil kalit beradi.
     """
-    return _norm(display_stem_name(name)).strip()
+    stem = _norm(display_stem_name(name))
+    return " ".join(t for t in re.split(r"\W+", stem) if t)
 
 
 def kg_family_for_product(product: Any) -> tuple[str, list[Any]]:
     """Katalog oilasi: faqat BIR XIL stem (Guruch 250g+1kg).
 
-    Eski fuzzy find_variants «Sardor semechka»ni «SEMECHKA 1KG»ga yopishtirardi.
+    Hajmsiz «NESTOGEN 3» ham shu oilaga kiradi — bitta kartochka bo‘lishi uchun.
     """
-    if not _product_grams(product):
-        return "", [product]
     key = kg_stem_key(str(product["name"]))
     if not key:
+        return "", [product]
+    if not _product_grams(product) and not _kg_stem_has_grams(key):
         return "", [product]
     family: list[Any] = []
     seen: set[int] = set()
     for p in db.get_products():
-        if not _product_grams(p):
+        if _product_ml(p):
             continue
         if kg_stem_key(str(p["name"])) != key:
             continue
@@ -650,6 +652,25 @@ def kg_family_for_product(product: Any) -> tuple[str, list[Any]]:
         family.insert(0, product)
     family.sort(key=lambda p: (_product_grams(p) or 0, int(p["id"])))
     return key, family
+
+
+def _kg_stem_has_grams(stem_key: str) -> bool:
+    """Shu stemda gramm/kg qadoqli mahsulot bormi (hajmsiz nom uchun)."""
+    for p in db.get_products():
+        if _product_ml(p) or not _product_grams(p):
+            continue
+        if kg_stem_key(str(p["name"])) == stem_key:
+            return True
+    return False
+
+
+def expand_gram_family_packs(family: list[Any]) -> list[dict[str, Any]]:
+    """Kg oilasi uchun tanlash: hajmsiz a'zo bo‘lsa nom+narx ro‘yxati."""
+    if not family:
+        return []
+    if any(not _product_grams(p) for p in family):
+        return expand_piece_packs(family)
+    return expand_kg_packs(family) or expand_real_gram_packs(family)
 
 
 def kg_money_options(products: list[Any]) -> list[dict[str, Any]]:
@@ -821,6 +842,9 @@ def display_stem_name(name: str) -> str:
         flags=re.I,
     )
     stem = re.sub(r"[-_/]+", " ", stem)
+    # «NESTOGEN 1 ()» / «Sut .» — hajm olib tashlangandan keyingi bo‘sh belgilar
+    stem = re.sub(r"\(\s*\)|\[\s*\]", " ", stem)
+    stem = re.sub(r"[\s.,;:]+$", "", stem)
     stem = re.sub(r"\s+", " ", stem).strip()
     stem = _strip_trailing_variant_age(stem)
     return stem or str(name)
@@ -845,7 +869,8 @@ def _strip_line_variant_markers(stem: str, *, trailing_age: bool = True) -> str:
     s = re.sub(r"\(\s*\d+\s+\d+\s*\)", " ", s)
     s = re.sub(r"\(\s*\d+\s*\)", " ", s)
     s = re.sub(r"[№#]\s*\d+\b", " ", s)
-    s = re.sub(r"\b\d+\s*plus\b", " ", s, flags=re.I)
+    # «NESTOGEN 3 PLUS» → «NESTOGEN 3»: bosqich raqami saqlanadi
+    s = re.sub(r"\b(\d+)\s*plus\b", r"\1", s, flags=re.I)
     s = re.sub(r"\bplus\b", " ", s, flags=re.I)
     if trailing_age:
         s = _strip_trailing_variant_age(s)
@@ -1391,7 +1416,7 @@ def collapse_catalog_families(products: list[Any]) -> list[Any]:
             lk = liter_stem_key(str(p["name"]))
             if lk:
                 liter_groups.setdefault((cid, lk), []).append(p)
-        elif _product_grams(p):
+        else:
             kk = kg_stem_key(str(p["name"]))
             if kk:
                 kg_groups.setdefault((cid, kk), []).append(p)
@@ -1417,14 +1442,14 @@ def collapse_catalog_families(products: list[Any]) -> list[Any]:
                 for m in members:
                     used.add(int(m["id"]))
                 continue
-        elif cid and _product_grams(p):
-            # NESTOGEN 1 300g + 600g — bitta kartochka; NESTOGEN 2/3 alohida
+        elif cid:
+            # NESTOGEN 3 300g + 600g — bitta kartochka; NESTOGEN 1/2 alohida
             kk = kg_stem_key(str(p["name"]))
             members = [
                 x for x in (kg_groups.get((cid, kk)) or [])
                 if int(x["id"]) in list_ids and int(x["id"]) not in used
             ]
-            if len({_product_grams(x) for x in members if _product_grams(x)}) >= 2:
+            if len(members) >= 2 and any(_product_grams(x) for x in members):
                 rep = _pick_family_rep(members)
                 out.append(rep)
                 for m in members:

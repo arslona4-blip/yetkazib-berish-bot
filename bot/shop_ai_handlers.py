@@ -11,11 +11,9 @@ from bot.keyboards import main_menu_keyboard, shop_ai_results_keyboard
 from bot.shop_ai import (
     _money_label,
     _product_ml,
-    _product_grams,
     display_stem_name,
     expand_exact_name_packs,
-    expand_kg_packs,
-    expand_real_gram_packs,
+    expand_gram_family_packs,
     exact_name_family_for_product,
     format_variants,
     grams_for_money,
@@ -181,8 +179,7 @@ async def show_kg_product_options(update: Update, product) -> bool:
     if _product_ml(product):
         from bot.shop_ai import expand_liter_packs, liter_family_for_product as _lf
         _lk, lfamily = _lf(product)
-        liter_packs = expand_liter_packs(lfamily)
-        if len(liter_packs) >= 2:
+        if len(expand_liter_packs(lfamily)) >= 2:
             await query.answer()
             title = display_stem_name(str(product["name"])) or str(product["name"])
             text = format_variants(title, lfamily)
@@ -192,16 +189,11 @@ async def show_kg_product_options(update: Update, product) -> bool:
             await query.message.reply_text("Menyu:", reply_markup=_menu(uid))
             return True
         return False
-    elif not _product_grams(product):
-        return False
-    else:
-        _stem, family = kg_family_for_product(product)
-        packs = expand_kg_packs(family)
-        if not packs:
-            packs = expand_real_gram_packs(family)
-        money_opts = kg_money_options(family)
 
-    if not packs and not money_opts:
+    _stem, family = kg_family_for_product(product)
+    packs = expand_gram_family_packs(family)
+    money_opts = kg_money_options(family)
+    if len(packs) < 2 and not money_opts:
         return False
 
     await query.answer()

@@ -277,14 +277,14 @@ def _liter_line_from_pack(product: Any, pack_ml: int) -> tuple[str, int]:
 
 def _kg_api_fields(product: Any) -> dict[str, Any]:
     from bot.shop_ai import (
-        _product_grams,
         _product_ml,
         exact_name_family_for_product,
         expand_exact_name_packs,
-        expand_kg_packs,
-        expand_real_gram_packs,
+        expand_gram_family_packs,
+        expand_liter_packs,
         kg_family_for_product,
         kg_money_options,
+        liter_family_for_product,
     )
 
     packs: list = []
@@ -297,14 +297,15 @@ def _kg_api_fields(product: Any) -> dict[str, Any]:
     if exact_packs:
         piece_packs = exact_packs
     elif _product_ml(product):
-        from bot.shop_ai import expand_liter_packs, liter_family_for_product
         _lk, lfamily = liter_family_for_product(product)
         liter_packs = expand_liter_packs(lfamily)
-    elif _product_grams(product):
+    else:
         _query, family = kg_family_for_product(product)
-        packs = expand_kg_packs(family)
-        if not packs:
-            packs = expand_real_gram_packs(family)
+        gram_packs = expand_gram_family_packs(family)
+        if gram_packs and "grams" in gram_packs[0]:
+            packs = gram_packs
+        else:
+            piece_packs = gram_packs
         money_opts = kg_money_options(family)
 
     return {
