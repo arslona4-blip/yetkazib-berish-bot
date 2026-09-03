@@ -1376,43 +1376,60 @@ def collapse_catalog_families(products: list[Any]) -> list[Any]:
     out: list[Any] = []
     exact_groups: dict[tuple[int, str], list[Any]] = {}
     liter_groups: dict[tuple[int, str], list[Any]] = {}
+    kg_groups: dict[tuple[int, str], list[Any]] = {}
     for p in products:
         enk = catalog_exact_name_key(p)
         if enk:
             exact_groups.setdefault(enk, []).append(p)
+        try:
+            cid = int(p["category_id"]) if p["category_id"] else None
+        except (KeyError, TypeError, ValueError):
+            cid = None
+        if not cid:
+            continue
         if _product_ml(p):
-            try:
-                cid = int(p["category_id"]) if p["category_id"] else None
-            except (KeyError, TypeError, ValueError):
-                cid = None
-            if cid:
-                lk = liter_stem_key(str(p["name"]))
-                if lk:
-                    liter_groups.setdefault((cid, lk), []).append(p)
+            lk = liter_stem_key(str(p["name"]))
+            if lk:
+                liter_groups.setdefault((cid, lk), []).append(p)
+        elif _product_grams(p):
+            kk = kg_stem_key(str(p["name"]))
+            if kk:
+                kg_groups.setdefault((cid, kk), []).append(p)
     for p in products:
         pid = int(p["id"])
         if pid in used:
             continue
         if _try_append_exact_name_group(p, exact_groups, list_ids, used, out):
             continue
-        if _product_ml(p):
-            try:
-                cid = int(p["category_id"]) if p["category_id"] else None
-            except (KeyError, TypeError, ValueError):
-                cid = None
-            if cid:
-                lk = liter_stem_key(str(p["name"]))
-                members = [
-                    x for x in (liter_groups.get((cid, lk)) or [])
-                    if int(x["id"]) in list_ids and int(x["id"]) not in used
-                ]
-                liter_packs = expand_liter_packs(members)
-                if len(liter_packs) >= 2:
-                    rep = _pick_family_rep(members)
-                    out.append(rep)
-                    for m in members:
-                        used.add(int(m["id"]))
-                    continue
+        try:
+            cid = int(p["category_id"]) if p["category_id"] else None
+        except (KeyError, TypeError, ValueError):
+            cid = None
+        if cid and _product_ml(p):
+            lk = liter_stem_key(str(p["name"]))
+            members = [
+                x for x in (liter_groups.get((cid, lk)) or [])
+                if int(x["id"]) in list_ids and int(x["id"]) not in used
+            ]
+            if len(expand_liter_packs(members)) >= 2:
+                rep = _pick_family_rep(members)
+                out.append(rep)
+                for m in members:
+                    used.add(int(m["id"]))
+                continue
+        elif cid and _product_grams(p):
+            # NESTOGEN 1 300g + 600g — bitta kartochka; NESTOGEN 2/3 alohida
+            kk = kg_stem_key(str(p["name"]))
+            members = [
+                x for x in (kg_groups.get((cid, kk)) or [])
+                if int(x["id"]) in list_ids and int(x["id"]) not in used
+            ]
+            if len({_product_grams(x) for x in members if _product_grams(x)}) >= 2:
+                rep = _pick_family_rep(members)
+                out.append(rep)
+                for m in members:
+                    used.add(int(m["id"]))
+                continue
         out.append(p)
         used.add(pid)
     return out

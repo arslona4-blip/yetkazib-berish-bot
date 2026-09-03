@@ -367,8 +367,17 @@ def _product_api_payload(product: Any, *, extra: dict[str, Any] | None = None) -
     }
     payload.update(_kg_api_fields(product))
     pieces = payload.get("piece_packs") or []
+    liters = payload.get("liter_packs") or []
     real_kg = [x for x in (payload.get("kg_packs") or []) if not x.get("virtual")]
-    priced = pieces if len(pieces) >= 2 else real_kg if len(real_kg) >= 2 else payload.get("kg_packs") or []
+    priced = (
+        pieces
+        if len(pieces) >= 2
+        else liters
+        if len(liters) >= 2
+        else real_kg
+        if len(real_kg) >= 2
+        else payload.get("kg_packs") or []
+    )
     if len(priced) >= 2:
         from bot.shop_ai import display_stem_name
 
