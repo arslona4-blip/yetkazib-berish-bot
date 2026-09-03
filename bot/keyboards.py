@@ -232,8 +232,15 @@ def catalog_keyboard(
     from bot.database import product_display_price
     from bot.shop_ai import (
         collapse_catalog_families,
+        display_stem_name,
+        expand_exact_name_packs,
+        expand_kg_packs,
+        expand_real_gram_packs,
+        exact_name_family_for_product,
+        kg_family_for_product,
         asks_piece_qty,
         qty_card_name,
+        _product_grams,
     )
 
     cart_qty = cart_qty or {}
@@ -243,11 +250,18 @@ def catalog_keyboard(
         callback = f"product:{product['id']}"
         qty = cart_qty.get(product["id"], 0)
         mark = f" ✅ x{qty}" if qty else ""
-        label_name = (
-            qty_card_name(product)
-            if asks_piece_qty(product)
-            else str(product["name"])
-        )
+        label_name = str(product["name"])
+        _etitle, efamily = exact_name_family_for_product(product)
+        if expand_exact_name_packs(efamily):
+            label_name = str(product["name"]).strip()
+        elif _product_grams(product):
+            _query, family = kg_family_for_product(product)
+            packs = expand_kg_packs(family) or expand_real_gram_packs(family)
+            real_n = len({int(x["product_id"]) for x in packs if not x.get("virtual")})
+            if len(packs) >= 2 or real_n >= 2:
+                label_name = display_stem_name(str(product["name"]))
+        if asks_piece_qty(product):
+            label_name = qty_card_name(product)
         btn_text = f"{label_name} — {product_display_price(product)}{mark}"
         rows.append(
             [

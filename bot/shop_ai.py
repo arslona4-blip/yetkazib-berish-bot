@@ -1368,8 +1368,26 @@ def _try_append_line_group(
 
 
 def collapse_catalog_families(products: list[Any]) -> list[Any]:
-    """Har bir mahsulot alohida — katalogda guruhlash yo‘q."""
-    return list(products)
+    """Bir xil nom — bitta kartochka; qolgan mahsulotlar alohida."""
+    if not products:
+        return []
+    list_ids = {int(p["id"]) for p in products}
+    used: set[int] = set()
+    out: list[Any] = []
+    exact_groups: dict[tuple[int, str], list[Any]] = {}
+    for p in products:
+        enk = catalog_exact_name_key(p)
+        if enk:
+            exact_groups.setdefault(enk, []).append(p)
+    for p in products:
+        pid = int(p["id"])
+        if pid in used:
+            continue
+        if _try_append_exact_name_group(p, exact_groups, list_ids, used, out):
+            continue
+        out.append(p)
+        used.add(pid)
+    return out
 
 
 def format_variants(query: str, products: list[Any]) -> str:

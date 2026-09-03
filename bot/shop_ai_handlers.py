@@ -11,9 +11,16 @@ from bot.keyboards import main_menu_keyboard, shop_ai_results_keyboard
 from bot.shop_ai import (
     _money_label,
     _product_ml,
+    _product_grams,
     display_stem_name,
+    expand_exact_name_packs,
+    expand_kg_packs,
+    expand_real_gram_packs,
+    exact_name_family_for_product,
     format_variants,
     grams_for_money,
+    kg_family_for_product,
+    kg_money_options,
     liter_family_for_product,
     money,
     reply_to_user,
@@ -150,21 +157,45 @@ async def shop_ai_liter_callback(
 
 
 async def show_kg_product_options(update: Update, product) -> bool:
-    """Faqat shu mahsulot uchun so‘mlik variantlari (1 kg bulk)."""
+    """Kg hajm (500g/1kg) va bir xil nomdagi narx tanlash."""
     query = update.callback_query
     from bot.database import get_variants
-    from bot.shop_ai import display_stem_name, kg_money_options
 
     if get_variants(int(product["id"]), active_only=True):
         return False
 
-    if not kg_money_options([product]):
+    _etitle, efamily = exact_name_family_for_product(product)
+    if expand_exact_name_packs(efamily):
+        await query.answer()
+        text = format_variants(_etitle, efamily)
+        kb = shop_ai_results_keyboard(efamily)
+        uid = query.from_user.id
+        await query.message.reply_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=kb,
+        )
+        await query.message.reply_text("Menyu:", reply_markup=_menu(uid))
+        return True
+
+    if _product_ml(product) or not _product_grams(product):
+        family = [product]
+        packs = []
+        money_opts = kg_money_options(family)
+    else:
+        _stem, family = kg_family_for_product(product)
+        packs = expand_kg_packs(family)
+        if not packs:
+            packs = expand_real_gram_packs(family)
+        money_opts = kg_money_options(family)
+
+    if not packs and not money_opts:
         return False
 
     await query.answer()
     title = display_stem_name(str(product["name"])) or str(product["name"])
-    text = format_variants(title, [product])
-    kb = shop_ai_results_keyboard([product])
+    text = format_variants(title, family)
+    kb = shop_ai_results_keyboard(family)
     uid = query.from_user.id
     await query.message.reply_text(
         text,

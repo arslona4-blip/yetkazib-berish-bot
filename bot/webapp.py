@@ -276,11 +276,45 @@ def _liter_line_from_pack(product: Any, pack_ml: int) -> tuple[str, int]:
 
 
 def _kg_api_fields(product: Any) -> dict[str, Any]:
-    from bot.shop_ai import kg_money_options
+    from bot.shop_ai import (
+        _product_grams,
+        _product_ml,
+        exact_name_family_for_product,
+        expand_exact_name_packs,
+        expand_kg_packs,
+        expand_real_gram_packs,
+        kg_family_for_product,
+        kg_money_options,
+    )
 
-    money_opts = kg_money_options([product])
+    packs: list = []
+    money_opts: list = []
+    liter_packs: list = []
+    piece_packs: list = []
+
+    _etitle, efamily = exact_name_family_for_product(product)
+    exact_packs = expand_exact_name_packs(efamily)
+    if exact_packs:
+        piece_packs = exact_packs
+    elif _product_grams(product) and not _product_ml(product):
+        _query, family = kg_family_for_product(product)
+        packs = expand_kg_packs(family)
+        if not packs:
+            packs = expand_real_gram_packs(family)
+        money_opts = kg_money_options(family)
+
     return {
-        "kg_packs": [],
+        "kg_packs": [
+            {
+                "grams": int(opt["grams"]),
+                "price": int(opt["price"]),
+                "label": opt["label"],
+                "virtual": bool(opt["virtual"]),
+                "product_id": int(opt["product_id"]),
+                "kg_product_id": int(opt["kg_product_id"]),
+            }
+            for opt in packs
+        ],
         "kg_money": [
             {
                 "product_id": int(opt["product_id"]),
@@ -291,8 +325,16 @@ def _kg_api_fields(product: Any) -> dict[str, Any]:
             }
             for opt in money_opts
         ],
-        "liter_packs": [],
-        "piece_packs": [],
+        "liter_packs": liter_packs,
+        "piece_packs": [
+            {
+                "product_id": int(opt["product_id"]),
+                "price": int(opt["price"]),
+                "label": opt["label"],
+                "name": opt["name"],
+            }
+            for opt in piece_packs
+        ],
     }
 
 
@@ -320,6 +362,19 @@ def _product_api_payload(product: Any, *, extra: dict[str, Any] | None = None) -
         ],
     }
     payload.update(_kg_api_fields(product))
+    pieces = payload.get("piece_packs") or []
+    real_kg = [x for x in (payload.get("kg_packs") or []) if not x.get("virtual")]
+    priced = pieces if len(pieces) >= 2 else real_kg if len(real_kg) >= 2 else payload.get("kg_packs") or []
+    if len(priced) >= 2:
+        from bot.shop_ai import display_stem_name
+
+        payload["card_name"] = display_stem_name(str(product["name"]))
+        prices = [int(x["price"]) for x in priced]
+        lo, hi = min(prices), max(prices)
+        if lo != hi:
+            payload["display_price"] = (
+                f"{lo:,} – {hi:,} so'm".replace(",", " ")
+            )
     from bot.shop_ai import PIECE_QTY_PRESETS, asks_piece_qty, qty_card_name
 
     if asks_piece_qty(product) and not payload.get("variants"):
