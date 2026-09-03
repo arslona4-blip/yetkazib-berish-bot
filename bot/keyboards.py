@@ -235,12 +235,15 @@ def catalog_keyboard(
         display_stem_name,
         expand_exact_name_packs,
         expand_kg_packs,
+        expand_liter_packs,
         expand_real_gram_packs,
         exact_name_family_for_product,
         kg_family_for_product,
+        liter_family_for_product,
         asks_piece_qty,
         qty_card_name,
         _product_grams,
+        _product_ml,
     )
 
     cart_qty = cart_qty or {}
@@ -254,6 +257,10 @@ def catalog_keyboard(
         _etitle, efamily = exact_name_family_for_product(product)
         if expand_exact_name_packs(efamily):
             label_name = str(product["name"]).strip()
+        elif _product_ml(product):
+            _lk, lfamily = liter_family_for_product(product)
+            if len(expand_liter_packs(lfamily)) >= 2:
+                label_name = display_stem_name(str(product["name"]))
         elif _product_grams(product):
             _query, family = kg_family_for_product(product)
             packs = expand_kg_packs(family) or expand_real_gram_packs(family)

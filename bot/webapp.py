@@ -296,7 +296,11 @@ def _kg_api_fields(product: Any) -> dict[str, Any]:
     exact_packs = expand_exact_name_packs(efamily)
     if exact_packs:
         piece_packs = exact_packs
-    elif _product_grams(product) and not _product_ml(product):
+    elif _product_ml(product):
+        from bot.shop_ai import expand_liter_packs, liter_family_for_product
+        _lk, lfamily = liter_family_for_product(product)
+        liter_packs = expand_liter_packs(lfamily)
+    elif _product_grams(product):
         _query, family = kg_family_for_product(product)
         packs = expand_kg_packs(family)
         if not packs:
