@@ -413,7 +413,31 @@
       return;
     }
 
+    const showSections = state.categoryId == null && state.categories.length > 0;
+    let lastKey = null;
+
     state.products.forEach((product) => {
+      if (showSections) {
+        const key =
+          product.category_id != null
+            ? `c:${product.category_id}`
+            : "c:none";
+        if (key !== lastKey) {
+          lastKey = key;
+          const section = document.createElement("h2");
+          section.className = "category-section";
+          const cat = state.categories.find(
+            (c) => Number(c.id) === Number(product.category_id)
+          );
+          section.textContent = cat
+            ? cat.label || `${cat.emoji || "📦"} ${cat.name}`.trim()
+            : product.category_name
+              ? `📦 ${product.category_name}`
+              : "📦 Boshqa";
+          els.products.appendChild(section);
+        }
+      }
+
       const card = document.createElement("article");
       card.className = "card";
       card.appendChild(photoEl(product));

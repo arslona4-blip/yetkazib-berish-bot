@@ -208,6 +208,22 @@ main {
   gap: 12px;
 }
 
+.category-section {
+  grid-column: 1 / -1;
+  margin: 8px 0 2px;
+  padding: 10px 4px 2px;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--deep);
+  border-bottom: 2px solid var(--lime);
+}
+
+.category-section:first-child {
+  margin-top: 0;
+  padding-top: 2px;
+}
+
 .card {
   background: var(--surface);
   border: 1px solid rgba(197, 219, 201, 0.85);

@@ -425,6 +425,18 @@ def _migrate_features(conn: sqlite3.Connection) -> None:
             (DELIVERY_PRICE,),
         )
 
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS push_subscriptions (
+            endpoint TEXT PRIMARY KEY,
+            admin_id INTEGER NOT NULL,
+            p256dh TEXT NOT NULL,
+            auth TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+
 
 @contextmanager
 def get_connection():
@@ -513,6 +525,33 @@ def create_category(name: str, emoji: str | None = None) -> int:
         return int(cursor.lastrowid)
 
 
+def update_category(category_id: int, name: str, emoji: str | None = None) -> None:
+    """Toifa nomini (va ixtiyoriy emoji) yangilash."""
+    from bot.category_emoji import parse_category_name
+
+    parsed_emoji, clean_name = parse_category_name(name)
+    if not clean_name:
+        raise ValueError("Toifa nomi kerak")
+    icon = (emoji or "").strip() or parsed_emoji
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT id FROM categories WHERE id = ?",
+            (int(category_id),),
+        ).fetchone()
+        if not row:
+            raise ValueError("Toifa topilmadi")
+        clash = conn.execute(
+            "SELECT id FROM categories WHERE name = ? AND id != ?",
+            (clean_name, int(category_id)),
+        ).fetchone()
+        if clash:
+            raise ValueError("Bunday toifa nomi allaqachon bor")
+        conn.execute(
+            "UPDATE categories SET name = ?, emoji = ?, is_active = 1 WHERE id = ?",
+            (clean_name, icon, int(category_id)),
+        )
+
+
 def set_category_emoji(category_id: int, emoji: str) -> None:
     icon = (emoji or "").strip() or "📦"
     with get_connection() as conn:
@@ -546,7 +585,13 @@ def get_products(active_only: bool = True, category_id: int | None = None) -> li
         if category_id is not None:
             query += " AND p.category_id = ?"
             params.append(category_id)
-        query += " ORDER BY p.name COLLATE NOCASE, p.id"
+        query += """
+            ORDER BY
+                CASE WHEN p.category_id IS NULL THEN 1 ELSE 0 END,
+                c.id,
+                p.name COLLATE NOCASE,
+                p.id
+        """
         rows = conn.execute(query, params).fetchall()
     return list(rows)
 
@@ -3017,3 +3062,48 @@ def get_shajara_share(code: str) -> str | None:
             (code.strip().upper(),),
         ).fetchone()
     return str(row["payload"]) if row else None
+
+
+def upsert_push_subscription(
+    admin_id: int, endpoint: str, p256dh: str, auth: str
+) -> None:
+    now = _now_iso()
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO push_subscriptions (endpoint, admin_id, p256dh, auth, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(endpoint) DO UPDATE SET
+                admin_id = excluded.admin_id,
+                p256dh = excluded.p256dh,
+                auth = excluded.auth,
+                created_at = excluded.created_at
+            """,
+            (endpoint, int(admin_id), p256dh, auth, now),
+        )
+
+
+def list_push_subscriptions() -> list[sqlite3.Row]:
+    with get_connection() as conn:
+        return list(
+            conn.execute(
+                "SELECT endpoint, admin_id, p256dh, auth, created_at "
+                "FROM push_subscriptions"
+            ).fetchall()
+        )
+
+
+def delete_push_subscription(endpoint: str) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            "DELETE FROM push_subscriptions WHERE endpoint = ?",
+            (endpoint,),
+        )
+
+
+def delete_push_subscriptions_for_admin(admin_id: int) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            "DELETE FROM push_subscriptions WHERE admin_id = ?",
+            (int(admin_id),),
+        )
