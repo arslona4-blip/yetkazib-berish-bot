@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=15" />
+  <link rel="stylesheet" href="styles.css?v=16" />
 </head>
 <body>
   <header class="topbar">
@@ -33,6 +33,22 @@
         <img src="bonus-aksiya.jpg" alt="Super aksiya" width="640" height="360" />
         <p id="giftPromoText"></p>
       </div>
+      <label class="search-wrap">
+        <span class="search-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="7"/>
+            <path d="M20 20l-3.5-3.5"/>
+          </svg>
+        </span>
+        <input
+          id="productSearch"
+          type="search"
+          enterkeyhint="search"
+          autocomplete="off"
+          placeholder="Qidiruv: guruch, cola, nestogen…"
+        />
+        <button type="button" id="searchClear" class="search-clear" hidden aria-label="Tozalash">×</button>
+      </label>
       <div id="categories" class="chips"></div>
       <div id="products" class="products"></div>
     </section>
@@ -118,6 +134,6 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=15"></script>
+  <script src="app.js?v=16"></script>
 </body>
 </html>

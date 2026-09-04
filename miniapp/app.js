@@ -17,6 +17,7 @@
     categories: [],
     products: [],
     categoryId: null,
+    searchQuery: "",
     cart: loadCart(),
     bonusPoints: 0,
     discount: 0,
@@ -28,6 +29,8 @@
     giftPromo: document.getElementById("giftPromo"),
     giftPromoText: document.getElementById("giftPromoText"),
     giftProgress: document.getElementById("giftProgress"),
+    productSearch: document.getElementById("productSearch"),
+    searchClear: document.getElementById("searchClear"),
     categories: document.getElementById("categories"),
     products: document.getElementById("products"),
     cartList: document.getElementById("cartList"),
@@ -406,17 +409,54 @@
     return div;
   }
 
+  function normalizeSearch(text) {
+    return String(text || "")
+      .toLowerCase()
+      .replace(/ʻ|ʼ|’|‘|`/g, "'")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function filteredProducts() {
+    const q = normalizeSearch(state.searchQuery);
+    if (!q) return state.products;
+    const tokens = q.split(" ").filter(Boolean);
+    return state.products.filter((p) => {
+      const hay = normalizeSearch(
+        [
+          p.card_name,
+          p.name,
+          p.category_name,
+          p.description,
+        ]
+          .filter(Boolean)
+          .join(" ")
+      );
+      return tokens.every((t) => hay.includes(t));
+    });
+  }
+
+  function syncSearchClear() {
+    if (!els.searchClear) return;
+    els.searchClear.hidden = !normalizeSearch(state.searchQuery);
+  }
+
   function renderProducts() {
     els.products.innerHTML = "";
-    if (!state.products.length) {
-      els.products.innerHTML = `<p class="empty">Mahsulotlar topilmadi</p>`;
+    const list = filteredProducts();
+    const q = normalizeSearch(state.searchQuery);
+    if (!list.length) {
+      els.products.innerHTML = q
+        ? `<p class="empty">«${state.searchQuery.trim()}» bo‘yicha topilmadi</p>`
+        : `<p class="empty">Mahsulotlar topilmadi</p>`;
       return;
     }
 
-    const showSections = state.categoryId == null && state.categories.length > 0;
+    const showSections =
+      state.categoryId == null && state.categories.length > 0 && !q;
     let lastKey = null;
 
-    state.products.forEach((product) => {
+    list.forEach((product) => {
       if (showSections) {
         const key =
           product.category_id != null
@@ -836,6 +876,29 @@
     });
 
     els.form.addEventListener("submit", onCheckout);
+
+    if (els.productSearch) {
+      let searchTimer = null;
+      const applySearch = () => {
+        state.searchQuery = els.productSearch.value || "";
+        syncSearchClear();
+        renderProducts();
+      };
+      els.productSearch.addEventListener("input", () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(applySearch, 120);
+      });
+      els.productSearch.addEventListener("search", applySearch);
+    }
+    if (els.searchClear) {
+      els.searchClear.addEventListener("click", () => {
+        if (els.productSearch) els.productSearch.value = "";
+        state.searchQuery = "";
+        syncSearchClear();
+        renderProducts();
+        if (els.productSearch) els.productSearch.focus();
+      });
+    }
 
     if (els.bonus) {
       els.bonus.addEventListener("input", () => renderCart());
