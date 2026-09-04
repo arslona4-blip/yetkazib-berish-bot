@@ -113,7 +113,6 @@ def _bot_description_uz() -> str:
         f"🕐 {SHOP_HOURS}\n"
         f"📞 {SHOP_PHONE}\n\n"
         f"🛒 Do'kon — katalog va buyurtma\n"
-        f"📷 Skaner — shtrix-kod bilan savatga\n"
         f"📋 Mening buyurtmalarim — holatni kuzating\n\n"
         f"{delivery_rates_plain()}\n\n"
         f"{gift_drink_promo_plain()}\n\n"

@@ -313,15 +313,34 @@ async def do_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
         await dispatch_main_menu(update, context)
         return ConversationHandler.END
-    if not update.message.photo:
-        await update.message.reply_text("Iltimos, rasm yuboring (matn emas).")
+
+    file_id = None
+    if update.message.photo:
+        file_id = update.message.photo[-1].file_id
+    elif update.message.document and (update.message.document.mime_type or "").startswith(
+        "image/"
+    ):
+        file_id = update.message.document.file_id
+    if not file_id:
+        await update.message.reply_text(
+            "Iltimos, rasm yuboring (galereyadan yoki fayl sifatida)."
+        )
         return ExtraState.PHOTO
-    file_id = update.message.photo[-1].file_id
     pid = context.user_data.get("photo_product_id")
+    if not pid:
+        await update.message.reply_text(
+            "Mahsulot tanlanmagan. Admin → mahsulot → 🖼 Rasm dan qayta bosing.",
+            reply_markup=menu_kb(update.effective_user.id),
+        )
+        return ConversationHandler.END
     set_product_image(pid, file_id)
     try:
-        from bot.webapp import cache_product_photo
+        from bot.webapp import cache_product_photo, photo_cache_path
 
+        # Eski cache o‘chiriladi — yangi rasm ko‘rinsin
+        cache = photo_cache_path(int(pid))
+        if cache.is_file():
+            cache.unlink(missing_ok=True)
         await cache_product_photo(int(pid), file_id)
     except Exception:
         pass
@@ -329,7 +348,8 @@ async def do_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data.pop("photo_product_id", None)
     await update.message.reply_text(
         f"✅ Rasm saqlandi! (#{pid})\n"
-        f"Katalogda mahsulot endi rasm bilan chiqadi.",
+        f"Katalogda mahsulot endi rasm bilan chiqadi.\n"
+        f"Do‘konni yopib qayta oching.",
         reply_markup=menu_kb(update.effective_user.id),
     )
     return ConversationHandler.END
@@ -356,7 +376,7 @@ async def apply_barcode_from_payload(
         return ConversationHandler.END
     code = _barcode_from_payload(payload)
     if not code:
-        await msg.reply_text("Kod bo‘sh. Qayta yozing.")
+        await msg.reply_text("Kod bo‘sh. Kodni yozib yuboring.")
         return ExtraState.BARCODE
     try:
         set_product_barcode(int(pid), code)
@@ -594,7 +614,29 @@ def build_extra_conversations() -> list:
             ],
             states={
                 ExtraState.PHOTO: [
-                    MessageHandler(filters.PHOTO | filters.TEXT, do_photo)
+                    MessageHandler(
+                        filters.PHOTO | filters.Document.IMAGE | filters.TEXT,
+                        do_photo,
+                    )
+                ]
+            },
+            fallbacks=[
+                MessageHandler(filters.Regex("^❌ Bekor qilish$"), cancel_extra),
+            ],
+            allow_reentry=True,
+        ),
+        ConversationHandler(
+            entry_points=[
+                CallbackQueryHandler(
+                    start_barcode, pattern=r"^admin_prod:barcode:\d+$"
+                )
+            ],
+            states={
+                ExtraState.BARCODE: [
+                    MessageHandler(
+                        filters.StatusUpdate.WEB_APP_DATA, do_barcode_webapp
+                    ),
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, do_barcode),
                 ]
             },
             fallbacks=[

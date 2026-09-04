@@ -415,7 +415,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def webapp_scan_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Mini App buyurtma (sendData) va admin kod biriktirish."""
+    """Mini App buyurtma (sendData). Eski kamera skaner oqimi o‘chirilgan."""
     user = update.effective_user
     msg = update.effective_message
     if not user or not msg or not msg.web_app_data:
@@ -485,8 +485,7 @@ async def webapp_scan_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
 
     await msg.reply_text(
-        "📷 Kamera skaner o‘chirilgan.\n"
-        "Mahsulotni katalogdan tanlang yoki kodni yozib yuboring.",
+        "Mahsulotni katalogdan tanlang yoki «🛒 Do'kon» orqali buyurtma bering.",
         reply_markup=menu_for(user.id),
     )
 
