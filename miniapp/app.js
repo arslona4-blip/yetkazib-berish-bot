@@ -385,6 +385,18 @@
       });
       els.categories.appendChild(btn);
     });
+
+    // Tanlangan toifa ko‘rinsin; qator chap–o‘nga suriladi
+    requestAnimationFrame(() => {
+      const active = els.categories.querySelector(".chip.active");
+      if (active && typeof active.scrollIntoView === "function") {
+        active.scrollIntoView({
+          inline: "center",
+          block: "nearest",
+          behavior: "smooth",
+        });
+      }
+    });
   }
 
   function photoEl(product) {
