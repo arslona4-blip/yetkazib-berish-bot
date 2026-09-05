@@ -9,13 +9,20 @@ from typing import Any
 from telegram import InputFile
 
 from bot.config import (
+    ADMIN_IDS,
     SHOP_NAME,
     VOICE_CONFIRM_ENABLED,
     VOICE_CONFIRM_SCRIPT,
     VOICE_CONFIRM_VOICE,
+    VOICE_WELCOME_ENABLED,
+    VOICE_WELCOME_SCRIPT,
 )
 
 logger = logging.getLogger(__name__)
+
+# Bir xil matn uchun TTS ni qayta-qayta chaqirmaslik
+_tts_cache: dict[str, bytes] = {}
+
 
 _ONES = (
     "",
@@ -134,6 +141,11 @@ def confirmation_script(*, order_id: int, total: int, shop_name: str | None = No
 async def synthesize_uzbek_mp3(text: str) -> bytes:
     import edge_tts
 
+    key = f"{VOICE_CONFIRM_VOICE}|{text}"
+    cached = _tts_cache.get(key)
+    if cached:
+        return cached
+
     voice = (VOICE_CONFIRM_VOICE or "uz-UZ-MadinaNeural").strip()
     communicate = edge_tts.Communicate(text, voice)
     buf = io.BytesIO()
@@ -143,7 +155,39 @@ async def synthesize_uzbek_mp3(text: str) -> bytes:
     data = buf.getvalue()
     if len(data) < 200:
         raise RuntimeError("TTS audio juda qisqa")
+    if len(_tts_cache) < 32:
+        _tts_cache[key] = data
     return data
+
+
+async def send_welcome_voice(bot: Any, chat_id: int) -> bool:
+    """Mijoz /start da xush kelibsiz ovozi. Adminlarga yuborilmaydi."""
+    if not VOICE_WELCOME_ENABLED:
+        return False
+    if chat_id in ADMIN_IDS:
+        return False
+
+    text = (VOICE_WELCOME_SCRIPT or "").strip() or (
+        "Assalomu alaykum! Baraka Market yetkazib berish xizmatiga xush kelibsiz."
+    )
+    try:
+        mp3 = await synthesize_uzbek_mp3(text)
+    except Exception as exc:
+        logger.warning("Welcome ovoz TTS xato: %s", exc)
+        return False
+
+    try:
+        await bot.send_audio(
+            chat_id=chat_id,
+            audio=InputFile(io.BytesIO(mp3), filename="xush_kelibsiz.mp3"),
+            title="Xush kelibsiz",
+            performer=SHOP_NAME,
+            caption="🔊 Assalomu alaykum!",
+        )
+        return True
+    except Exception as exc:
+        logger.warning("Welcome ovoz yuborilmadi: %s", exc)
+        return False
 
 
 async def send_order_voice_confirm(

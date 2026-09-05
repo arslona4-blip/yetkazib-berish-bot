@@ -388,6 +388,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             parse_mode="HTML",
         )
 
+    # Mijozga xush kelibsiz ovozi (adminlarga emas)
+    try:
+        from bot.voice_confirm import send_welcome_voice
+
+        await send_welcome_voice(context.bot, user.id)
+    except Exception:
+        pass
+
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     shop_line = (

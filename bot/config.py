@@ -249,6 +249,14 @@ VOICE_CONFIRM_SCRIPT = os.getenv(
     "Baraka Market yetkazib berish xodimlari sizdan mamnun.",
 ).strip()
 
+# /start da xush kelibsiz ovozi (mijozlar uchun)
+_VOICE_WELCOME_RAW = os.getenv("VOICE_WELCOME", "1").strip().lower()
+VOICE_WELCOME_ENABLED = _VOICE_WELCOME_RAW not in {"0", "false", "no", "off"}
+VOICE_WELCOME_SCRIPT = os.getenv(
+    "VOICE_WELCOME_SCRIPT",
+    "Assalomu alaykum! Baraka Market yetkazib berish xizmatiga xush kelibsiz.",
+).strip()
+
 # Eski konstanta — endi bot.timeutil.get_delivery_slots() ishlatiladi
 DELIVERY_SLOTS = []
 
