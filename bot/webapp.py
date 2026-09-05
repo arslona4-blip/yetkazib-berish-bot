@@ -39,6 +39,7 @@ from bot.config import (
     card_payment_enabled,
     payment_link_with_amount,
 )
+from bot.gift_value import get_gift_value_limit
 from bot.database import (
     calc_promo_discount,
     create_order,
@@ -642,6 +643,7 @@ async def api_config(_request: web.Request) -> web.Response:
             "delivery_fee_low": DELIVERY_FEE_LOW,
             "delivery_fee_high": DELIVERY_FEE_HIGH,
             "gift_drink_threshold": GIFT_DRINK_THRESHOLD,
+            "gift_value_limit": get_gift_value_limit(),
             "min_order": MIN_ORDER_AMOUNT,
             "slots": get_delivery_slots(),
             "payme_link": PAYME_LINK or payment_link_with_amount("", 0, 0),

@@ -55,17 +55,27 @@ MIN_ORDER_AMOUNT = 10000
 BONUS_PERCENT = int(os.getenv("BONUS_PERCENT", "2"))
 BONUS_RATE = int(os.getenv("BONUS_RATE", "100"))  # 100 so'm = 1 ball
 
-# 100 000+ buyurtmaga bepul 1L ichimlik
+# 100 000+ buyurtmaga bepul sovg‘a limi = Coca-Cola 1L narxi
 GIFT_DRINK_THRESHOLD = int(os.getenv("GIFT_DRINK_THRESHOLD", "100000"))
-GIFT_DRINK_OPTIONS = (
-    "🥤 Coca-Cola 1L",
-    "🔵 Pepsi 1L",
-    "🧡 Fanta 1L",
-)
+# Katalogda Cola 1L topilmasa — shu summa (so‘m)
+GIFT_VALUE_FALLBACK = int(os.getenv("GIFT_VALUE_FALLBACK", "15000"))
+GIFT_DRINK_OPTIONS = ()  # eski Cola/Pepsi/Fanta ro‘yxati o‘chirildi
 
 
 def _som(amount: int) -> str:
     return f"{int(amount):,}".replace(",", " ")
+
+
+def _gift_limit_som() -> tuple[int, str]:
+    """(limit_so'm, formatlangan)."""
+    try:
+        from bot.gift_value import get_gift_value_info
+
+        info = get_gift_value_info()
+        amount = int(info["amount"])
+        return amount, _som(amount)
+    except Exception:
+        return GIFT_VALUE_FALLBACK, _som(GIFT_VALUE_FALLBACK)
 
 
 def delivery_rates_html() -> str:
@@ -92,27 +102,29 @@ def delivery_rates_plain() -> str:
 
 
 def gift_drink_promo_html() -> str:
-    """E’tiborni tortadigan bepul ichimlik aksiyasi."""
+    """100k+ → 1L ichimlik yoki shu narxdagi boshqa mahsulot."""
     thr = _som(GIFT_DRINK_THRESHOLD)
+    _lim, lim_s = _gift_limit_som()
     return (
         f"🎁 <b>SUPER AKSIYA!</b>\n"
         f"━━━━━━━━━━━━━━\n"
-        f"🛒 Buyurtma <b>{thr} so‘m</b> va undan yuqori bo‘lsa —\n"
-        f"<b>BEPUL 1 litr ichimlik</b> tanlaysiz:\n\n"
-        f"🥤 <b>Coca-Cola</b> 1L\n"
-        f"🔵 <b>Pepsi</b> 1L\n"
-        f"🧡 <b>Fanta</b> 1L\n"
-        f"━━━━━━━━━━━━━━\n"
+        f"🛒 Buyurtma <b>{thr} so‘m+</b> —\n"
+        f"<b>1L ichimlik</b> (yoki shu narxdagi boshqa mahsulot) "
+        f"<b>bepul</b>!\n\n"
+        f"💰 Limi: <b>{lim_s} so‘m</b> "
+        f"(Coca-Cola 1L narxi bo‘yicha)\n"
         f"✨ Tanlov — o‘zingizniki!"
     )
 
 
 def gift_drink_promo_plain() -> str:
     thr = _som(GIFT_DRINK_THRESHOLD)
+    _lim, lim_s = _gift_limit_som()
     return (
         f"🎁 SUPER AKSIYA!\n"
-        f"Buyurtma {thr} so‘m+ bo‘lsa — BEPUL 1L ichimlik:\n"
-        f"🥤 Coca-Cola · 🔵 Pepsi · 🧡 Fanta"
+        f"{thr} so‘m+ buyurtmaga — 1L ichimlik "
+        f"(yoki shu narxdagi boshqa mahsulot, limi {lim_s} so‘m) bepul, "
+        f"tanlov o‘zingizniki!"
     )
 
 
@@ -120,15 +132,18 @@ def gift_drink_progress_html(subtotal: int) -> str:
     """Savat summasi bo‘yicha aksiya holati."""
     amount = max(0, int(subtotal or 0))
     thr = GIFT_DRINK_THRESHOLD
+    _lim, lim_s = _gift_limit_som()
     if amount >= thr:
         return (
             f"🎉 <b>Tabriklaymiz!</b> Sovg‘angiz tayyor!\n"
-            f"Tanlang: 🥤 Coca-Cola · 🔵 Pepsi · 🧡 Fanta (1L)"
+            f"1L ichimlik yoki shu narxdagi boshqa mahsulot "
+            f"(limi <b>{lim_s} so‘m</b>) — tanlov o‘zingizniki."
         )
     left = thr - amount
     return (
         f"🎁 Yana <b>{_som(left)} so‘m</b> qo‘shsangiz —\n"
-        f"BEPUL 🥤 Coca-Cola / 🔵 Pepsi / 🧡 Fanta 1L!"
+        f"1L ichimlik (yoki shu narxdagi mahsulot, limi "
+        f"<b>{lim_s} so‘m</b>) bepul!"
     )
 
 
@@ -170,13 +185,15 @@ def _mahalla_bot_cta() -> tuple[str, str]:
 def mahalla_promo_html() -> str:
     """Mahalla guruhlariga forward qilish uchun qisqa HTML caption."""
     thr = _som(GIFT_DRINK_THRESHOLD)
+    _lim, lim_s = _gift_limit_som()
     cta_html, _ = _mahalla_bot_cta()
     return (
         f"📣 <b>{SHOP_NAME}</b> — mahallangizga yetkazamiz!\n"
         f"━━━━━━━━━━━━━━\n"
         f"{delivery_rates_html()}\n\n"
-        f"🎁 <b>{thr} so‘m+</b> → <b>BEPUL 1L</b> ichimlik\n"
-        f"🥤 Coca-Cola · 🔵 Pepsi · 🧡 Fanta\n"
+        f"🎁 <b>{thr} so‘m+</b> → 1L ichimlik "
+        f"(yoki shu narxdagi mahsulot, limi <b>{lim_s} so‘m</b>) bepul\n"
+        f"✨ Tanlov o‘zingizniki!\n"
         f"━━━━━━━━━━━━━━\n"
         f"{cta_html}"
     )
@@ -185,11 +202,13 @@ def mahalla_promo_html() -> str:
 def mahalla_promo_plain() -> str:
     """Nusxa olish uchun oddiy matn."""
     thr = _som(GIFT_DRINK_THRESHOLD)
+    _lim, lim_s = _gift_limit_som()
     _, cta_plain = _mahalla_bot_cta()
     return (
         f"📣 {SHOP_NAME} — mahallangizga yetkazamiz!\n"
         f"{delivery_rates_plain()}\n"
-        f"🎁 {thr} so‘m+ → BEPUL 1L ichimlik (Cola/Pepsi/Fanta)\n"
+        f"🎁 {thr} so‘m+ → 1L ichimlik (yoki shu narxdagi mahsulot, "
+        f"limi {lim_s} so‘m) bepul, tanlov o‘zingizniki!\n"
         f"{cta_plain}"
     )
 
