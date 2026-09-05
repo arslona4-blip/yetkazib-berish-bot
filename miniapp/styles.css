@@ -724,6 +724,39 @@ main {
   grid-column: 1 / -1;
 }
 
+.recipe-banner {
+  grid-column: 1 / -1;
+  background: linear-gradient(145deg, #e8f5e1 0%, #f7fbf4 100%);
+  border: 1px solid rgba(141, 198, 63, 0.35);
+  border-radius: 18px;
+  padding: 16px 16px 14px;
+  margin-bottom: 4px;
+}
+
+.recipe-banner h2 {
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #143018;
+}
+
+.recipe-banner p {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+  color: #2a3d30;
+  line-height: 1.4;
+}
+
+.recipe-banner .muted {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.recipe-add-all {
+  width: 100%;
+  margin-top: 6px;
+}
+
 #variantDialog {
   border: none;
   border-radius: 22px;

@@ -413,27 +413,241 @@
     return String(text || "")
       .toLowerCase()
       .replace(/ʻ|ʼ|’|‘|`/g, "'")
+      .replace(/\bpetsept\b/g, "retsept")
+      .replace(/\bresep\b/g, "retsept")
+      .replace(/\bresept\b/g, "retsept")
+      .replace(/\bretsep\b/g, "retsept")
       .replace(/\s+/g, " ")
       .trim();
+  }
+
+  /** Mini App retsept to‘plamlari (bot shop_ai bilan bir xil g‘oya). */
+  const RECIPES = [
+    {
+      key: "osh",
+      title: "Palov (osh)",
+      aliases: ["osh uchun", "palov uchun", "palov", "plov", "osh retsept"],
+      items: ["guruch", "yog", "moy", "sabzi", "piyoz", "noxat", "ziravor"],
+    },
+    {
+      key: "lagmon",
+      title: "Lag‘mon",
+      aliases: ["lagmon", "lag'mon", "lag‘mon"],
+      items: ["makaron", "gosht", "go'sht", "sabzi", "piyoz", "pomidor"],
+    },
+    {
+      key: "shorva",
+      title: "Sho‘rva",
+      aliases: ["shorva", "sho'rva", "sho‘rva", "sup"],
+      items: ["gosht", "go'sht", "kartoshka", "sabzi", "piyoz"],
+    },
+    {
+      key: "mastava",
+      title: "Mastava",
+      aliases: ["mastava"],
+      items: ["guruch", "gosht", "go'sht", "sabzi", "piyoz", "kartoshka"],
+    },
+    {
+      key: "somsa",
+      title: "Somsa",
+      aliases: ["somsa"],
+      items: ["un", "gosht", "go'sht", "piyoz", "yog", "moy"],
+    },
+    {
+      key: "manti",
+      title: "Manti",
+      aliases: ["manti"],
+      items: ["un", "gosht", "go'sht", "piyoz", "yog", "moy"],
+    },
+    {
+      key: "shashlik",
+      title: "Shashlik",
+      aliases: ["shashlik", "kabob", "kebab"],
+      items: ["gosht", "go'sht", "piyoz", "yog", "moy", "non"],
+    },
+    {
+      key: "makaron",
+      title: "Makaron qovurdoq",
+      aliases: ["makaron uchun", "pasta uchun"],
+      items: ["makaron", "gosht", "go'sht", "piyoz", "pomidor", "yog", "moy"],
+    },
+    {
+      key: "nonushta",
+      title: "Nonushta to‘plami",
+      aliases: ["nonushta", "ertalabki", "zavtrak"],
+      items: ["non", "tuxum", "sut", "sariyog", "choy"],
+    },
+    {
+      key: "salat",
+      title: "Salat to‘plami",
+      aliases: ["salat", "olivye", "olive"],
+      items: ["kartoshka", "sabzi", "tuxum", "mayonez", "piyoz"],
+    },
+    {
+      key: "choy",
+      title: "Choy dasturxoni",
+      aliases: ["choy uchun", "dasturxon", "choy to'plam", "choy to‘plam"],
+      items: ["choy", "shakar", "non", "pechenye"],
+    },
+  ];
+
+  const RECIPE_TRIGGERS = [
+    "retsept",
+    "uchun kerak",
+    "nima kerak",
+    "to'plam",
+    "to‘plam",
+    "toplam",
+    "ingredient",
+  ];
+
+  function productSearchHay(p) {
+    return normalizeSearch(
+      [p.card_name, p.name, p.category_name, p.description]
+        .filter(Boolean)
+        .join(" ")
+    );
+  }
+
+  function findIngredientProduct(query, usedIds) {
+    const q = normalizeSearch(query);
+    if (!q) return null;
+    let best = null;
+    let bestScore = 0;
+    state.products.forEach((p) => {
+      if (usedIds.has(Number(p.id))) return;
+      const hay = productSearchHay(p);
+      let score = 0;
+      if (hay.includes(q)) score = 20 + (hay.startsWith(q) ? 5 : 0);
+      else if (q.length >= 3 && hay.split(" ").some((w) => w.startsWith(q))) score = 12;
+      if (score > bestScore) {
+        bestScore = score;
+        best = p;
+      }
+    });
+    return best;
+  }
+
+  function detectRecipe(rawQuery) {
+    const q = normalizeSearch(rawQuery);
+    if (!q) return null;
+
+    let matched = null;
+    let bestLen = 0;
+    RECIPES.forEach((recipe) => {
+      recipe.aliases.forEach((alias) => {
+        const a = normalizeSearch(alias);
+        if (a && q.includes(a) && a.length >= bestLen) {
+          bestLen = a.length;
+          matched = recipe;
+        }
+      });
+      if (q.includes(recipe.key) && recipe.key.length > bestLen) {
+        bestLen = recipe.key.length;
+        matched = recipe;
+      }
+    });
+
+    const hasTrigger = RECIPE_TRIGGERS.some((t) => q.includes(normalizeSearch(t)));
+    if (!matched) {
+      if (hasTrigger) return { recipe: null, menu: true };
+      return null;
+    }
+
+    // Oddiy «osh» / «makaron» — mahsulot qidiruvi (retsept emas)
+    const dishOnly = new Set([
+      "palov",
+      "plov",
+      "mastava",
+      "nonushta",
+      "shashlik",
+      "kabob",
+      "kebab",
+      "lagmon",
+      "lag'mon",
+      "somsa",
+      "manti",
+      "shorva",
+      "sho'rva",
+      "salat",
+      "olivye",
+    ]);
+    const intent =
+      hasTrigger ||
+      q.includes("uchun") ||
+      q.includes("toplam") ||
+      q.includes("to'plam") ||
+      q.includes("to‘plam") ||
+      dishOnly.has(q) ||
+      [...dishOnly].some((d) => q.startsWith(d + " "));
+    if (!intent && (q === matched.key || q === "makaron" || q === "choy" || q === "osh")) {
+      return null;
+    }
+
+    const used = new Set();
+    const found = [];
+    const missing = [];
+    const tried = new Set();
+    matched.items.forEach((item) => {
+      const token = normalizeSearch(item);
+      if (tried.has(token)) return;
+      tried.add(token);
+      const p = findIngredientProduct(item, used);
+      if (p) {
+        used.add(Number(p.id));
+        found.push(p);
+      } else if (![...tried].some((t) => t !== token && item.includes(t))) {
+        // faqat birinchi sinoniym uchun missing
+        if (!["moy", "yog", "go'sht", "gosht"].includes(token) || !found.length) {
+          missing.push(item);
+        }
+      }
+    });
+    // missing tozalash: agar gosht topilgan bo‘lsa go'sht missing o‘chirilsin
+    const cleanMissing = missing.filter((m) => {
+      const n = normalizeSearch(m);
+      if ((n === "moy" || n === "yog") && found.some((p) => /moy|yog/.test(productSearchHay(p))))
+        return false;
+      if (
+        (n === "gosht" || n === "go'sht") &&
+        found.some((p) => /gosht|go'sht|go‘sht|мясо/.test(productSearchHay(p)))
+      )
+        return false;
+      return true;
+    });
+
+    return { recipe: matched, products: found, missing: cleanMissing, menu: false };
   }
 
   function filteredProducts() {
     const q = normalizeSearch(state.searchQuery);
     if (!q) return state.products;
+    const recipeHit = detectRecipe(state.searchQuery);
+    if (recipeHit && recipeHit.recipe && recipeHit.products) {
+      return recipeHit.products;
+    }
     const tokens = q.split(" ").filter(Boolean);
     return state.products.filter((p) => {
-      const hay = normalizeSearch(
-        [
-          p.card_name,
-          p.name,
-          p.category_name,
-          p.description,
-        ]
-          .filter(Boolean)
-          .join(" ")
-      );
+      const hay = productSearchHay(p);
       return tokens.every((t) => hay.includes(t));
     });
+  }
+
+  function addRecipeToCart(products) {
+    (products || []).forEach((p) => {
+      upsertCartItem({
+        product_id: p.id,
+        variant_id: 0,
+        name: p.card_name || p.name,
+        price: p.price,
+        quantity: 1,
+      });
+    });
+    if (tg && tg.HapticFeedback) {
+      try {
+        tg.HapticFeedback.notificationOccurred("success");
+      } catch (_) {}
+    }
   }
 
   function syncSearchClear() {
@@ -443,8 +657,56 @@
 
   function renderProducts() {
     els.products.innerHTML = "";
-    const list = filteredProducts();
+    const recipeHit = detectRecipe(state.searchQuery);
     const q = normalizeSearch(state.searchQuery);
+
+    if (recipeHit && recipeHit.menu) {
+      const box = document.createElement("div");
+      box.className = "recipe-banner";
+      box.innerHTML = `<h2>🍽 Retsept / to‘plam</h2>
+        <p>Qaysi taom? Masalan: <b>osh uchun</b>, <b>lag‘mon retsept</b>, <b>nonushta</b></p>
+        <p class="muted">Bor: ${RECIPES.map((r) => r.title).join(", ")}</p>`;
+      els.products.appendChild(box);
+      return;
+    }
+
+    if (recipeHit && recipeHit.recipe) {
+      const box = document.createElement("div");
+      box.className = "recipe-banner";
+      const total = (recipeHit.products || []).reduce(
+        (s, p) => s + (Number(p.price) || 0),
+        0
+      );
+      const miss =
+        recipeHit.missing && recipeHit.missing.length
+          ? `<p class="muted">Topilmadi: ${recipeHit.missing.join(", ")}</p>`
+          : "";
+      box.innerHTML = `<h2>🍽 ${recipeHit.recipe.title}</h2>
+        <p>Katalogdagi kerakli mahsulotlar · taxminan <b>${formatMoney(total)}</b></p>
+        ${miss}`;
+      if (recipeHit.products.length) {
+        const addAll = document.createElement("button");
+        addAll.type = "button";
+        addAll.className = "btn add recipe-add-all";
+        addAll.textContent = `Hammasini qo‘shish (${recipeHit.products.length})`;
+        addAll.addEventListener("click", () => {
+          addRecipeToCart(recipeHit.products);
+          addAll.textContent = "✓ Savatga qo‘shildi";
+          addAll.disabled = true;
+        });
+        box.appendChild(addAll);
+      }
+      els.products.appendChild(box);
+      if (!recipeHit.products.length) {
+        const empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "Bu retsept uchun katalogda mahsulot topilmadi";
+        els.products.appendChild(empty);
+        return;
+      }
+    }
+
+    const list = filteredProducts();
     if (!list.length) {
       els.products.innerHTML = q
         ? `<p class="empty">«${state.searchQuery.trim()}» bo‘yicha topilmadi</p>`
@@ -453,7 +715,10 @@
     }
 
     const showSections =
-      state.categoryId == null && state.categories.length > 0 && !q;
+      state.categoryId == null &&
+      state.categories.length > 0 &&
+      !q &&
+      !(recipeHit && recipeHit.recipe);
     let lastKey = null;
 
     list.forEach((product) => {
