@@ -89,6 +89,43 @@ def is_main_menu_text(text: str) -> bool:
     }
 
 
+def is_bot_ui_button_text(text: str) -> bool:
+    """Menyu/admin/bekor tugmalari — AI qidiruvga tushmasin (group=1)."""
+    t = (text or "").strip()
+    if not t:
+        return True
+    if is_main_menu_text(t):
+        return True
+    if t in {
+        "❌ Bekor qilish",
+        "⏭ O'tkazib yuborish",
+        "⏭ O‘tkazib yuborish",
+        "✏️ Boshqa nom yozaman",
+        "📱 Kontaktni yuborish",
+        "📍 Lokatsiya yuborish",
+        "⬅️ Orqaga",
+    }:
+        return True
+    # Admin reply-klaviatura yoki eski tugmalar
+    if t.startswith(
+        (
+            "🛍 Mahsulotlar",
+            "👥 Kontaktlar",
+            "📊 Statistika",
+            "📈 Kunlik",
+            "📣 Broadcast",
+            "📤 Excel",
+            "📥 Excel",
+            "🔑 Kirish",
+            "🆕 Yangi buyurtma",
+            "🚚 Faol buyurtma",
+            "🖥 Admin",
+        )
+    ):
+        return True
+    return False
+
+
 def main_menu_keyboard(is_admin: bool = False, is_courier: bool = False) -> ReplyKeyboardMarkup:
     rows: list[list] = []
     shop_btn = shop_reply_button()

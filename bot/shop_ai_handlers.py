@@ -7,7 +7,11 @@ from telegram.ext import ContextTypes
 
 from bot.config import ADMIN_IDS, COURIER_IDS
 from bot.database import add_money_to_cart, get_cart_totals, get_product
-from bot.keyboards import main_menu_keyboard, shop_ai_results_keyboard
+from bot.keyboards import (
+    is_bot_ui_button_text,
+    main_menu_keyboard,
+    shop_ai_results_keyboard,
+)
 from bot.shop_ai import (
     _money_label,
     _product_ml,
@@ -38,9 +42,12 @@ async def shop_ai_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     text = (update.message.text or "").strip()
     if not text:
         return
+    # Menyu/admin tugmalari group=0 da ishlaydi; group=1 dagi AI ularni
+    # «katalogda topilmadi» deb qayta yozmasin.
+    if is_bot_ui_button_text(text):
+        return
     uid = update.effective_user.id
     # Faqat admin HAQIQATAN matn kutayotganda o‘tkazib yuborish.
-    # Eski admin_product draft retsept/AI ni yutmasin.
     if uid in ADMIN_IDS and context.user_data.get("awaiting_admin"):
         return
     if text == "🤖 AI sotuvchi":
