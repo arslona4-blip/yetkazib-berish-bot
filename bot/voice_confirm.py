@@ -8,7 +8,12 @@ from typing import Any
 
 from telegram import InputFile
 
-from bot.config import SHOP_NAME, VOICE_CONFIRM_ENABLED, VOICE_CONFIRM_VOICE
+from bot.config import (
+    SHOP_NAME,
+    VOICE_CONFIRM_ENABLED,
+    VOICE_CONFIRM_SCRIPT,
+    VOICE_CONFIRM_VOICE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -99,13 +104,31 @@ def confirmation_script(*, order_id: int, total: int, shop_name: str | None = No
     name = (shop_name or SHOP_NAME or "Do‘kon").strip()
     total_words = amount_to_uzbek_words(total)
     order_words = amount_to_uzbek_words(int(order_id))
-    return (
-        f"Assalomu alaykum! {name}. "
-        f"Buyurtmangiz qabul qilindi. "
-        f"Buyurtma raqami: {order_words}. "
-        f"Jami: {total_words} so‘m. "
-        f"Tez orada yetkazib beramiz. Rahmat!"
+    template = (VOICE_CONFIRM_SCRIPT or "").strip() or (
+        "Assalomu alaykum! Baraka Market yetkazib berish xizmatiga xush kelibsiz. "
+        "Buyurtmangiz qabul qilindi. "
+        "Buyurtma raqami: {order}. "
+        "Jami: {total} so‘m. "
+        "Buyurtmangiz uchun rahmat. "
+        "Baraka Market yetkazib berish xodimlari sizdan mamnun."
     )
+    try:
+        return template.format(
+            shop=name,
+            order=order_words,
+            total=total_words,
+            order_id=int(order_id),
+            amount=int(total),
+        )
+    except (KeyError, ValueError):
+        return (
+            f"Assalomu alaykum! Baraka Market yetkazib berish xizmatiga xush kelibsiz. "
+            f"Buyurtmangiz qabul qilindi. "
+            f"Buyurtma raqami: {order_words}. "
+            f"Jami: {total_words} so‘m. "
+            f"Buyurtmangiz uchun rahmat. "
+            f"Baraka Market yetkazib berish xodimlari sizdan mamnun."
+        )
 
 
 async def synthesize_uzbek_mp3(text: str) -> bytes:

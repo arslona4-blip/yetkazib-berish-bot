@@ -138,6 +138,62 @@ SHOP_PHONE = os.getenv("SHOP_PHONE", "+998 90 123 45 67")
 SHOP_TELEGRAM = os.getenv("SHOP_TELEGRAM", "@support")
 SHOP_HOURS = os.getenv("SHOP_HOURS", "09:00 - 22:00")
 BOT_USERNAME = os.getenv("BOT_USERNAME", "yetkazib_berish_xizmat_bot").lstrip("@")
+
+
+def _mahalla_bot_cta() -> tuple[str, str]:
+    """Mahalla reklama CTA: (html, plain)."""
+    shop_link = (os.getenv("SHOP_BOT_LINK") or "").strip()
+    env_user = (os.getenv("BOT_USERNAME") or "").strip().lstrip("@")
+    if shop_link:
+        return (
+            f'🛒 <a href="{shop_link}">Bot orqali buyurtma bering</a>',
+            f"🛒 Buyurtma: {shop_link}",
+        )
+    if env_user:
+        link = f"https://t.me/{env_user}"
+        return (
+            f"🛒 Bot: <b>@{env_user}</b>\n🔗 {link}",
+            f"🛒 Bot: @{env_user}\n🔗 {link}",
+        )
+    if BOT_USERNAME:
+        link = f"https://t.me/{BOT_USERNAME}"
+        return (
+            f"🛒 Bot: <b>@{BOT_USERNAME}</b>\n🔗 {link}",
+            f"🛒 Bot: @{BOT_USERNAME}\n🔗 {link}",
+        )
+    return (
+        "🛒 Bot orqali buyurtma bering",
+        "🛒 Bot orqali buyurtma bering",
+    )
+
+
+def mahalla_promo_html() -> str:
+    """Mahalla guruhlariga forward qilish uchun qisqa HTML caption."""
+    thr = _som(GIFT_DRINK_THRESHOLD)
+    cta_html, _ = _mahalla_bot_cta()
+    return (
+        f"📣 <b>{SHOP_NAME}</b> — mahallangizga yetkazamiz!\n"
+        f"━━━━━━━━━━━━━━\n"
+        f"{delivery_rates_html()}\n\n"
+        f"🎁 <b>{thr} so‘m+</b> → <b>BEPUL 1L</b> ichimlik\n"
+        f"🥤 Coca-Cola · 🔵 Pepsi · 🧡 Fanta\n"
+        f"━━━━━━━━━━━━━━\n"
+        f"{cta_html}"
+    )
+
+
+def mahalla_promo_plain() -> str:
+    """Nusxa olish uchun oddiy matn."""
+    thr = _som(GIFT_DRINK_THRESHOLD)
+    _, cta_plain = _mahalla_bot_cta()
+    return (
+        f"📣 {SHOP_NAME} — mahallangizga yetkazamiz!\n"
+        f"{delivery_rates_plain()}\n"
+        f"🎁 {thr} so‘m+ → BEPUL 1L ichimlik (Cola/Pepsi/Fanta)\n"
+        f"{cta_plain}"
+    )
+
+
 REFERRAL_BONUS = int(os.getenv("REFERRAL_BONUS", "1000"))
 WEBAPP_PORT = int(os.getenv("PORT") or os.getenv("WEBAPP_PORT", "8088"))
 # Cloudflare tunnel / Railway HTTPS URL, masalan https://xxxx.up.railway.app
@@ -175,12 +231,23 @@ WELCOME_ANIMATION_PATH = Path(
     os.getenv("WELCOME_ANIMATION_PATH", str(_WELCOME_GIF_DEFAULT))
 ).expanduser()
 
-# Buyurtma qabulida o‘zbekcha ovoz (edge-tts)
+# Buyurtma qabulida o‘zbekcha ovoz (edge-tts, Madina)
 _VOICE_CONFIRM_RAW = os.getenv("VOICE_CONFIRM", "1").strip().lower()
 VOICE_CONFIRM_ENABLED = _VOICE_CONFIRM_RAW not in {"0", "false", "no", "off"}
 VOICE_CONFIRM_VOICE = os.getenv(
     "VOICE_CONFIRM_VOICE", "uz-UZ-MadinaNeural"
 ).strip() or "uz-UZ-MadinaNeural"
+# Ovoz matni. Placeholderlar: {shop} {order} {total}
+# {order}/{total} — o‘zbekcha so‘z (yetmish uch, qirq to‘qqiz ming)
+VOICE_CONFIRM_SCRIPT = os.getenv(
+    "VOICE_CONFIRM_SCRIPT",
+    "Assalomu alaykum! Baraka Market yetkazib berish xizmatiga xush kelibsiz. "
+    "Buyurtmangiz qabul qilindi. "
+    "Buyurtma raqami: {order}. "
+    "Jami: {total} so‘m. "
+    "Buyurtmangiz uchun rahmat. "
+    "Baraka Market yetkazib berish xodimlari sizdan mamnun.",
+).strip()
 
 # Eski konstanta — endi bot.timeutil.get_delivery_slots() ishlatiladi
 DELIVERY_SLOTS = []
