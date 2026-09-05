@@ -12,6 +12,84 @@ from bot.config import SHOP_NAME, VOICE_CONFIRM_ENABLED, VOICE_CONFIRM_VOICE
 
 logger = logging.getLogger(__name__)
 
+_ONES = (
+    "",
+    "bir",
+    "ikki",
+    "uch",
+    "to‘rt",
+    "besh",
+    "olti",
+    "yetti",
+    "sakkiz",
+    "to‘qqiz",
+)
+_TENS = (
+    "",
+    "o‘n",
+    "yigirma",
+    "o‘ttiz",
+    "qirq",
+    "ellik",
+    "oltmish",
+    "yetmish",
+    "sakson",
+    "to‘qson",
+)
+
+
+def _under_thousand(n: int) -> str:
+    """0..999 → o‘zbekcha (0 bo‘lsa bo‘sh)."""
+    n = int(n) % 1000
+    if n <= 0:
+        return ""
+    parts: list[str] = []
+    hundreds = n // 100
+    rest = n % 100
+    if hundreds:
+        if hundreds == 1:
+            parts.append("yuz")
+        else:
+            parts.append(f"{_ONES[hundreds]} yuz")
+    if rest:
+        if rest < 10:
+            parts.append(_ONES[rest])
+        elif rest < 20:
+            ones = rest % 10
+            parts.append("o‘n" if ones == 0 else f"o‘n {_ONES[ones]}")
+        else:
+            tens = rest // 10
+            ones = rest % 10
+            parts.append(_TENS[tens] if ones == 0 else f"{_TENS[tens]} {_ONES[ones]}")
+    return " ".join(parts)
+
+
+def amount_to_uzbek_words(amount: int) -> str:
+    """49000 → «qirq to‘qqiz ming» — TTS raqamni chalkashtirmasin."""
+    n = max(0, int(amount or 0))
+    if n == 0:
+        return "nol"
+
+    parts: list[str] = []
+    milliards = n // 1_000_000_000
+    millions = (n // 1_000_000) % 1000
+    thousands = (n // 1000) % 1000
+    rest = n % 1000
+
+    if milliards:
+        w = _under_thousand(milliards)
+        parts.append(f"{w} milliard")
+    if millions:
+        w = _under_thousand(millions)
+        parts.append(f"{w} million")
+    if thousands:
+        w = _under_thousand(thousands)
+        parts.append(f"{w} ming")
+    if rest:
+        parts.append(_under_thousand(rest))
+
+    return " ".join(p for p in parts if p).strip()
+
 
 def _som_fmt(amount: int) -> str:
     return f"{max(0, int(amount or 0)):,}".replace(",", " ")
@@ -19,11 +97,13 @@ def _som_fmt(amount: int) -> str:
 
 def confirmation_script(*, order_id: int, total: int, shop_name: str | None = None) -> str:
     name = (shop_name or SHOP_NAME or "Do‘kon").strip()
+    total_words = amount_to_uzbek_words(total)
+    order_words = amount_to_uzbek_words(int(order_id))
     return (
         f"Assalomu alaykum! {name}. "
         f"Buyurtmangiz qabul qilindi. "
-        f"Buyurtma raqami: {int(order_id)}. "
-        f"Jami: {_som_fmt(total)} so‘m. "
+        f"Buyurtma raqami: {order_words}. "
+        f"Jami: {total_words} so‘m. "
         f"Tez orada yetkazib beramiz. Rahmat!"
     )
 
