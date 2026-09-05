@@ -303,7 +303,10 @@ def catalog_text(limit: int = 40, category: str | None = None) -> str:
 
 def _norm(s: str) -> str:
     # «2OO GR» / «20OOO» → raqam (kirill/lotin O chalkashligi)
+    from bot.translit import to_search_text
+
     s = _fix_lookalike_digits(s or "")
+    s = to_search_text(s)
     return (
         s.lower()
         .replace("‘", "'")

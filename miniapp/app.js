@@ -421,8 +421,87 @@
     return div;
   }
 
+  function cyrillicToLatin(text) {
+    let s = String(text || "").toLowerCase();
+    const digraphs = [
+      ["щ", "sh"],
+      ["ш", "sh"],
+      ["ч", "ch"],
+      ["ц", "ts"],
+      ["ё", "yo"],
+      ["ю", "yu"],
+      ["я", "ya"],
+      ["ў", "o'"],
+      ["ғ", "g'"],
+    ];
+    digraphs.forEach(([a, b]) => {
+      s = s.split(a).join(b);
+    });
+    const map = {
+      а: "a",
+      б: "b",
+      в: "v",
+      г: "g",
+      д: "d",
+      е: "e",
+      ж: "j",
+      з: "z",
+      и: "i",
+      й: "y",
+      к: "k",
+      л: "l",
+      м: "m",
+      н: "n",
+      о: "o",
+      п: "p",
+      р: "r",
+      с: "s",
+      т: "t",
+      у: "u",
+      ф: "f",
+      х: "x",
+      ъ: "'",
+      ы: "i",
+      ь: "",
+      э: "e",
+      қ: "q",
+      ҳ: "h",
+    };
+    s = s
+      .split("")
+      .map((ch) => (map[ch] !== undefined ? map[ch] : ch))
+      .join("");
+    const aliases = {
+      ris: "guruch",
+      myaso: "gosht",
+      moloko: "sut",
+      maslo: "yog",
+      luk: "piyoz",
+      morkov: "sabzi",
+      morkovka: "sabzi",
+      kartofel: "kartoshka",
+      sakhar: "shakar",
+      chay: "choy",
+      yaytso: "tuxum",
+      yayca: "tuxum",
+      hleb: "non",
+      muka: "un",
+      goroh: "noxat",
+      plov: "osh",
+      palov: "osh",
+    };
+    return s
+      .split(/(\W+)/)
+      .map((tok) => {
+        if (!tok || /^\W+$/.test(tok)) return tok;
+        const key = tok.replace(/'/g, "");
+        return aliases[key] || tok;
+      })
+      .join("");
+  }
+
   function normalizeSearch(text) {
-    return String(text || "")
+    return cyrillicToLatin(String(text || ""))
       .toLowerCase()
       .replace(/ʻ|ʼ|’|‘|`/g, "'")
       .replace(/\bpetsept\b/g, "retsept")

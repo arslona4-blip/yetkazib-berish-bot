@@ -1428,19 +1428,38 @@ def get_stats() -> dict[str, Any]:
 
 
 def search_products(query: str, limit: int = 20) -> list[sqlite3.Row]:
-    q = f"%{query.strip()}%"
+    from bot.translit import to_search_text
+
+    raw = (query or "").strip()
+    latin = to_search_text(raw).strip()
+    variants = []
+    for v in (raw, latin):
+        v = v.strip()
+        if v and v not in variants:
+            variants.append(v)
+    if not variants:
+        return []
+
+    clauses = []
+    params: list = []
+    for v in variants:
+        like = f"%{v}%"
+        clauses.append("(p.name LIKE ? OR IFNULL(p.description, '') LIKE ?)")
+        params.extend([like, like])
+    params.append(limit)
+
     with get_connection() as conn:
         rows = conn.execute(
-            """
+            f"""
             SELECT p.*, c.name AS category_name
             FROM products p
             LEFT JOIN categories c ON c.id = p.category_id
             WHERE p.is_active = 1
-              AND (p.name LIKE ? OR IFNULL(p.description, '') LIKE ?)
+              AND ({' OR '.join(clauses)})
             ORDER BY p.name
             LIMIT ?
             """,
-            (q, q, limit),
+            params,
         ).fetchall()
     return list(rows)
 
