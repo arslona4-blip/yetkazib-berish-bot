@@ -427,7 +427,7 @@
       key: "osh",
       title: "Palov (osh)",
       aliases: ["osh uchun", "palov uchun", "palov", "plov", "osh retsept"],
-      items: ["guruch", "yog", "moy", "sabzi", "piyoz", "noxat", "ziravor"],
+      items: ["guruch", "yog", "moy", "sabzi", "piyoz", "noxat", "zira"],
     },
     {
       key: "lagmon",
@@ -509,6 +509,42 @@
     );
   }
 
+  const RECIPE_MUST = {
+    guruch: ["guruch", "рис", "rice"],
+    yog: ["yog", "moy", "масло", "oil"],
+    moy: ["yog", "moy", "масло", "oil"],
+    sabzi: ["sabzi", "морков", "carrot"],
+    piyoz: ["piyoz", "лук", "onion"],
+    noxat: ["noxat", "noxot", "горох", "peas", "нут"],
+    zira: ["zira", "kimyon", "зира"],
+    ziravor: ["ziravor", "zira", "kimyon", "зира"],
+    gosht: ["gosht", "мясо", "mol", "qoy", "tovuq", "farsh", "joja"],
+    kartoshka: ["kartoshka", "картош", "potato"],
+    pomidor: ["pomidor", "томат", "tomato"],
+    makaron: ["makaron", "pasta", "spagetti", "noodle", "lagmon"],
+    un: ["мука", "flour", " un", "un "],
+    non: ["non", "хлеб", "bread", "lavash"],
+    tuxum: ["tuxum", "яйц", "egg"],
+    sut: ["sut", "молоко", "milk"],
+    choy: ["choy", "чай", "tea"],
+    shakar: ["shakar", "сахар", "sugar"],
+    mayonez: ["mayonez", "майонез", "mayo"],
+    pechenye: ["pechen", "печенье", "cookie"],
+    sariyog: ["sariyog", "sari yog", "сливоч", "butter"],
+  };
+
+  const RECIPE_JUNK = /bezak|soch|boyoq|bo'yoq|shampun|sovun|pampers|sun'?iy|suniy|oyinchoq/;
+
+  function recipeNameOk(query, hay) {
+    const flat = hay.replace(/['‘’`]/g, "");
+    if (RECIPE_JUNK.test(flat)) return false;
+    if (/\bgul\b/.test(flat) && !flat.includes("sabzi")) return false;
+    const q = normalizeSearch(query).replace(/'/g, "");
+    const must = RECIPE_MUST[q];
+    if (!must) return true;
+    return must.some((m) => flat.includes(m.replace(/'/g, "")) || hay.includes(m));
+  }
+
   function findIngredientProduct(query, usedIds) {
     let q = normalizeSearch(query).replace(/'/g, "");
     if (!q) return null;
@@ -525,14 +561,16 @@
     state.products.forEach((p) => {
       if (usedIds.has(Number(p.id))) return;
       const hay = productSearchHay(p);
+      if (!recipeNameOk(query, hay)) return;
       if (meatQuery && meatBad.test(hay)) return;
       if (meatQuery && !meatOk.test(hay)) return;
       if (oilQuery && meatBad.test(hay)) return;
+      if (oilQuery && !/yog|moy|масло|oil/.test(hay.replace(/'/g, ""))) return;
 
       let score = 0;
       const hayFlat = hay.replace(/'/g, "");
       if (hayFlat.includes(q)) score = 20 + (hayFlat.startsWith(q) ? 5 : 0);
-      else if (q.length >= 3 && hayFlat.split(" ").some((w) => w.startsWith(q)))
+      else if (q.length >= 4 && hayFlat.split(/\s+/).some((w) => w.startsWith(q)))
         score = 12;
       if (meatQuery && /gosht/.test(hayFlat)) score += 15;
       if (score > bestScore) {

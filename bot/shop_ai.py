@@ -46,7 +46,7 @@ _RECIPES: dict[str, dict[str, Any]] = {
             ("sabzi", None),
             ("piyoz", None),
             ("no'xat", "ixtiyoriy"),
-            ("ziravor", "ixtiyoriy"),
+            ("zira", "ixtiyoriy"),
         ),
     },
     "lagmon": {
@@ -378,12 +378,28 @@ def _edit_distance(a: str, b: str) -> int:
     return prev[-1]
 
 
+def _fold_contains(a: str, b: str) -> bool:
+    """Bir fold ikkinchisida bormi — qisqa/bo‘sh tokenlar yolg‘onmos kelmasin.
+
+    Masalan: fold('iy')='i' ⊂ 'sabzi'; kirill fold='' ⊂ hammasi; 'non' ⊂ 'noxat'.
+    """
+    if not a or not b:
+        return False
+    if a == b:
+        return len(a) >= 3
+    if a in b:
+        return len(a) >= 4
+    if b in a:
+        return len(b) >= 4
+    return False
+
+
 def _tokens_fuzzy_match(query_tok: str, name_tok: str) -> bool:
     q = _fold_token(query_tok)
     n = _fold_token(name_tok)
     if len(q) < 3 or len(n) < 3:
-        return q == n and len(q) >= 2
-    if q in n or n in q:
+        return q == n and len(q) >= 3
+    if _fold_contains(q, n):
         return True
     # qisqa tokenlar — 1 xato; uzun — 2 xato
     limit = 1 if min(len(q), len(n)) <= 5 else 2
@@ -396,8 +412,11 @@ def _query_matches_name(query: str, name: str) -> int:
     n = _norm(name)
     if not q:
         return 0
-    if q in n:
+    # Butun so‘rov — so‘z chegarasi bilan (sabzi ≠ sun'iy bezak…)
+    if re.search(rf"(?<!\w){re.escape(q)}(?!\w)", n):
         return 100
+    if len(q) >= 4 and q in n:
+        return 90
     q_toks = [t for t in re.split(r"\W+", q) if len(t) >= 2 and t not in _STOP]
     n_toks = [t for t in re.split(r"\W+", n) if len(t) >= 2]
     if not q_toks:
@@ -406,13 +425,17 @@ def _query_matches_name(query: str, name: str) -> int:
     for qt in q_toks:
         if any(_tokens_fuzzy_match(qt, nt) for nt in n_toks):
             matched += 1
-        elif any(_fold_token(qt) in _fold_token(nt) or _fold_token(nt) in _fold_token(qt) for nt in n_toks):
+        elif any(
+            _fold_contains(_fold_token(qt), _fold_token(nt)) for nt in n_toks
+        ):
             matched += 1
     if matched == 0:
         # butun so‘rov vs butun nom (hajmsiz)
         qb = _fold_token(re.sub(r"\d+(?:\.\d+)?\s*(kg|g|l|ml)\b", "", q))
         nb = _fold_token(_base_name(name) if "(" not in name else name)
-        if qb and nb and (qb in nb or nb in qb or _edit_distance(qb, nb) <= 2):
+        if qb and nb and len(qb) >= 3 and (
+            _fold_contains(qb, nb) or _edit_distance(qb, nb) <= 2
+        ):
             return 40
         return 0
     # barcha muhim tokenlar topilsa — yuqori ball
@@ -2089,13 +2112,83 @@ def _wants_recipe_add(user_text: str) -> bool:
     )
 
 
+# Retsept: ingredient → nomda bo‘lishi shart bo‘lgan ildizlar
+_RECIPE_MUST: dict[str, tuple[str, ...]] = {
+    "guruch": ("guruch", "рис", "rice"),
+    "yog": ("yog", "moy", "масло", "oil"),
+    "yogi": ("yog", "moy", "масло", "oil"),
+    "moy": ("yog", "moy", "масло", "oil"),
+    "sariyog": ("sariyog", "sari yog", "сливоч", "butter"),
+    "sabzi": ("sabzi", "морков", "carrot"),
+    "piyoz": ("piyoz", "лук", "onion", "пиёз"),
+    "noxat": ("noxat", "noxot", "no‘xat", "горох", "peas", "нут"),
+    "ziravor": ("ziravor", "zira", "kimyon", "зира", "приправ", "spice"),
+    "zira": ("zira", "kimyon", "зира"),
+    "gosht": ("gosht", "мясо", "mol ", "molg", "qoy", "tovuq", "farsh", "joja", "govaz"),
+    "kartoshka": ("kartoshka", "картош", "potato"),
+    "pomidor": ("pomidor", "томат", "tomato"),
+    "qalampir": ("qalampir", "перец", "pepper", "chili"),
+    "makaron": ("makaron", "pasta", "spagetti", "noodle", "lagmon", "lag'mon"),
+    "un": ("un ", " un", "мука", "flour", "un)"),
+    "non": ("non", "хлеб", "bread", "bulka", "lavash"),
+    "tuxum": ("tuxum", "яйц", "egg"),
+    "sut": ("sut", "молоко", "milk"),
+    "choy": ("choy", "чай", "tea"),
+    "shakar": ("shakar", "сахар", "sugar"),
+    "mayonez": ("mayonez", "майонез", "mayo"),
+    "pechenye": ("pechen", "печенье", "cookie", "biscuit"),
+}
+
+
+def _recipe_name_ok(query: str, name: str) -> bool:
+    n = _norm(name)
+    n_flat = (
+        n.replace("'", "")
+        .replace("‘", "")
+        .replace("’", "")
+        .replace("`", "")
+        .replace(" ", "")
+    )
+    # Kosmetika / bezak — ovqat emas
+    junk = (
+        "bezak",
+        "soch",
+        "boyoq",
+        "shampun",
+        "sovun",
+        "pampers",
+        "podguz",
+        "suniy",
+        "oyinchoq",
+    )
+    if any(j in n_flat for j in junk):
+        return False
+    # «gul» yolg‘iz (sabzi emas)
+    if "gul" in n_flat and "sabzi" not in n_flat:
+        return False
+    q = (
+        _norm(query)
+        .replace("'", "")
+        .replace("‘", "")
+        .replace("’", "")
+        .replace("`", "")
+    )
+    must = _RECIPE_MUST.get(q)
+    if not must:
+        return True
+    n_check = _norm(name).replace("'", "").replace("‘", "").replace("’", "")
+    return any(m.replace("'", "") in n_check or m in n for m in must)
+
+
 def _recipe_pick_product(query: str, seen: set[int]):
-    """Retsept ingredienti — aniqroq tanlov (kolbasa ≠ go‘sht)."""
-    q = _norm(query).replace("'", "").replace("`", "")
+    """Retsept ingredienti — aniqroq tanlov (kolbasa ≠ go‘sht, gul ≠ sabzi)."""
+    q = _norm(query).replace("'", "").replace("`", "").replace("‘", "").replace("’", "")
     # go'sht → yaxlit token
     q_search = query
     if q in {"gosht", "goshti"} or "gosht" in q:
         q_search = "gosht"
+    if q in {"yog", "yogi", "moy"}:
+        q_search = "yog"
 
     meat_query = q in {"gosht", "goshti"} or q.startswith("gosht")
     oil_query = q in {"yog", "yogi", "moy", "sariyog"}
@@ -2130,7 +2223,7 @@ def _recipe_pick_product(query: str, seen: set[int]):
     best = _best_product(q_search)
     if best:
         candidates.append(best)
-    candidates.extend(find_products(q_search, limit=8))
+    candidates.extend(find_products(q_search, limit=12))
 
     ranked: list[tuple[int, Any]] = []
     for p in candidates:
@@ -2138,16 +2231,22 @@ def _recipe_pick_product(query: str, seen: set[int]):
         if pid in seen:
             continue
         name = _norm(str(p["name"]))
+        if not _recipe_name_ok(query, str(p["name"])):
+            continue
         if meat_query and any(x in name for x in exclude_meat):
             continue
         if meat_query and not any(x in name for x in prefer_meat):
             continue
         if oil_query and any(x in name for x in exclude_meat):
             continue
+        if oil_query and not any(
+            x in name.replace("'", "") for x in ("yog", "moy", "масло", "oil")
+        ):
+            continue
         score = _query_matches_name(q_search, str(p["name"]))
         if meat_query and "gosht" in name.replace("'", ""):
             score += 30
-        if score > 0:
+        if score >= 40:
             ranked.append((score, p))
 
     if not ranked:
