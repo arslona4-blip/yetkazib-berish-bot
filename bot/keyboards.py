@@ -751,11 +751,6 @@ def admin_products_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
-                    "🤖 AI / rasm bilan qo‘shish", callback_data="admin_prod:ai_add"
-                )
-            ],
-            [
-                InlineKeyboardButton(
                     "🗂 Toifalar", callback_data="admin_prod:cats"
                 )
             ],
