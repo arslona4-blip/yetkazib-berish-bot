@@ -10,14 +10,22 @@ from datetime import datetime
 from typing import Any
 
 from bot.config import (
+    CARD_HOLDER,
+    CARD_NUMBER,
     DELIVERY_FEE_HIGH as DELIVERY_FEE,
     MIN_ORDER_AMOUNT,
     OPENAI_API_KEY,
     OPENAI_BASE_URL,
     OPENAI_MODEL,
+    ORDER_STATUS_LABELS,
+    SHOP_ADDRESS,
     SHOP_HOURS,
     SHOP_NAME,
     SHOP_PHONE,
+    card_payment_enabled,
+    delivery_rates_html,
+    delivery_rates_plain,
+    online_payment_enabled,
 )
 from bot import database as db
 
@@ -1902,14 +1910,120 @@ def try_quick_add(user_id: int, user_text: str) -> str | None:
     )
 
 
+def _payment_faq_html() -> str:
+    lines = ["<b>To‘lov usullari</b>", "💵 Naqd — yetkazib berganda"]
+    if card_payment_enabled():
+        holder = CARD_HOLDER or SHOP_NAME
+        lines.append(f"💳 Karta: <code>{CARD_NUMBER}</code> ({holder})")
+    if online_payment_enabled():
+        lines.append("📱 Telegram onlayn to‘lov")
+    lines.append("Buyurtma berishda usulni tanlaysiz.")
+    return "\n".join(lines)
+
+
+def _order_assistant_reply(user_id: int, user_text: str) -> str | None:
+    """Buyurtma holati va oxirgisini takrorlash (kam qolgan tovar yo‘q)."""
+    text = _norm(user_text)
+    if not text:
+        return None
+
+    reorder_keys = (
+        "takror",
+        "takrorla",
+        "qayta buyurtma",
+        "yana buyurtma",
+        "oxirgi buyurtma",
+        "oldingi buyurtma",
+        "shu buyurtmani",
+        "qayta zakaz",
+        "reorder",
+        "yanayam ol",
+    )
+    if any(k in text for k in reorder_keys):
+        orders = db.get_user_orders(user_id, limit=8)
+        order = next((o for o in orders if o["status"] != "cancelled"), None)
+        if not order:
+            return (
+                "Hali takrorlash uchun buyurtma yo‘q.\n"
+                "Mahsulot yozing: <i>guruch 2kg, cola 1.5l</i>"
+            )
+        added = db.refill_cart_from_order(user_id, int(order["id"]))
+        if added <= 0:
+            return (
+                f"#{order['id']} dagi mahsulotlar hozir katalogda topilmadi.\n"
+                "Katalogdan qayta tanlang."
+            )
+        total = db.get_cart_totals(user_id)[1]
+        return (
+            f"🔁 <b>#{order['id']}</b> buyurtma savatga yuklandi "
+            f"({added} tur).\n"
+            f"Savat: <b>{money(total)}</b>\n\n"
+            "Tekshirib <b>🛒 Savatcha</b> → Buyurtma berish."
+        )
+
+    status_keys = (
+        "buyurtma holat",
+        "holatim",
+        "zakazim",
+        "buyurtmam",
+        "mening buyurtma",
+        "buyurtma qayerda",
+        "qayerda buyurtma",
+        "buyurtmam qayerda",
+        "yetkazilyapti",
+        "kuryer qayerda",
+        "order status",
+        "statusim",
+    )
+    wants_status = any(k in text for k in status_keys) or (
+        ("qayerda" in text or "holat" in text or "status" in text)
+        and any(k in text for k in ("buyurtma", "zakaz", "order"))
+    ) or text in {"holat", "status", "zakaz"}
+    if not wants_status:
+        return None
+
+    orders = db.get_user_orders(user_id, limit=5)
+    if not orders:
+        return (
+            "Hali buyurtmangiz yo‘q.\n"
+            "Yozing: <i>guruch 2kg</i> yoki <b>🛍 Katalog</b>dan tanlang."
+        )
+    active = {"new", "accepted", "in_delivery"}
+    current = next((o for o in orders if o["status"] in active), None)
+    row = current or orders[0]
+    status = ORDER_STATUS_LABELS.get(row["status"], row["status"])
+    slot = row["delivery_slot"] if "delivery_slot" in row.keys() else None
+    addr = (row["delivery_address"] or "—").strip()
+    lines = [
+        f"📦 <b>Buyurtma #{row['id']}</b>",
+        f"Holat: <b>{status}</b>",
+        f"💰 {money(int(row['price']))}",
+    ]
+    if slot:
+        lines.append(f"🕒 {slot}")
+    if addr and addr != "Lokatsiya":
+        lines.append(f"📍 {addr[:120]}")
+    if current is None and row["status"] not in active:
+        lines.append("")
+        lines.append("Faol buyurtma yo‘q — yuqorida oxirgisi.")
+    lines.append("")
+    lines.append(
+        "Takrorlash: <i>oxirgi buyurtmani takrorla</i>\n"
+        "Barcha: <b>📋 Mening buyurtmalarim</b>"
+    )
+    return "\n".join(lines)
+
+
 def _faq_reply(user_text: str) -> str | None:
     text = _norm(user_text)
     if any(w in text for w in ("salom", "assalom", "hello", "hi", "hayrli")):
         return (
-            f"Assalomu alaykum! {SHOP_NAME} xizmatidaman.\n"
+            f"Assalomu alaykum! Men <b>{SHOP_NAME}</b> AI sotuvchisiman.\n"
             f"⏰ {SHOP_HOURS} · 📞 {SHOP_PHONE}\n\n"
-            "Nima kerak? Masalan:\n"
-            "<i>guruch 2kg, cola 1.5l x 2, shakar 0.5kg</i>"
+            "Yozing:\n"
+            "• <i>guruch 2kg, cola 1.5l x 2</i> — savatga\n"
+            "• <i>buyurtmam qayerda?</i> — holat\n"
+            "• <i>oxirgisini takrorla</i> — qayta buyurtma"
         )
     if any(w in text for w in ("rahmat", "tashakkur", "spasibo")):
         return "Arzimaydi! Yana kerak bo‘lsa yozing."
@@ -1921,40 +2035,38 @@ def _faq_reply(user_text: str) -> str | None:
             "telefon",
             "aloqa",
             "manzil",
-            "qayerda",
             "soat",
             "ish vaqti",
             "ochiqmi",
         )
-    ):
+    ) or (text == "qayerda" or text.startswith("qayerdasiz")):
         return (
             f"<b>{SHOP_NAME}</b>\n"
+            f"📍 {SHOP_ADDRESS}\n"
             f"📞 {SHOP_PHONE}\n"
             f"⏰ {SHOP_HOURS}\n"
-            f"💳 Minimal: {money(MIN_ORDER_AMOUNT)}\n"
-            f"🚚 Yetkazish: {money(DELIVERY_FEE)}"
+            f"💳 Minimal: {money(MIN_ORDER_AMOUNT)}\n\n"
+            f"{delivery_rates_html()}"
         )
     if any(w in text for w in ("yetkaz", "dostavka", "delivery", "yetkazib")):
         return (
-            f"Yetkazib beramiz.\n"
-            f"🚚 Narxi: <b>{money(DELIVERY_FEE)}</b>\n"
+            f"{delivery_rates_html()}\n"
             f"Minimal buyurtma: <b>{money(MIN_ORDER_AMOUNT)}</b>\n"
-            "Manzilni buyurtmada yozasiz."
+            "Manzilni buyurtmada yozasiz yoki lokatsiya yuborasiz."
         )
-    if any(w in text for w in ("to‘lov", "tolov", "pul", "naqd", "karta", "qanday to")):
-        return (
-            "To‘lov: buyurtma yetkazilganda (odatda naqd).\n"
-            "Batafsil: admin tasdiqlagach xabar beriladi."
-        )
+    if any(w in text for w in ("to‘lov", "tolov", "pul", "naqd", "karta", "qanday to", "click", "payme")):
+        return _payment_faq_html()
     if any(w in text for w in ("minimal", "eng kam", "kamida")):
         return f"Minimal buyurtma: <b>{money(MIN_ORDER_AMOUNT)}</b> (mahsulotlar)."
     if any(w in text for w in ("savat", "cart")):
         return "Savatchani ko‘rish: pastdagi <b>🛒 Savatcha</b> tugmasi."
     if any(w in text for w in ("buyurtma qanday", "qanday buyurtma", "qanday zakaz")):
         return (
-            "1) Mahsulotlarni yozing yoki Katalogdan qo‘shing\n"
+            "1) Yozing: <i>guruch 2kg, shakar 1kg</i> yoki Katalog\n"
             "2) <b>Savatcha</b>ni tekshiring\n"
-            "3) <b>Buyurtma berish</b> — telefon, manzil, ism"
+            "3) <b>Buyurtma berish</b> — telefon, manzil\n\n"
+            "Holat: <i>buyurtmam qayerda?</i>\n"
+            "Takror: <i>oxirgisini takrorla</i>"
         )
     if "soat nechi" in text or text in {"vaqt", "time"}:
         now = datetime.now().strftime("%H:%M")
@@ -1985,17 +2097,18 @@ def _general_reply(user_text: str) -> str:
     if len(text) >= 3 and not text.endswith("?"):
         return (
             f"«<b>{text[:80]}</b>» katalogda topilmadi.\n\n"
-            "Nomini tekshiring yoki <b>Katalog</b>dan qarang.\n"
-            "Admin bo‘lsangiz — <b>➕ Mahsulot</b> bilan qo‘shing.\n\n"
+            "Nomini tekshiring yoki <b>🛍 Katalog</b>dan qarang.\n\n"
             f"📞 {SHOP_PHONE} · ⏰ {SHOP_HOURS}"
         )
     return (
         f"Tushundim: «{text[:120]}»\n\n"
-        f"Men {SHOP_NAME} AI sotuvchisiman — asosan mahsulot, narx va buyurtma bo‘yicha yordam beraman.\n"
+        f"Men {SHOP_NAME} <b>AI sotuvchisiman</b>.\n"
         f"📞 {SHOP_PHONE} · ⏰ {SHOP_HOURS}\n\n"
-        "Agar buyurtma bo‘lsa, shunday yozing:\n"
-        "<i>guruch 2kg, cola 1.5l x 2, shakar 0.5kg</i>\n\n"
-        "Boshqa savolingiz bo‘lsa — yozing, imkon qadar javob beraman."
+        "Yozing:\n"
+        "• <i>guruch 2kg, cola 1.5l x 2</i>\n"
+        "• <i>buyurtmam qayerda?</i>\n"
+        "• <i>oxirgisini takrorla</i>\n"
+        "• <i>yetkazib berish narxi</i> / <i>to‘lov</i>"
     )
 
 
@@ -2058,20 +2171,19 @@ def _openai_reply(user_id: int, user_text: str) -> str | None:
 
     history = db.get_ai_memory(user_id)
     system = (
-        f"Sen «{SHOP_NAME}» do‘konining professional o‘zbek AI yordamchisisan.\n"
-        f"Telefon: {SHOP_PHONE}. Ish vaqti: {SHOP_HOURS}. "
-        f"Minimal: {MIN_ORDER_AMOUNT}. Yetkazish: {DELIVERY_FEE}.\n"
-        "Har qanday savolga odobli va foydali javob ber (do‘kon, hayot, umumiy).\n"
+        f"Sen «{SHOP_NAME}» do‘konining professional o‘zbek AI sotuvchisisan.\n"
+        f"Telefon: {SHOP_PHONE}. Manzil: {SHOP_ADDRESS}. Ish vaqti: {SHOP_HOURS}.\n"
+        f"Minimal buyurtma: {MIN_ORDER_AMOUNT} so‘m.\n"
+        f"{delivery_rates_plain()}\n"
+        "Buyurtma holati / takrorlash so‘rovlarini qisqa javobla; "
+        "batafsil holatni tizim alohida beradi — ADD qilma.\n"
         "Do‘kon savollarida katalogdan foydalan. Yo‘q mahsulotni o‘ylab topma.\n"
         "Agar mijoz hajmsiz yozsa (masalan «cola», «sut», «guruch») — ADD qilma; "
         "katalogdagi SHU mahsulotning barcha hajm/tur variantlarini (#ID bilan) ko‘rsat "
-        "va tanlashni so‘ra. Bu QOIDА barcha mahsulotlarga tegishli.\n"
-        "Agar mijoz so‘mlik so‘rasa (masalan «guruch 5000 so‘mlik», «shakar 10 minglik») — "
-        "1kg narxidan gramm hisobla va tushuntir; ADD qilma (tizim o‘zi qo‘shadi).\n"
-        "Agar mijoz bir nechta mahsulot so‘rasa (masalan: guruch 2kg, cola 1.5l x2), "
-        "mos mahsulotlarni tanla va HAR BIR uchun alohida qator yoz:\n"
+        "va tanlashni so‘ra.\n"
+        "Agar mijoz so‘mlik so‘rasa — gramm hisobla; ADD qilma (tizim o‘zi qo‘shadi).\n"
+        "Bir nechta mahsulot so‘ralsa HAR BIR uchun:\n"
         "ADD:#ID:QTY\n"
-        "Masalan: ADD:#1:2\n"
         "Keyin odamga tushunarli xulosa yoz.\n\n"
         f"KATALOG:\n{catalog_text()}"
     )
@@ -2111,6 +2223,11 @@ def _openai_reply(user_id: int, user_text: str) -> str | None:
 
 
 def reply_to_user(user_id: int, user_text: str) -> tuple[str, list[Any]]:
+    # Buyurtma holati / takrorlash — mahsulot qidiruvidan oldin
+    order_help = _order_assistant_reply(user_id, user_text)
+    if order_help:
+        return order_help, []
+
     # So‘mlik / aniq hajm — avval multi; faqat hajmsiz → variantlar
     segments = parse_order_segments(user_text)
     if len(segments) == 1 and "," not in user_text:

@@ -150,7 +150,8 @@ def more_menu_keyboard() -> ReplyKeyboardMarkup:
         ["🔍 Qidiruv", "⭐ Sevimlilar"],
         ["🎁 Bonus", "👥 Ulashish"],
         ["✨ Tavsiyalar", "🔁 Takroriy buyurtmalar"],
-        ["🌐 Til", "ℹ️ Yordam"],
+        ["🤖 AI sotuvchi", "ℹ️ Yordam"],
+        ["🌐 Til"],
         ["⬅️ Asosiy menyu"],
     ]
     shop = shop_reply_button("🛒 Do'kon")

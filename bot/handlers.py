@@ -403,8 +403,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "2️⃣ <b>Savatcha</b> — miqdorni sozlang\n"
         "3️⃣ <b>Buyurtma berish</b> — manzil + vaqt\n"
         "4️⃣ Tasdiqlang va to‘lovni tanlang\n\n"
-        "💬 Yoki shu yerga yozing: <i>guruch 2kg</i>, "
-        "<i>cola 1.5l</i>, <i>guruch 20000 somlik</i>\n\n"
+        "💬 <b>AI sotuvchi</b> — shu chatga yozing:\n"
+        "   <i>guruch 2kg</i>, <i>buyurtmam qayerda?</i>, "
+        "<i>oxirgisini takrorla</i>\n\n"
         f"{delivery_rates_html()}\n\n"
         f"{gift_drink_promo_html()}\n\n"
         f"👥 Do‘st taklif qilsangiz — +{REFERRAL_BONUS:,} bonus\n"
@@ -2416,6 +2417,23 @@ async def dispatch_main_menu(
         return True
     if text == "ℹ️ Yordam":
         await help_command(update, context)
+        return True
+    if text == "🤖 AI sotuvchi":
+        await update.message.reply_text(
+            "🤖 <b>AI sotuvchi</b>\n\n"
+            "Shu chatga yozing — men yordam beraman:\n\n"
+            "🛒 <i>guruch 2kg, cola 1.5l x 2</i>\n"
+            "📦 <i>buyurtmam qayerda?</i>\n"
+            "🔁 <i>oxirgisini takrorla</i>\n"
+            "🚚 <i>yetkazib berish narxi</i>\n"
+            "💳 <i>to‘lov</i>\n\n"
+            "Hozir nima kerak — yozing!",
+            parse_mode="HTML",
+            reply_markup=main_menu_keyboard(
+                is_admin(update.effective_user.id),
+                is_courier(update.effective_user.id),
+            ),
+        )
         return True
     if text in {"🌐 Til", "🌐 Язык"}:
         from bot.features_handlers import ask_language
