@@ -39,31 +39,39 @@ def _clean_price(raw: str) -> int | None:
 
 
 def parse_price_phrase(text: str) -> int | None:
-    """«Narhi 3.000 ming», «narxi 15000», «15 ming so'm»."""
+    """Matndan narx (so‘m). Aniq raqamni o‘zgartirmaydi.
+
+    Qoidalar:
+    - «15 ming» / «15ming» → 15000
+    - «3.000 ming» (nuqta = minglik ajratuvchi) → 3000 (qayta *1000 yo‘q)
+    - «70000», «70 000», «70.000», «Narhi 70000» → aynan shu raqam
+    """
     raw = (text or "").strip()
     if not raw:
         return None
-    # 15 ming / 3 ming so'm
+
+    # 1) «N ming» — faqat alohida so‘z «ming»
     m = re.search(
-        r"(\d+(?:[.,]\d+)?)\s*ming(?:\s*(?:so['ʻ’`]?m|sum|som))?",
+        r"(?P<num>\d+(?:[.,]\d+)?)\s*ming\b(?:\s*(?:so['ʻ’`]?m|sum|som))?",
         raw,
         flags=re.I,
     )
     if m:
-        num = m.group(1).replace(",", ".")
-        # «3.000 ming» — nuqta minglik ajratuvchi (3000), qayta *1000 qilinmasin
-        if re.fullmatch(r"\d{1,3}[.,]\d{3}", m.group(1)):
-            return _clean_price(m.group(1))
+        token = m.group("num")
+        # «3.000 ming» / «3,000 ming» → 3000 so‘m (ajratuvchi), *1000 qilinmasin
+        if re.fullmatch(r"\d{1,3}[.,]\d{3}", token):
+            return _clean_price(token)
         try:
-            base = float(num)
+            base = float(token.replace(",", "."))
         except ValueError:
             base = None
         if base is not None:
-            # «15 ming» → 15000; lekin «3000 ming» g‘alati — agar base>=100 bo‘lsa *1000
             if base < 1000:
                 return _clean_price(str(int(round(base * 1000))))
+            # «3000 ming» g‘alatilik — raqamni o‘zi sifatida olamiz
             return _clean_price(str(int(round(base))))
 
+    # 2) «Narhi/narxi …»
     m = re.search(
         r"(?:narx[iı]?|narh[iı]?|цена|price)\s*[:\-]?\s*(\d[\d\s.,]*)",
         raw,
@@ -72,10 +80,65 @@ def parse_price_phrase(text: str) -> int | None:
     if m:
         return _clean_price(m.group(1))
 
-    m = re.search(r"(\d{1,3}(?:[.,\s]\d{3})+|\d{3,})\s*(?:so['ʻ’`]?m|sum|som)?", raw)
-    if m:
-        return _clean_price(m.group(1))
+    # 3) Oxirgi aniq narx (eng ishonchli: «… 70000»)
+    matches = list(
+        re.finditer(
+            r"(\d{1,3}(?:[.,\s]\d{3}){1,}|\d{3,8})(?!\s*ming\b)",
+            raw,
+            flags=re.I,
+        )
+    )
+    if matches:
+        return _clean_price(matches[-1].group(1))
     return None
+
+
+def lock_price_from_text(source_text: str, candidate: int | None = None) -> int | None:
+    """Matndagi raqam — eng yuqori ustunlik; AI nomzodi faqat zaxira."""
+    locked = parse_price_phrase(source_text or "")
+    if locked is not None:
+        return locked
+    if candidate is None:
+        return None
+    try:
+        value = int(candidate)
+    except (TypeError, ValueError):
+        return None
+    if value < 100 or value > 50_000_000:
+        return None
+    return value
+
+
+def merge_product_draft(
+    *,
+    local: dict[str, Any] | None,
+    ai: dict[str, Any] | None,
+    source_text: str = "",
+    default_category_id: int | None = None,
+) -> dict[str, Any] | None:
+    """Local parser narxni qulflaydi; AI faqat nom/toifa to‘ldiradi."""
+    local = local or {}
+    ai = ai or {}
+    name = str(local.get("name") or ai.get("name") or "").strip()
+    name = _strip_trailing_price(name)
+    price = lock_price_from_text(
+        source_text,
+        local.get("price") if local.get("price") is not None else ai.get("price"),
+    )
+    if not name or price is None:
+        return None
+    cat_id = local.get("category_id")
+    if cat_id is None:
+        cat_id = ai.get("category_id")
+    if cat_id is None:
+        cat_id = default_category_id
+    return {
+        "name": name[:120],
+        "price": int(price),
+        "category_id": cat_id,
+        "description": str(local.get("description") or ai.get("description") or "")[:300],
+        "price_locked": bool(parse_price_phrase(source_text or "")),
+    }
 
 
 def _strip_trailing_price(name: str) -> str:
@@ -202,35 +265,38 @@ def extract_product_from_image(
     default_category_id: int | None = None,
 ) -> dict[str, Any] | None:
     """Rasmdagi yozuv / mahsulotdan nom+narx+toifa (OpenAI Vision)."""
-    if not OPENAI_API_KEY or not photo_bytes:
-        return None
-
-    # Avval caption bo‘lsa — tezkor yo‘l
-    if (caption_hint or "").strip():
+    hint = (caption_hint or "").strip()
+    # Matnda aniq narx bo‘lsa — Vision chaqirmasdan local
+    if hint:
         quick = parse_caption_product(
-            caption_hint, categories, default_category_id=default_category_id
+            hint, categories, default_category_id=default_category_id
         )
         if quick and quick.get("price") and quick.get("name"):
+            quick["price_locked"] = True
             return quick
+
+    if not OPENAI_API_KEY or not photo_bytes:
+        return None
 
     cat_lines = []
     for c in categories:
         emoji = (c["emoji"] if "emoji" in c.keys() else "") or ""
         cat_lines.append(f"- id={c['id']}: {emoji} {c['name']}".strip())
     cats_block = "\n".join(cat_lines) if cat_lines else "(toifa yo‘q)"
-    hint = (caption_hint or "").strip()
+    locked_price = parse_price_phrase(hint) if hint else None
     system = (
-        "Sen do‘kon katalogi uchun mahsulot aniqlovchisan. "
-        "Rasmda (yoki izohda) yozilgan mahsulot nomi va narxni o‘qi. "
-        "Narx odatda so‘mda (masalan 70000, 3.000, 15 ming).\n"
-        'Javob faqat JSON: {"name":"...","price":70000,"category_id":1,"description":""}\n'
-        "price — butun son (so‘m). Agar narx ko‘rinmasa — null.\n"
-        "name — qisqa uzbekcha nom (rasmdagi yozuv yoki mahsulot tavsifi).\n"
-        "category_id — pastdagi ro‘yxatdan eng mos; bilmasa null.\n"
-        "REDMI/vaqt belgisi/watermark — e’tiborsiz.\n\n"
+        "Sen professional do‘kon katalog AI agentisan. "
+        "Rasmdan mahsulot nomi va narxni o‘qi.\n"
+        "MUHIM: agar IZOH_HINT yoki rasmdagi yozuvda aniq so‘m raqami bo‘lsa, "
+        "uni O‘ZGARTIRMA (masalan 70000 → 70000, 70 ming emas).\n"
+        "«15 ming» bo‘lsa → 15000. «3.000 ming» (ajratuvchi) → 3000.\n"
+        'JSON: {"name":"...","price":70000,"category_id":1,"description":""}\n'
+        "price — butun so‘m. Ko‘rinmasa null.\n"
+        "REDMI/vaqt/watermark — e’tiborsiz.\n\n"
         f"TOIFALAR:\n{cats_block}\n"
         f"DEFAULT_CATEGORY_ID: {default_category_id}\n"
-        f"IZOH_HINT: {hint or '(yo‘q)'}"
+        f"IZOH_HINT: {hint or '(yo‘q)'}\n"
+        f"LOCKED_PRICE: {locked_price if locked_price is not None else '(yo‘q)'}"
     )
     user_content: list[dict[str, Any]] = [
         {
@@ -274,9 +340,8 @@ def extract_product_from_image(
         if not isinstance(parsed, dict):
             return None
         name = _strip_trailing_price(str(parsed.get("name") or "").strip())
-        price = _clean_price(str(parsed.get("price") or ""))
-        if price is None and hint:
-            price = parse_price_phrase(hint)
+        # Narx: matn/hint ustun — AI o‘zgartira olmaydi
+        price = lock_price_from_text(hint, parsed.get("price"))
         if not name and hint:
             cap = parse_caption_product(
                 hint, categories, default_category_id=default_category_id
@@ -306,6 +371,7 @@ def extract_product_from_image(
             "price": int(price),
             "category_id": category_id,
             "description": str(parsed.get("description") or "")[:300],
+            "price_locked": locked_price is not None,
         }
     except (
         urllib.error.URLError,
@@ -403,10 +469,12 @@ def parse_products_openai(
         cat_lines.append(f"- id={c['id']}: {emoji} {c['name']}".strip())
     cats_block = "\n".join(cat_lines) if cat_lines else "(toifa yo‘q)"
     system = (
-        "Sen do‘kon admini uchun mahsulot parserisan. "
+        "Sen professional do‘kon admini uchun mahsulot parserisan. "
         "Berilgan matndan mahsulotlar ro‘yxatini JSON qilib chiqar.\n"
         'Format: {"items":[{"name":"...","price":18000,"category_id":1,"description":""}]}\n'
-        "price — butun so‘m (raqam). name — qisqa mahsulot nomi (hajm bilan, masalan Guruch 1kg).\n"
+        "price — butun so‘m. Matndagi raqamni O‘ZGARTIRMA "
+        "(70000→70000; 15 ming→15000; 3.000 ming→3000).\n"
+        "name — qisqa mahsulot nomi (hajm bilan, masalan Guruch 1kg).\n"
         "category_id — pastdagi ro‘yxatdan; mos kelmasa null.\n"
         "Faqat JSON qaytar, boshqa matn yo‘q.\n\n"
         f"TOIFALAR:\n{cats_block}\n"
@@ -482,16 +550,47 @@ def parse_products_openai(
 def parse_product_drafts(
     text: str, categories: list[Any], *, default_category_id: int | None = None
 ) -> tuple[list[dict[str, Any]], str]:
-    """Qaytaradi: (items, manba: 'ai'|'local')."""
-    ai_items = parse_products_openai(
-        text, categories, default_category_id=default_category_id
-    )
-    if ai_items:
-        return ai_items, "ai"
+    """Qaytaradi: (items, manba: 'ai'|'local').
+
+    Avvalo local parser — narxni buzmaslik uchun.
+    AI faqat local hech narsa topmasa.
+    """
     local = parse_products_local(
         text, categories, default_category_id=default_category_id
     )
-    return local, "local"
+    if local:
+        return local, "local"
+
+    ai_items = parse_products_openai(
+        text, categories, default_category_id=default_category_id
+    )
+    if not ai_items:
+        return [], "local"
+
+    # AI narxlarini matndagi raqam bilan qayta qulflash
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    for item in ai_items:
+        name_l = str(item.get("name") or "").lower()
+        locked = None
+        for line in lines:
+            if name_l and (
+                name_l[:12] in line.lower()
+                or line.lower()[:12] in name_l
+                or any(
+                    w in line.lower()
+                    for w in name_l.split()[:2]
+                    if len(w) >= 3
+                )
+            ):
+                locked = parse_price_phrase(line)
+                if locked is not None:
+                    break
+        if locked is None:
+            locked = parse_price_phrase(text)
+        if locked is not None:
+            item["price"] = locked
+            item["price_locked"] = True
+    return ai_items, "ai"
 
 
 def format_draft_preview(items: list[dict[str, Any]], categories: list[Any]) -> str:
