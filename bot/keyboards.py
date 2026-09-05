@@ -85,6 +85,7 @@ def is_main_menu_text(text: str) -> bool:
         "🔍 Qidiruv",
         "✨ Tavsiyalar",
         "🔁 Takroriy buyurtmalar",
+        "🤖 AI sotuvchi",
     }
 
 

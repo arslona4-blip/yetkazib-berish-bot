@@ -2695,7 +2695,13 @@ async def admin_category_awaiting_text(
 async def admin_awaiting_text(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
-    """ConversationHandler ushlamasa — admin matnini qabul qilish (zaxira)."""
+    """ConversationHandler ushlamasa — admin matnini qabul qilish (zaxira).
+
+    Faqat haqiqatan admin oqimi bo‘lsa ApplicationHandlerStop — aks holda
+    keyingi guruhdagi shop_ai_message (retsept, qidiruv) ishlasin.
+    """
+    from telegram.ext import ApplicationHandlerStop
+
     if not update.message or not is_admin(update.effective_user.id):
         return
 
@@ -2703,15 +2709,12 @@ async def admin_awaiting_text(
     if is_main_menu_text(text):
         _clear_admin_draft(context)
         await dispatch_main_menu(update, context)
-        return
+        raise ApplicationHandlerStop
 
     mode = context.user_data.get("awaiting_admin")
     if not mode:
-        draft = context.user_data.get("admin_product") or {}
-        if draft.get("name") and draft.get("price") is not None:
-            mode = "product_stock"
-        else:
-            return
+        # Eski draft bilan «osh uchun» ni yutmaslik — faqat aniq awaiting_admin
+        return
 
     if mode == "product_name":
         await admin_product_name(update, context)
@@ -2728,6 +2731,7 @@ async def admin_awaiting_text(
         await _save_new_product(update, context)
     else:
         return
+    raise ApplicationHandlerStop
 
 
 async def admin_size_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:

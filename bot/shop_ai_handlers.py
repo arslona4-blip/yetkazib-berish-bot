@@ -39,10 +39,14 @@ async def shop_ai_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not text:
         return
     uid = update.effective_user.id
-    if uid in ADMIN_IDS and (
-        context.user_data.get("awaiting_admin")
-        or "admin_product" in context.user_data
-    ):
+    # Faqat admin HAQIQATAN matn kutayotganda o‘tkazib yuborish.
+    # Eski admin_product draft retsept/AI ni yutmasin.
+    if uid in ADMIN_IDS and context.user_data.get("awaiting_admin"):
+        return
+    if text == "🤖 AI sotuvchi":
+        from bot.handlers import dispatch_main_menu
+
+        await dispatch_main_menu(update, context)
         return
     answer, products = reply_to_user(uid, text)
     kb = shop_ai_results_keyboard(products) if products else None

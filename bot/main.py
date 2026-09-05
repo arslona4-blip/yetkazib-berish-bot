@@ -255,8 +255,11 @@ def main() -> None:
     app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, admin_awaiting_text)
     )
+    # group=1: admin_awaiting_text (group 0) yutmasa — AI/retsept ishlaydi.
+    # Admin oqimi ApplicationHandlerStop bilan to‘xtatiladi.
     app.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, shop_ai_message)
+        MessageHandler(filters.TEXT & ~filters.COMMAND, shop_ai_message),
+        group=1,
     )
 
     print("Bot ishga tushdi...")
