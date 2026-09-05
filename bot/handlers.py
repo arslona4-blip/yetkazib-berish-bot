@@ -2005,12 +2005,11 @@ async def admin_product_callback(
         ) or "• (toifa yo‘q — avval toifa yarating)"
         await query.edit_message_text("🤖 AI / rasm bilan mahsulot qo‘shish")
         await query.message.reply_text(
-            "📦 <b>2 xil usul:</b>\n\n"
-            "1️⃣ <b>Rasm + izoh</b> (Telegramdan forward ham bo‘ladi):\n"
-            "Rasm yuboring, izohga yozing:\n"
-            "<code>Daftar 36 varoqli\n"
-            "Narhi 3000</code>\n\n"
-            "AI rasmni reklamabop qiladi, narxni yozadi va katalogga qo‘shadi.\n\n"
+            "📦 <b>AI agent — rasm yoki matn</b>\n\n"
+            "1️⃣ <b>Rasm</b> (forward ham bo‘ladi):\n"
+            "• Izohga yozing: <code>Sun'iy bezak gul 70000</code>\n"
+            "• Yoki nom/narx rasmning o‘zida yozilgan bo‘lsa — shunchaki rasm yuboring.\n"
+            "AI o‘qiydi, reklamabop qiladi va toifaga qo‘shadi.\n\n"
             "2️⃣ <b>Matn ro‘yxati</b>:\n"
             "<code>Guruch 1kg 18000\n"
             "Shakar 1kg - 14000</code>\n\n"
@@ -2895,7 +2894,7 @@ async def admin_edit_desc(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def admin_product_ai_photo(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> int:
-    """Rasm + caption → reklamabop kartochka → mahsulot."""
+    """Rasm (+ izoh yoki rasmdagi yozuv) → reklamabop kartochka → mahsulot."""
     left = await exit_admin_if_menu(update, context)
     if left is not None:
         return left
@@ -2912,20 +2911,9 @@ async def admin_product_ai_photo(
         await msg.reply_text("Rasm yuboring.", reply_markup=cancel_keyboard())
         return ProductAdminState.AI_TEXT
 
-    caption = (msg.caption or "").strip()
-    if not caption:
-        await msg.reply_text(
-            "Rasmga izoh (caption) yozing.\n"
-            "Masalan:\n"
-            "<code>Daftar 36 varoqli\nNarhi 3000</code>",
-            parse_mode="HTML",
-            reply_markup=cancel_keyboard(),
-        )
-        return ProductAdminState.AI_TEXT
+    caption = (msg.caption or msg.text or "").strip()
 
-    from bot.ai_product_agent import parse_caption_product
-    from bot.product_ad_image import make_product_ad_card
-    from bot.webapp import PHOTOS_DIR, cache_product_photo
+    from bot.ai_product_agent import extract_product_from_image, parse_caption_product
 
     draft = context.user_data.get("admin_product") or {}
     default_cid = draft.get("category_id")
@@ -2935,105 +2923,152 @@ async def admin_product_ai_photo(
         default_cid = None
 
     categories = get_categories(active_only=False)
-    item = parse_caption_product(
-        caption, categories, default_category_id=default_cid
-    )
-    if not item or not item.get("price"):
-        await msg.reply_text(
-            "❌ Nom yoki narx topilmadi.\n"
-            "Izohga yozing:\n"
-            "<code>Mahsulot nomi\nNarhi 3000</code>",
-            parse_mode="HTML",
-            reply_markup=cancel_keyboard(),
-        )
-        return ProductAdminState.AI_TEXT
-
-    status = await msg.reply_text("⏳ Rasm reklamabop qilinmoqda…")
+    status = await msg.reply_text("⏳ Rasm o‘qilmoqda, reklamabop qilinmoqda…")
     try:
-        import io
-
         tg_file = await photo_file.get_file()
         raw = bytes(await tg_file.download_as_bytearray())
-        ad_bytes = make_product_ad_card(
-            raw, name=str(item["name"]), price=int(item["price"])
-        )
-        # Qayta yuklash — yangi file_id
-        sent = await context.bot.send_photo(
-            chat_id=msg.chat_id,
-            photo=InputFile(io.BytesIO(ad_bytes), filename="product_ad.jpg"),
-            caption=(
-                f"✨ Reklama kartochka\n"
-                f"<b>{item['name']}</b>\n"
-                f"💰 {int(item['price']):,} so‘m".replace(",", " ")
-            ),
-            parse_mode="HTML",
-        )
-        file_id = sent.photo[-1].file_id
-        pid = create_product(
-            str(item["name"]),
-            int(item["price"]),
-            str(item.get("description") or ""),
-            item.get("category_id"),
-            barcode=None,
-            stock=100,
-        )
-        set_product_image(pid, file_id)
-        try:
-            PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
-            cache_path = PHOTOS_DIR / f"{pid}.jpg"
-            cache_path.write_bytes(ad_bytes)
-        except Exception:
-            try:
-                await cache_product_photo(pid, file_id)
-            except Exception:
-                pass
 
-        cat = get_category(item["category_id"]) if item.get("category_id") else None
-        context.user_data.pop("admin_product", None)
-        context.user_data.pop("awaiting_admin", None)
-        try:
-            await status.delete()
-        except Exception:
-            pass
-        await msg.reply_text(
-            f"✅ Katalogga qo‘shildi!\n"
-            f"#{pid} <b>{item['name']}</b>\n"
-            f"💰 {int(item['price']):,} so‘m\n"
-            f"🗂 {category_label(cat) if cat else '— (toifani keyin belgilang)'}"
-            .replace(",", " "),
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(
-                [
-                    [
-                        InlineKeyboardButton(
-                            "🗂 Toifa o‘zgartirish",
-                            callback_data=f"admin_prod:cat:{pid}",
-                        ),
-                        InlineKeyboardButton(
-                            "✏️ Tahrirlash",
-                            callback_data=f"admin_prod:item:{pid}",
-                        ),
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "📷 Yana rasm",
-                            callback_data="admin_prod:ai_add",
-                        )
-                    ],
-                ]
-            ),
+        item = None
+        if caption:
+            item = parse_caption_product(
+                caption, categories, default_category_id=default_cid
+            )
+        if not item or not item.get("price"):
+            item = extract_product_from_image(
+                raw,
+                categories,
+                caption_hint=caption,
+                default_category_id=default_cid,
+            )
+
+        if not item or not item.get("price"):
+            # Keyingi matn xabari bilan birlashtirish
+            context.user_data["ai_pending_photo"] = raw
+            context.user_data["admin_product"] = {
+                "mode": "ai_bulk",
+                "category_id": default_cid,
+            }
+            try:
+                await status.edit_text(
+                    "❌ Nom yoki narx topilmadi.\n"
+                    "Rasm saqlandi — endi yozing:\n"
+                    "<code>Sun'iy bezak gul 70000</code>",
+                    parse_mode="HTML",
+                )
+            except Exception:
+                await msg.reply_text(
+                    "❌ Nom yoki narx topilmadi.\n"
+                    "Yozing: <code>Mahsulot nomi 70000</code>",
+                    parse_mode="HTML",
+                    reply_markup=cancel_keyboard(),
+                )
+            return ProductAdminState.AI_TEXT
+
+        context.user_data.pop("ai_pending_photo", None)
+        return await _finish_ai_photo_product(
+            update,
+            context,
+            raw=raw,
+            item=item,
+            status_msg=status,
         )
-        await msg.reply_text(
-            "Menyu:",
-            reply_markup=main_menu_keyboard(is_admin(msg.from_user.id)),
-        )
-        return ConversationHandler.END
     except Exception as exc:
         try:
             await status.edit_text(f"❌ Xato: {exc}")
         except Exception:
             await msg.reply_text(f"❌ Xato: {exc}")
         return ProductAdminState.AI_TEXT
+
+
+async def _finish_ai_photo_product(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    raw: bytes,
+    item: dict,
+    status_msg=None,
+) -> int:
+    """Reklama kartochka + create_product."""
+    import io
+
+    from bot.product_ad_image import make_product_ad_card
+    from bot.webapp import PHOTOS_DIR, cache_product_photo
+
+    msg = update.effective_message
+    ad_bytes = make_product_ad_card(
+        raw, name=str(item["name"]), price=int(item["price"])
+    )
+    sent = await context.bot.send_photo(
+        chat_id=msg.chat_id,
+        photo=InputFile(io.BytesIO(ad_bytes), filename="product_ad.jpg"),
+        caption=(
+            f"✨ Reklama kartochka\n"
+            f"<b>{item['name']}</b>\n"
+            f"💰 {int(item['price']):,} so‘m".replace(",", " ")
+        ),
+        parse_mode="HTML",
+    )
+    file_id = sent.photo[-1].file_id
+    pid = create_product(
+        str(item["name"]),
+        int(item["price"]),
+        str(item.get("description") or ""),
+        item.get("category_id"),
+        barcode=None,
+        stock=100,
+    )
+    set_product_image(pid, file_id)
+    try:
+        PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
+        (PHOTOS_DIR / f"{pid}.jpg").write_bytes(ad_bytes)
+    except Exception:
+        try:
+            await cache_product_photo(pid, file_id)
+        except Exception:
+            pass
+
+    cat = get_category(item["category_id"]) if item.get("category_id") else None
+    context.user_data.pop("admin_product", None)
+    context.user_data.pop("awaiting_admin", None)
+    context.user_data.pop("ai_pending_photo", None)
+    if status_msg is not None:
+        try:
+            await status_msg.delete()
+        except Exception:
+            pass
+    await msg.reply_text(
+        f"✅ Katalogga qo‘shildi!\n"
+        f"#{pid} <b>{item['name']}</b>\n"
+        f"💰 {int(item['price']):,} so‘m\n"
+        f"🗂 {category_label(cat) if cat else '— (toifani keyin belgilang)'}"
+        .replace(",", " "),
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "🗂 Toifa o‘zgartirish",
+                        callback_data=f"admin_prod:cat:{pid}",
+                    ),
+                    InlineKeyboardButton(
+                        "✏️ Tahrirlash",
+                        callback_data=f"admin_prod:item:{pid}",
+                    ),
+                ],
+                [
+                    InlineKeyboardButton(
+                        "📷 Yana rasm",
+                        callback_data="admin_prod:ai_add",
+                    )
+                ],
+            ]
+        ),
+    )
+    await msg.reply_text(
+        "Menyu:",
+        reply_markup=main_menu_keyboard(is_admin(msg.from_user.id)),
+    )
+    return ConversationHandler.END
 
 
 async def admin_product_ai_text(
@@ -3044,7 +3079,51 @@ async def admin_product_ai_text(
         return left
     text = (update.message.text or "").strip()
     if _is_cancel_text(text):
+        context.user_data.pop("ai_pending_photo", None)
         return await cancel_product_admin(update, context)
+
+    # Oldingi rasm + keyin yuborilgan nom/narx
+    pending = context.user_data.get("ai_pending_photo")
+    if isinstance(pending, (bytes, bytearray)) and pending:
+        from bot.ai_product_agent import extract_product_from_image, parse_caption_product
+
+        draft = context.user_data.get("admin_product") or {}
+        default_cid = draft.get("category_id")
+        try:
+            default_cid = int(default_cid) if default_cid not in (None, "") else None
+        except (TypeError, ValueError):
+            default_cid = None
+        categories = get_categories(active_only=False)
+        item = parse_caption_product(
+            text, categories, default_category_id=default_cid
+        )
+        if not item or not item.get("price"):
+            item = extract_product_from_image(
+                bytes(pending),
+                categories,
+                caption_hint=text,
+                default_category_id=default_cid,
+            )
+        if not item or not item.get("price"):
+            await update.message.reply_text(
+                "❌ Narx topilmadi. Masalan: <code>Sun'iy bezak gul 70000</code>",
+                parse_mode="HTML",
+                reply_markup=cancel_keyboard(),
+            )
+            return ProductAdminState.AI_TEXT
+        status = await update.message.reply_text("⏳ Reklamabop qilinmoqda…")
+        try:
+            return await _finish_ai_photo_product(
+                update,
+                context,
+                raw=bytes(pending),
+                item=item,
+                status_msg=status,
+            )
+        except Exception as exc:
+            await update.message.reply_text(f"❌ Xato: {exc}")
+            return ProductAdminState.AI_TEXT
+
     if len(text) < 3:
         await update.message.reply_text(
             "Matn juda qisqa. Masalan: <code>Guruch 1kg 18000</code>",

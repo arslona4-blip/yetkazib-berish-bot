@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import io
 import json
 import logging
 import re
@@ -76,10 +78,41 @@ def parse_price_phrase(text: str) -> int | None:
     return None
 
 
+def _strip_trailing_price(name: str) -> str:
+    """«Sun'iy bezak gul 70000» → «Sun'iy bezak gul»."""
+    text = (name or "").strip()
+    text = re.sub(
+        r"\s*(?:narx[iı]?|narh[iı]?|цена|price)\s*[:\-]?\s*\d[\d\s.,]*\s*"
+        r"(?:ming)?\s*(?:so['ʻ’`]?m|sum|som)?\s*$",
+        "",
+        text,
+        flags=re.I,
+    )
+    text = re.sub(
+        r"\s+\d{1,3}(?:[.,\s]\d{3})+\s*(?:so['ʻ’`]?m|sum|som)?\s*$",
+        "",
+        text,
+        flags=re.I,
+    )
+    text = re.sub(
+        r"\s+\d{3,8}\s*(?:so['ʻ’`]?m|sum|som)?\s*$",
+        "",
+        text,
+        flags=re.I,
+    )
+    text = re.sub(
+        r"\s+\d+(?:[.,]\d+)?\s*ming(?:\s*(?:so['ʻ’`]?m|sum|som))?\s*$",
+        "",
+        text,
+        flags=re.I,
+    )
+    return text.strip(" -–—:|")
+
+
 def parse_caption_product(
     caption: str, categories: list[Any], *, default_category_id: int | None = None
 ) -> dict[str, Any] | None:
-    """Rasm caption: «Daftar 36 varoqli\\nNarhi 3.000 ming»."""
+    """Rasm caption: «Daftar 36 varoqli\\nNarhi 3.000 ming» yoki «Sun'iy gul 70000»."""
     text = (caption or "").strip()
     if not text:
         return None
@@ -87,21 +120,32 @@ def parse_caption_product(
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
     name_lines: list[str] = []
     for ln in lines:
-        if re.search(r"(?:narx|narh|цена|price|ming|so['ʻ’`]?m)", ln, flags=re.I) and parse_price_phrase(ln):
+        # Faqat narx qatori (masalan «Narhi 3000») — nom emas
+        if re.match(
+            r"^(?:narx[iı]?|narh[iı]?|цена|price)\b", ln, flags=re.I
+        ) and parse_price_phrase(ln):
+            continue
+        if re.match(
+            r"^\d[\d\s.,]*\s*(?:ming)?\s*(?:so['ʻ’`]?m|sum|som)?\s*$",
+            ln,
+            flags=re.I,
+        ):
             continue
         if re.match(r"^(?:toifa|category)\s*:", ln, flags=re.I):
             continue
         name_lines.append(ln)
-    name = " ".join(name_lines).strip()
+    name = _strip_trailing_price(" ".join(name_lines).strip())
     if not name:
         # Narx qatoridan tashqari birinchi qator
         name = lines[0] if lines else ""
-        name = re.sub(
-            r"(?:narx[iı]?|narh[iı]?|цена|price)\s*[:\-]?\s*\d[\d\s.,]*.*$",
-            "",
-            name,
-            flags=re.I,
-        ).strip()
+        name = _strip_trailing_price(
+            re.sub(
+                r"(?:narx[iı]?|narh[iı]?|цена|price)\s*[:\-]?\s*\d[\d\s.,]*.*$",
+                "",
+                name,
+                flags=re.I,
+            ).strip()
+        )
     if price is None:
         # Butun matndan oxirgi urinish
         local = parse_products_local(text, categories, default_category_id=default_category_id)
@@ -126,6 +170,155 @@ def parse_caption_product(
         "category_id": cat_id,
         "description": "",
     }
+
+
+def _image_to_data_url(photo_bytes: bytes, max_side: int = 1280) -> str:
+    """Vision API uchun JPEG data URL (hajmni qisqartirish)."""
+    try:
+        from PIL import Image
+
+        img = Image.open(io.BytesIO(photo_bytes)).convert("RGB")
+        w, h = img.size
+        scale = min(1.0, max_side / max(w, h))
+        if scale < 1.0:
+            img = img.resize(
+                (max(1, int(w * scale)), max(1, int(h * scale))),
+                Image.Resampling.LANCZOS,
+            )
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=85, optimize=True)
+        raw = buf.getvalue()
+    except Exception:
+        raw = photo_bytes
+    b64 = base64.b64encode(raw).decode("ascii")
+    return f"data:image/jpeg;base64,{b64}"
+
+
+def extract_product_from_image(
+    photo_bytes: bytes,
+    categories: list[Any],
+    *,
+    caption_hint: str = "",
+    default_category_id: int | None = None,
+) -> dict[str, Any] | None:
+    """Rasmdagi yozuv / mahsulotdan nom+narx+toifa (OpenAI Vision)."""
+    if not OPENAI_API_KEY or not photo_bytes:
+        return None
+
+    # Avval caption bo‘lsa — tezkor yo‘l
+    if (caption_hint or "").strip():
+        quick = parse_caption_product(
+            caption_hint, categories, default_category_id=default_category_id
+        )
+        if quick and quick.get("price") and quick.get("name"):
+            return quick
+
+    cat_lines = []
+    for c in categories:
+        emoji = (c["emoji"] if "emoji" in c.keys() else "") or ""
+        cat_lines.append(f"- id={c['id']}: {emoji} {c['name']}".strip())
+    cats_block = "\n".join(cat_lines) if cat_lines else "(toifa yo‘q)"
+    hint = (caption_hint or "").strip()
+    system = (
+        "Sen do‘kon katalogi uchun mahsulot aniqlovchisan. "
+        "Rasmda (yoki izohda) yozilgan mahsulot nomi va narxni o‘qi. "
+        "Narx odatda so‘mda (masalan 70000, 3.000, 15 ming).\n"
+        'Javob faqat JSON: {"name":"...","price":70000,"category_id":1,"description":""}\n'
+        "price — butun son (so‘m). Agar narx ko‘rinmasa — null.\n"
+        "name — qisqa uzbekcha nom (rasmdagi yozuv yoki mahsulot tavsifi).\n"
+        "category_id — pastdagi ro‘yxatdan eng mos; bilmasa null.\n"
+        "REDMI/vaqt belgisi/watermark — e’tiborsiz.\n\n"
+        f"TOIFALAR:\n{cats_block}\n"
+        f"DEFAULT_CATEGORY_ID: {default_category_id}\n"
+        f"IZOH_HINT: {hint or '(yo‘q)'}"
+    )
+    user_content: list[dict[str, Any]] = [
+        {
+            "type": "text",
+            "text": "Rasmdan mahsulot nomi va narxini ajrat. JSON qaytar.",
+        },
+        {
+            "type": "image_url",
+            "image_url": {"url": _image_to_data_url(photo_bytes)},
+        },
+    ]
+    if hint:
+        user_content.insert(
+            0, {"type": "text", "text": f"Telegram izohi: {hint}"}
+        )
+
+    payload = {
+        "model": OPENAI_MODEL,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_content},
+        ],
+        "temperature": 0.1,
+        "max_tokens": 400,
+        "response_format": {"type": "json_object"},
+    }
+    req = urllib.request.Request(
+        f"{OPENAI_BASE_URL}/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        content = data["choices"][0]["message"]["content"].strip()
+        parsed = json.loads(content)
+        if not isinstance(parsed, dict):
+            return None
+        name = _strip_trailing_price(str(parsed.get("name") or "").strip())
+        price = _clean_price(str(parsed.get("price") or ""))
+        if price is None and hint:
+            price = parse_price_phrase(hint)
+        if not name and hint:
+            cap = parse_caption_product(
+                hint, categories, default_category_id=default_category_id
+            )
+            if cap:
+                name = str(cap.get("name") or "")
+                price = price or cap.get("price")
+        if not name or price is None:
+            return None
+        cid = parsed.get("category_id")
+        try:
+            category_id = (
+                int(cid) if cid not in (None, "", "null") else default_category_id
+            )
+        except (TypeError, ValueError):
+            category_id = default_category_id
+        if category_id is not None:
+            known = {int(c["id"]) for c in categories}
+            if category_id not in known:
+                category_id = default_category_id
+        from bot.product_ad_image import guess_category_keywords
+
+        if category_id is None:
+            category_id = guess_category_keywords(name, categories)
+        return {
+            "name": name[:120],
+            "price": int(price),
+            "category_id": category_id,
+            "description": str(parsed.get("description") or "")[:300],
+        }
+    except (
+        urllib.error.URLError,
+        urllib.error.HTTPError,
+        KeyError,
+        IndexError,
+        TimeoutError,
+        json.JSONDecodeError,
+        TypeError,
+        ValueError,
+    ) as exc:
+        logger.warning("AI image product parse xato: %s", exc)
+        return None
 
 
 def _norm_cat(name: str) -> str:

@@ -149,6 +149,13 @@ def guess_category_keywords(name: str, categories: list[Any]) -> int | None:
         (("guruch", "shakar", "un", "yog", "moy", "makaron", "novvot"), ("oziq", "oziq-ovqat", "bakaleya", "food")),
         (("sut", "moloko", "yogurt", "qatiq", "smetana"), ("sut", "молоч", "dairy")),
         (("non", "bulochka", "pechenye", "pishiriq"), ("non", "pishiriq", "bread")),
+        (
+            ("gul", "bezak", "sun'iy", "suniy", "dekor", "guldon", "o‘simlik", "osimlik"),
+            ("bayram", "bezak", "dekor", "gul", "holiday", "uy"),
+        ),
+        (("bolajon", "bola", "oyinchog", "o‘yinchoq", "podguznik", "nestogen"), ("bolajon", "bola", "дети", "child")),
+        (("tozalash", "kir yuvish", "fairy", "domestos", "sovun"), ("tozalash", "cleaning", "быт")),
+        (("shokolad", "konfet", "qandolat", "pechenye", "vafli"), ("qandolat", "конфет", "sweet")),
     ]
     for name_keys, cat_keys in rules:
         if not any(k in n for k in name_keys):
