@@ -2089,6 +2089,73 @@ def _wants_recipe_add(user_text: str) -> bool:
     )
 
 
+def _recipe_pick_product(query: str, seen: set[int]):
+    """Retsept ingredienti — aniqroq tanlov (kolbasa ≠ go‘sht)."""
+    q = _norm(query).replace("'", "").replace("`", "")
+    # go'sht → yaxlit token
+    q_search = query
+    if q in {"gosht", "goshti"} or "gosht" in q:
+        q_search = "gosht"
+
+    meat_query = q in {"gosht", "goshti"} or q.startswith("gosht")
+    oil_query = q in {"yog", "yogi", "moy", "sariyog"}
+
+    exclude_meat = (
+        "kolbasa",
+        "sosiska",
+        "sausage",
+        "колбас",
+        "сосис",
+        "vetchina",
+        "ветчин",
+        "sardelka",
+        "сосиск",
+    )
+    prefer_meat = (
+        "gosht",
+        "go'sht",
+        "go‘sht",
+        "mol ",
+        "molg",
+        "qoy",
+        "tovuq",
+        "joja",
+        "jo'ja",
+        "govaz",
+        "мясо",
+        "farsh",
+    )
+
+    candidates: list[Any] = []
+    best = _best_product(q_search)
+    if best:
+        candidates.append(best)
+    candidates.extend(find_products(q_search, limit=8))
+
+    ranked: list[tuple[int, Any]] = []
+    for p in candidates:
+        pid = int(p["id"])
+        if pid in seen:
+            continue
+        name = _norm(str(p["name"]))
+        if meat_query and any(x in name for x in exclude_meat):
+            continue
+        if meat_query and not any(x in name for x in prefer_meat):
+            continue
+        if oil_query and any(x in name for x in exclude_meat):
+            continue
+        score = _query_matches_name(q_search, str(p["name"]))
+        if meat_query and "gosht" in name.replace("'", ""):
+            score += 30
+        if score > 0:
+            ranked.append((score, p))
+
+    if not ranked:
+        return None
+    ranked.sort(key=lambda x: x[0], reverse=True)
+    return ranked[0][1]
+
+
 def _recipe_build(
     recipe_key: str,
 ) -> tuple[str, list[Any], list[tuple[Any, str]], list[str]]:
@@ -2097,17 +2164,22 @@ def _recipe_build(
     found: list[tuple[Any, str]] = []
     seen: set[int] = set()
     missing: list[str] = []
+    # Bir xil ingredient sinonimlarini bir marta qidirish
+    tried_keys: set[str] = set()
     for query, note in meta["items"]:
-        product = _best_product(query)
-        if not product:
-            alts = find_products(query, limit=1)
-            product = alts[0] if alts else None
+        key = _norm(query).replace("'", "")
+        if key in {"moy", "yog"}:
+            key = "yog"
+        if key in {"gosht", "goshti"}:
+            key = "gosht"
+        if key in tried_keys:
+            continue
+        tried_keys.add(key)
+        product = _recipe_pick_product(query, seen)
         if not product:
             missing.append(query)
             continue
         pid = int(product["id"])
-        if pid in seen:
-            continue
         seen.add(pid)
         found.append((product, note or ""))
     products = [p for p, _ in found]

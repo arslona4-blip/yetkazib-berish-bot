@@ -510,22 +510,37 @@
   }
 
   function findIngredientProduct(query, usedIds) {
-    const q = normalizeSearch(query);
+    let q = normalizeSearch(query).replace(/'/g, "");
     if (!q) return null;
+    const meatQuery = q === "gosht" || q === "goshti" || q.startsWith("gosht");
+    const oilQuery = q === "yog" || q === "yogi" || q === "moy" || q === "sariyog";
+    if (meatQuery) q = "gosht";
+    if (oilQuery && q !== "sariyog") q = "yog";
+
+    const meatBad = /kolbasa|sosiska|sausage|колбас|сосис|vetchina|ветчин|sardelka/;
+    const meatOk = /gosht|go'sht|go‘sht|mol\b|qoy\b|tovuq|joja|jo'ja|govaz|мясо|farsh/;
+
     let best = null;
     let bestScore = 0;
     state.products.forEach((p) => {
       if (usedIds.has(Number(p.id))) return;
       const hay = productSearchHay(p);
+      if (meatQuery && meatBad.test(hay)) return;
+      if (meatQuery && !meatOk.test(hay)) return;
+      if (oilQuery && meatBad.test(hay)) return;
+
       let score = 0;
-      if (hay.includes(q)) score = 20 + (hay.startsWith(q) ? 5 : 0);
-      else if (q.length >= 3 && hay.split(" ").some((w) => w.startsWith(q))) score = 12;
+      const hayFlat = hay.replace(/'/g, "");
+      if (hayFlat.includes(q)) score = 20 + (hayFlat.startsWith(q) ? 5 : 0);
+      else if (q.length >= 3 && hayFlat.split(" ").some((w) => w.startsWith(q)))
+        score = 12;
+      if (meatQuery && /gosht/.test(hayFlat)) score += 15;
       if (score > bestScore) {
         bestScore = score;
         best = p;
       }
     });
-    return best;
+    return bestScore > 0 ? best : null;
   }
 
   function detectRecipe(rawQuery) {
