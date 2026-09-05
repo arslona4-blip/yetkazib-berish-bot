@@ -80,7 +80,6 @@ from bot.database import (
     get_user,
     get_user_orders,
     get_variants,
-    is_onboarding_done,
     issue_admin_login_code,
     product_display_price,
     remove_from_cart,
@@ -389,30 +388,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             parse_mode="HTML",
         )
 
-    # Yangi mijoz — qisqa o‘qitish (do‘kon → savat → buyurtma)
-    if is_new:
-        from bot.onboarding import send_onboarding
-
-        await send_onboarding(update, context, step=0)
-    elif not is_onboarding_done(user.id):
-        # Eski foydalanuvchi hali o‘qimagan — taklif
-        await update.message.reply_text(
-            "📚 <b>Birinchi marta?</b> 30 soniyalik qo‘llanma yordam beradi.",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(
-                [
-                    [
-                        InlineKeyboardButton(
-                            "📚 Qo‘llanmani ochish", callback_data="onboard:0"
-                        ),
-                        InlineKeyboardButton(
-                            "O‘tkazib yuborish", callback_data="onboard:skip"
-                        ),
-                    ]
-                ]
-            ),
-        )
-
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     shop_line = (
@@ -437,16 +412,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "   («⋯ Ko‘proq» → «👥 Ulashish»)\n\n"
         "Savol bo‘lsa — «📞 Aloqa» ni bosing.",
         parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        "📚 Bosqichma-bosqich qo‘llanma",
-                        callback_data="onboard:0",
-                    )
-                ]
-            ]
-        ),
     )
 
 
@@ -564,7 +529,7 @@ async def contact_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def show_more_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "✨ <b>Qo‘shimcha imkoniyatlar</b>\n"
-        "Qidiruv, sevimlilar, <b>📚 Qo‘llanma</b>, til va yordam:",
+        "Qidiruv, sevimlilar, tavsiyalar, til va yordam:",
         reply_markup=more_menu_keyboard(),
         parse_mode="HTML",
     )
@@ -2452,11 +2417,6 @@ async def dispatch_main_menu(
         return True
     if text == "ℹ️ Yordam":
         await help_command(update, context)
-        return True
-    if text == "📚 Qo‘llanma":
-        from bot.onboarding import start_onboarding_command
-
-        await start_onboarding_command(update, context)
         return True
     if text == "🤖 AI sotuvchi":
         await update.message.reply_text(
