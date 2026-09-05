@@ -35,6 +35,143 @@ def money(amount: int) -> str:
 
 logger = logging.getLogger(__name__)
 
+# Taom → katalogdan qidiriladigan ingredientlar (query, ixtiyoriy izoh)
+_RECIPES: dict[str, dict[str, Any]] = {
+    "osh": {
+        "title": "Palov (osh)",
+        "aliases": ("osh", "palov", "plov", "osh uchun", "palov uchun"),
+        "items": (
+            ("guruch", "1 kg"),
+            ("yog'", "yoki moy"),
+            ("sabzi", None),
+            ("piyoz", None),
+            ("no'xat", "ixtiyoriy"),
+            ("ziravor", "ixtiyoriy"),
+        ),
+    },
+    "lagmon": {
+        "title": "Lag‘mon",
+        "aliases": ("lagmon", "lag'mon", "lag‘mon", "лагимон"),
+        "items": (
+            ("makaron", "yoki noodle"),
+            ("go'sht", None),
+            ("sabzi", None),
+            ("piyoz", None),
+            ("qalampir", "ixtiyoriy"),
+            ("pomidor", None),
+        ),
+    },
+    "shorva": {
+        "title": "Sho‘rva",
+        "aliases": ("shorva", "sho'rva", "sho‘rva", "суп", "sup"),
+        "items": (
+            ("go'sht", None),
+            ("kartoshka", None),
+            ("sabzi", None),
+            ("piyoz", None),
+            ("no'xat", "ixtiyoriy"),
+        ),
+    },
+    "mastava": {
+        "title": "Mastava",
+        "aliases": ("mastava",),
+        "items": (
+            ("guruch", None),
+            ("go'sht", None),
+            ("sabzi", None),
+            ("piyoz", None),
+            ("kartoshka", None),
+        ),
+    },
+    "somsa": {
+        "title": "Somsa",
+        "aliases": ("somsa", "самса"),
+        "items": (
+            ("un", None),
+            ("go'sht", None),
+            ("piyoz", None),
+            ("yog'", None),
+        ),
+    },
+    "manti": {
+        "title": "Manti",
+        "aliases": ("manti", "манты"),
+        "items": (
+            ("un", None),
+            ("go'sht", None),
+            ("piyoz", None),
+            ("yog'", None),
+        ),
+    },
+    "shashlik": {
+        "title": "Shashlik",
+        "aliases": ("shashlik", "kabob", "kebab", "шашлык"),
+        "items": (
+            ("go'sht", None),
+            ("piyoz", None),
+            ("yog'", None),
+            ("non", None),
+        ),
+    },
+    "makaron": {
+        "title": "Makaron qovurdoq",
+        "aliases": ("makaron", "pasta", "spagetti"),
+        "items": (
+            ("makaron", None),
+            ("go'sht", "ixtiyoriy"),
+            ("piyoz", None),
+            ("pomidor", None),
+            ("yog'", None),
+        ),
+    },
+    "nonushta": {
+        "title": "Nonushta to‘plami",
+        "aliases": ("nonushta", "завтрак", "zavtrak", "ertalabki"),
+        "items": (
+            ("non", None),
+            ("tuxum", None),
+            ("sut", None),
+            ("sariyog'", "ixtiyoriy"),
+            ("choy", "ixtiyoriy"),
+        ),
+    },
+    "salat": {
+        "title": "Salat to‘plami",
+        "aliases": ("salat", "olivye", "olive", "салат"),
+        "items": (
+            ("kartoshka", None),
+            ("sabzi", None),
+            ("tuxum", None),
+            ("mayonez", None),
+            ("piyoz", "ixtiyoriy"),
+        ),
+    },
+    "choy": {
+        "title": "Choy dasturxoni",
+        "aliases": ("choy", "choy uchun", "dasturxon"),
+        "items": (
+            ("choy", None),
+            ("shakar", None),
+            ("non", None),
+            ("pechenye", "ixtiyoriy"),
+        ),
+    },
+}
+
+_RECIPE_TRIGGER = (
+    "retsept",
+    "retsep",
+    "рецепт",
+    "uchun kerak",
+    "nima kerak",
+    "ingredient",
+    "ingredientlar",
+    "to'plam",
+    "to‘plam",
+    "tayyorlash",
+    "pishirish",
+)
+
 _STOP = {
     "kerak",
     "kerakli",
@@ -1910,6 +2047,163 @@ def try_quick_add(user_id: int, user_text: str) -> str | None:
     )
 
 
+def _detect_recipe_key(user_text: str) -> str | None:
+    text = _norm(user_text)
+    if not text:
+        return None
+    # Aniq alias (uzunroq avval)
+    scored: list[tuple[int, str]] = []
+    for key, meta in _RECIPES.items():
+        for alias in meta["aliases"]:
+            a = _norm(alias)
+            if a and a in text:
+                scored.append((len(a), key))
+        if key in text:
+            scored.append((len(key), key))
+    if scored:
+        scored.sort(reverse=True)
+        return scored[0][1]
+    # «retsept …» lekin taom nomi yo‘q
+    if any(t in text for t in _RECIPE_TRIGGER):
+        return None
+    return None
+
+
+def _wants_recipe_add(user_text: str) -> bool:
+    text = _norm(user_text)
+    return any(
+        w in text
+        for w in (
+            "savat",
+            "qosh",
+            "qo‘sh",
+            "qo'sh",
+            "olay",
+            "olib",
+            "zakaz",
+            "buyurtma qil",
+            "hammasini",
+            "to'plamni ol",
+            "to‘plamni ol",
+        )
+    )
+
+
+def _recipe_build(
+    recipe_key: str,
+) -> tuple[str, list[Any], list[tuple[Any, str]], list[str]]:
+    """Qaytaradi: (sarlavha, products, [(product, note)], missing)."""
+    meta = _RECIPES[recipe_key]
+    found: list[tuple[Any, str]] = []
+    seen: set[int] = set()
+    missing: list[str] = []
+    for query, note in meta["items"]:
+        product = _best_product(query)
+        if not product:
+            alts = find_products(query, limit=1)
+            product = alts[0] if alts else None
+        if not product:
+            missing.append(query)
+            continue
+        pid = int(product["id"])
+        if pid in seen:
+            continue
+        seen.add(pid)
+        found.append((product, note or ""))
+    products = [p for p, _ in found]
+    return str(meta["title"]), products, found, missing
+
+
+def _recipe_reply(user_id: int, user_text: str) -> tuple[str, list[Any]] | None:
+    """Retsept/to‘plam: katalogdan ingredientlar."""
+    text = _norm(user_text)
+    key = _detect_recipe_key(user_text)
+    if key is None and any(t in text for t in _RECIPE_TRIGGER):
+        names = ", ".join(m["title"] for m in _RECIPES.values())
+        return (
+            "🍽 <b>Retsept / to‘plam</b>\n\n"
+            "Qaysi taom? Masalan:\n"
+            "<i>osh uchun</i>, <i>lag‘mon retsept</i>, "
+            "<i>nonushta to‘plami</i>\n\n"
+            f"Bor: {names}",
+            [],
+        )
+    if key is None:
+        return None
+
+    # Oddiy mahsulot qidiruvi: faqat «osh», «makaron», «choy»
+    recipe_intent = any(t in text for t in _RECIPE_TRIGGER) or any(
+        w in text for w in ("uchun", "to'plam", "to‘plam", "toplam", "dasturxon")
+    )
+    if not recipe_intent:
+        # «palov», «mastava», «nonushta», «shashlik» — to‘g‘ridan retsept
+        dish_names = {
+            "palov",
+            "plov",
+            "mastava",
+            "nonushta",
+            "shashlik",
+            "kabob",
+            "kebab",
+            "lagmon",
+            "lag'mon",
+            "lag‘mon",
+            "somsa",
+            "manti",
+            "shorva",
+            "sho'rva",
+            "sho‘rva",
+            "salat",
+            "olivye",
+        }
+        if text not in dish_names and not any(
+            text.startswith(d + " ") for d in dish_names
+        ):
+            return None
+
+    title, products, found, missing = _recipe_build(key)
+    if not found:
+        return (
+            f"🍽 <b>{title}</b>\n\n"
+            "Katalogda mos mahsulot topilmadi.\n"
+            "Nom bilan qidiring yoki <b>🛍 Katalog</b>dan tanlang.",
+            [],
+        )
+
+    do_add = _wants_recipe_add(user_text)
+    lines = [f"🍽 <b>{title}</b> — kerakli mahsulotlar:\n"]
+    total = 0
+    for product, note in found:
+        price = int(product["price"])
+        total += price
+        extra = f" <i>({note})</i>" if note else ""
+        lines.append(f"• {product['name']} — {money(price)}{extra}")
+    if missing:
+        lines.append("")
+        lines.append("Topilmadi: " + ", ".join(missing))
+    lines.append("")
+    lines.append(f"Jami (taxminan): <b>{money(total)}</b>")
+
+    if do_add:
+        for product, _note in found:
+            db.add_to_cart(user_id, int(product["id"]), 1)
+        cart_total = db.get_cart_totals(user_id)[1]
+        lines.append("")
+        lines.append(
+            f"✅ {len(found)} ta mahsulot savatga qo‘shildi.\n"
+            f"Savat: <b>{money(cart_total)}</b>\n"
+            "Tekshirib <b>🛒 Savatcha</b> orqali buyurtma bering."
+        )
+        return "\n".join(lines), products
+
+    lines.append("")
+    lines.append(
+        f"Savatga: <i>{key}ni savatga</i> yoki <i>hammasini qo‘sh</i>\n"
+        "Yoki pastdagi tugmalardan tanlang."
+    )
+    return "\n".join(lines), products
+
+
 def _payment_faq_html() -> str:
     lines = ["<b>To‘lov usullari</b>", "💵 Naqd — yetkazib berganda"]
     if card_payment_enabled():
@@ -2022,6 +2316,7 @@ def _faq_reply(user_text: str) -> str | None:
             f"⏰ {SHOP_HOURS} · 📞 {SHOP_PHONE}\n\n"
             "Yozing:\n"
             "• <i>guruch 2kg, cola 1.5l x 2</i> — savatga\n"
+            "• <i>osh uchun</i> — retsept to‘plami\n"
             "• <i>buyurtmam qayerda?</i> — holat\n"
             "• <i>oxirgisini takrorla</i> — qayta buyurtma"
         )
@@ -2106,6 +2401,7 @@ def _general_reply(user_text: str) -> str:
         f"📞 {SHOP_PHONE} · ⏰ {SHOP_HOURS}\n\n"
         "Yozing:\n"
         "• <i>guruch 2kg, cola 1.5l x 2</i>\n"
+        "• <i>osh uchun / retsept</i>\n"
         "• <i>buyurtmam qayerda?</i>\n"
         "• <i>oxirgisini takrorla</i>\n"
         "• <i>yetkazib berish narxi</i> / <i>to‘lov</i>"
@@ -2175,8 +2471,10 @@ def _openai_reply(user_id: int, user_text: str) -> str | None:
         f"Telefon: {SHOP_PHONE}. Manzil: {SHOP_ADDRESS}. Ish vaqti: {SHOP_HOURS}.\n"
         f"Minimal buyurtma: {MIN_ORDER_AMOUNT} so‘m.\n"
         f"{delivery_rates_plain()}\n"
-        "Buyurtma holati / takrorlash so‘rovlarini qisqa javobla; "
-        "batafsil holatni tizim alohida beradi — ADD qilma.\n"
+        "Buyurtma holati / takrorlash / retsept so‘rovlarini tizim ko‘proq "
+        "boshqaradi — keraksiz ADD qilma.\n"
+        "Agar mijoz «osh uchun», «retsept», «to‘plam» desa — ingredientlarni "
+        "katalogdan (#ID) ro‘yxatla, ADD qilma (tizim o‘zi to‘plam yasaydi).\n"
         "Do‘kon savollarida katalogdan foydalan. Yo‘q mahsulotni o‘ylab topma.\n"
         "Agar mijoz hajmsiz yozsa (masalan «cola», «sut», «guruch») — ADD qilma; "
         "katalogdagi SHU mahsulotning barcha hajm/tur variantlarini (#ID bilan) ko‘rsat "
@@ -2227,6 +2525,10 @@ def reply_to_user(user_id: int, user_text: str) -> tuple[str, list[Any]]:
     order_help = _order_assistant_reply(user_id, user_text)
     if order_help:
         return order_help, []
+
+    recipe = _recipe_reply(user_id, user_text)
+    if recipe:
+        return recipe
 
     # So‘mlik / aniq hajm — avval multi; faqat hajmsiz → variantlar
     segments = parse_order_segments(user_text)
