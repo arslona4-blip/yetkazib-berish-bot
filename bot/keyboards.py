@@ -79,6 +79,7 @@ def is_main_menu_text(text: str) -> bool:
         "👥 Ulashish",
         "📋 Mening buyurtmalarim",
         "ℹ️ Yordam",
+        "📚 Qo‘llanma",
         "🌐 Til",
         "🌐 Язык",
         "🛒 Do'kon",
@@ -152,7 +153,7 @@ def more_menu_keyboard() -> ReplyKeyboardMarkup:
         ["🎁 Bonus", "👥 Ulashish"],
         ["✨ Tavsiyalar", "🔁 Takroriy buyurtmalar"],
         ["🤖 AI sotuvchi", "ℹ️ Yordam"],
-        ["🌐 Til"],
+        ["📚 Qo‘llanma", "🌐 Til"],
         ["⬅️ Asosiy menyu"],
     ]
     shop = shop_reply_button("🛒 Do'kon")

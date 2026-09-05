@@ -317,6 +317,13 @@ def _migrate_features(conn: sqlite3.Connection) -> None:
         conn.execute(
             "ALTER TABLE users ADD COLUMN language TEXT NOT NULL DEFAULT 'uz'"
         )
+    user_cols = {r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
+    if "onboarding_done" not in user_cols:
+        conn.execute(
+            "ALTER TABLE users ADD COLUMN onboarding_done INTEGER NOT NULL DEFAULT 0"
+        )
+        # Avvalgi mijozlarga majburiy taklif chiqmasin — faqat yangilar
+        conn.execute("UPDATE users SET onboarding_done = 1")
 
     cart_cols = {r[1] for r in conn.execute("PRAGMA table_info(cart_items)").fetchall()}
     if "custom_name" not in cart_cols:
@@ -478,6 +485,24 @@ def get_user(user_id: int) -> sqlite3.Row | None:
             (user_id,),
         ).fetchone()
     return row
+
+
+def is_onboarding_done(user_id: int) -> bool:
+    user = get_user(user_id)
+    if not user:
+        return False
+    try:
+        return int(user["onboarding_done"] or 0) == 1
+    except (KeyError, IndexError, TypeError):
+        return False
+
+
+def set_onboarding_done(user_id: int, done: bool = True) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE users SET onboarding_done = ? WHERE user_id = ?",
+            (1 if done else 0, user_id),
+        )
 
 
 def get_categories(active_only: bool = True) -> list[sqlite3.Row]:

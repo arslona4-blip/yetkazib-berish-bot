@@ -78,6 +78,7 @@ from bot.shop_ai_handlers import (
     shop_ai_money_callback,
     shop_ai_pack_callback,
 )
+from bot.onboarding import onboarding_callback, start_onboarding_command
 from bot.webapp import set_bot, start_webapp_server
 
 
@@ -199,6 +200,9 @@ def main() -> None:
     app.add_handler(MessageHandler(filters.Regex("^👥 Ulashish$"), share_invite))
     app.add_handler(MessageHandler(filters.Regex("^📋 Mening buyurtmalarim$"), my_orders))
     app.add_handler(MessageHandler(filters.Regex("^ℹ️ Yordam$"), help_command))
+    app.add_handler(
+        MessageHandler(filters.Regex("^📚 Qo‘llanma$"), start_onboarding_command)
+    )
     app.add_handler(MessageHandler(filters.Regex("^📞 Aloqa$"), contact_info))
     app.add_handler(MessageHandler(filters.Regex("^📦 Buyurtmalar$"), admin_orders_panel))
     app.add_handler(MessageHandler(filters.Regex("^🛠 Admin panel$"), admin_panel))
@@ -252,6 +256,7 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(shop_ai_money_callback, pattern=r"^ai_m:"))
     app.add_handler(CallbackQueryHandler(shop_ai_pack_callback, pattern=r"^ai_p:"))
     app.add_handler(CallbackQueryHandler(shop_ai_liter_callback, pattern=r"^ai_l:"))
+    app.add_handler(CallbackQueryHandler(onboarding_callback, pattern=r"^onboard:"))
     app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, admin_awaiting_text)
     )
