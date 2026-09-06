@@ -2073,6 +2073,16 @@ def try_quick_add(user_id: int, user_text: str) -> str | None:
     )
 
 
+def _has_recipe_phrase(hay: str, needle: str) -> bool:
+    """«osh» ⊂ «kartoshka» bo‘lmasin — so‘z chegarasi."""
+    n = (needle or "").strip()
+    if not n or not hay:
+        return False
+    if " " in n:
+        return n in hay
+    return bool(re.search(rf"(?<![a-z0-9]){re.escape(n)}(?![a-z0-9])", hay))
+
+
 def _detect_recipe_key(user_text: str) -> str | None:
     text = _norm(user_text)
     if not text:
@@ -2082,9 +2092,9 @@ def _detect_recipe_key(user_text: str) -> str | None:
     for key, meta in _RECIPES.items():
         for alias in meta["aliases"]:
             a = _norm(alias)
-            if a and a in text:
+            if a and _has_recipe_phrase(text, a):
                 scored.append((len(a), key))
-        if key in text:
+        if _has_recipe_phrase(text, key):
             scored.append((len(key), key))
     if scored:
         scored.sort(reverse=True)

@@ -681,6 +681,15 @@
     return bestScore > 0 ? best : null;
   }
 
+  function hasRecipePhrase(hay, needle) {
+    const n = normalizeSearch(needle);
+    if (!n || !hay) return false;
+    if (n.includes(" ")) return hay.includes(n);
+    // «osh» ⊂ «kartoshka» bo‘lmasin
+    const esc = n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(^|[^a-z0-9'])${esc}([^a-z0-9']|$)`).test(hay);
+  }
+
   function detectRecipe(rawQuery) {
     const q = normalizeSearch(rawQuery);
     if (!q) return null;
@@ -690,12 +699,12 @@
     RECIPES.forEach((recipe) => {
       recipe.aliases.forEach((alias) => {
         const a = normalizeSearch(alias);
-        if (a && q.includes(a) && a.length >= bestLen) {
+        if (a && hasRecipePhrase(q, a) && a.length >= bestLen) {
           bestLen = a.length;
           matched = recipe;
         }
       });
-      if (q.includes(recipe.key) && recipe.key.length > bestLen) {
+      if (hasRecipePhrase(q, recipe.key) && recipe.key.length > bestLen) {
         bestLen = recipe.key.length;
         matched = recipe;
       }
