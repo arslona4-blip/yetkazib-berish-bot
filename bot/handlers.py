@@ -276,7 +276,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     welcome_caption = (
         f"✨ <b>Assalomu alaykum, {name}!</b>\n"
         f"{delivery_rates_html()}\n"
-        f"🎁 <b>100 000+</b> → 1L ichimlik (yoki shu narxdagi mahsulot) bepul!\n"
+        f"🎁 <b>100 000+</b> → COCA COLA / PEPSI / FANTA 1L yoki shu narxdagi mahsulot!\n"
         f"👇 <b>🛒 Do'kon</b> yoki yozing: <i>guruch 2kg</i>"
     )
     # Rasm yo‘q bo‘lsa — to‘liq matn
@@ -1460,18 +1460,12 @@ async def confirm_order_callback(
     gift_line = ""
     admin_extra = ""
     if subtotal >= GIFT_DRINK_THRESHOLD:
-        from bot.gift_value import get_gift_value_limit
-
-        lim = get_gift_value_limit()
-        lim_s = f"{lim:,}".replace(",", " ")
         gift_line = (
-            f"\n\n🎉 Sovg‘angiz: 1L ichimlik "
-            f"(yoki shu narxdagi boshqa mahsulot, limi {lim_s} so‘m) — "
-            f"tanlov o‘zingizniki!"
+            "\n\n🎉 Sovg‘angiz: 1L COCA COLA yoki 1L PEPSI yoki 1L FANTA "
+            "yoki shu narxdagi mahsulot — tanlov o‘zingizniki!"
         )
         admin_extra = (
-            f"\n\n🎁 SOVG‘A: 1L / limi {lim_s} so‘m gacha mahsulot "
-            f"(mijoz tanlaydi)"
+            "\n\n🎁 SOVG‘A: Cola/Pepsi/Fanta 1L yoki shu narxdagi mahsulot"
         )
     await query.edit_message_text(
         f"✅ Buyurtma qabul qilindi!\nBuyurtma raqami: #{order_id}\n"

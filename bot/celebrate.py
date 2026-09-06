@@ -53,16 +53,12 @@ def celebration_bonus_points(order_total: int) -> int:
 def celebration_html(*, subtotal: int, total: int) -> str:
     """Mijozga yuboriladigan bayram matni (HTML)."""
     _ = total
-    from bot.gift_value import get_gift_value_limit
+    from bot.config import gift_drink_promo_text
 
-    lim_s = f"{get_gift_value_limit():,}".replace(",", " ")
     return (
         "🎊 <b>Tabriklaymiz!</b> 🎊\n\n"
-        f"Siz <b>{_som(subtotal)} so‘m</b>lik buyurtma berdingiz "
-        f"va <b>bonus sohibi</b> bo‘ldingiz!\n\n"
-        f"🎁 <b>Sovg‘angiz:</b> 1L ichimlik "
-        f"(yoki shu narxdagi boshqa mahsulot, limi {lim_s} so‘m) — "
-        f"tanlov o‘zingizniki!\n\n"
+        f"Siz <b>{_som(subtotal)} so‘m</b>lik buyurtma berdingiz!\n\n"
+        f"{gift_drink_promo_text().replace(chr(10), ' ')}\n\n"
         "🎈🎈🎈 Salyutlar! 🎆"
     )
 

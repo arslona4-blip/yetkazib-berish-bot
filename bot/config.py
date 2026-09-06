@@ -101,49 +101,47 @@ def delivery_rates_plain() -> str:
     )
 
 
-def gift_drink_promo_html() -> str:
-    """100k+ → 1L ichimlik yoki shu narxdagi boshqa mahsulot."""
+def gift_drink_promo_text() -> str:
+    """Yagona aksiya matni (plain)."""
     thr = _som(GIFT_DRINK_THRESHOLD)
-    _lim, lim_s = _gift_limit_som()
     return (
-        f"🎁 <b>SUPER AKSIYA!</b>\n"
-        f"━━━━━━━━━━━━━━\n"
-        f"🛒 Buyurtma <b>{thr} so‘m+</b> —\n"
-        f"<b>1L ichimlik</b> (yoki shu narxdagi boshqa mahsulot) "
-        f"<b>bepul</b>!\n\n"
-        f"💰 Limi: <b>{lim_s} so‘m</b> "
-        f"(Coca-Cola 1L narxi bo‘yicha)\n"
-        f"✨ Tanlov — o‘zingizniki!"
+        f"Buyurtma {thr} so‘mga yetganda bonus yani sovg‘a beriladi.\n"
+        f"1L COCA COLA yoki 1L PEPSI yoki 1L FANTA "
+        f"yoki shu narxdagi mahsulot beriladi.\n"
+        f"Tanlov o‘zingizniki."
+    )
+
+
+def gift_drink_promo_html() -> str:
+    """Yagona aksiya matni (HTML)."""
+    thr = _som(GIFT_DRINK_THRESHOLD)
+    return (
+        f"🎁 <b>SUPER AKSIYA!</b>\n\n"
+        f"Buyurtma <b>{thr} so‘m</b>ga yetganda bonus yani sovg‘a beriladi.\n"
+        f"<b>1L COCA COLA</b> yoki <b>1L PEPSI</b> yoki <b>1L FANTA</b> "
+        f"yoki shu narxdagi mahsulot beriladi.\n"
+        f"Tanlov o‘zingizniki."
     )
 
 
 def gift_drink_promo_plain() -> str:
-    thr = _som(GIFT_DRINK_THRESHOLD)
-    _lim, lim_s = _gift_limit_som()
-    return (
-        f"🎁 SUPER AKSIYA!\n"
-        f"{thr} so‘m+ buyurtmaga — 1L ichimlik "
-        f"(yoki shu narxdagi boshqa mahsulot, limi {lim_s} so‘m) bepul, "
-        f"tanlov o‘zingizniki!"
-    )
+    return f"🎁 SUPER AKSIYA!\n{gift_drink_promo_text()}"
 
 
 def gift_drink_progress_html(subtotal: int) -> str:
-    """Savat summasi bo‘yicha aksiya holati."""
+    """Savat — qisqa eslatma yoki to‘liq aksiya matni."""
     amount = max(0, int(subtotal or 0))
     thr = GIFT_DRINK_THRESHOLD
-    _lim, lim_s = _gift_limit_som()
     if amount >= thr:
         return (
-            f"🎉 <b>Tabriklaymiz!</b> Sovg‘angiz tayyor!\n"
-            f"1L ichimlik yoki shu narxdagi boshqa mahsulot "
-            f"(limi <b>{lim_s} so‘m</b>) — tanlov o‘zingizniki."
+            "🎉 <b>Tabriklaymiz!</b> Sovg‘angiz tayyor!\n"
+            "1L COCA COLA / PEPSI / FANTA yoki shu narxdagi mahsulot — "
+            "tanlov o‘zingizniki."
         )
     left = thr - amount
     return (
-        f"🎁 Yana <b>{_som(left)} so‘m</b> qo‘shsangiz —\n"
-        f"1L ichimlik (yoki shu narxdagi mahsulot, limi "
-        f"<b>{lim_s} so‘m</b>) bepul!"
+        f"🎁 Yana <b>{_som(left)} so‘m</b> qo‘shsangiz — sovg‘a!\n"
+        f"1L COCA COLA / PEPSI / FANTA yoki shu narxdagi mahsulot."
     )
 
 
@@ -184,16 +182,12 @@ def _mahalla_bot_cta() -> tuple[str, str]:
 
 def mahalla_promo_html() -> str:
     """Mahalla guruhlariga forward qilish uchun qisqa HTML caption."""
-    thr = _som(GIFT_DRINK_THRESHOLD)
-    _lim, lim_s = _gift_limit_som()
     cta_html, _ = _mahalla_bot_cta()
     return (
         f"📣 <b>{SHOP_NAME}</b> — mahallangizga yetkazamiz!\n"
         f"━━━━━━━━━━━━━━\n"
         f"{delivery_rates_html()}\n\n"
-        f"🎁 <b>{thr} so‘m+</b> → 1L ichimlik "
-        f"(yoki shu narxdagi mahsulot, limi <b>{lim_s} so‘m</b>) bepul\n"
-        f"✨ Tanlov o‘zingizniki!\n"
+        f"{gift_drink_promo_html()}\n"
         f"━━━━━━━━━━━━━━\n"
         f"{cta_html}"
     )
@@ -201,14 +195,11 @@ def mahalla_promo_html() -> str:
 
 def mahalla_promo_plain() -> str:
     """Nusxa olish uchun oddiy matn."""
-    thr = _som(GIFT_DRINK_THRESHOLD)
-    _lim, lim_s = _gift_limit_som()
     _, cta_plain = _mahalla_bot_cta()
     return (
         f"📣 {SHOP_NAME} — mahallangizga yetkazamiz!\n"
         f"{delivery_rates_plain()}\n"
-        f"🎁 {thr} so‘m+ → 1L ichimlik (yoki shu narxdagi mahsulot, "
-        f"limi {lim_s} so‘m) bepul, tanlov o‘zingizniki!\n"
+        f"{gift_drink_promo_plain()}\n"
         f"{cta_plain}"
     )
 

@@ -132,27 +132,25 @@
 
   function giftPromoText() {
     const thr = formatMoney(giftThreshold()).replace(" so'm", "");
-    const lim = formatMoney(giftValueLimit()).replace(" so'm", "");
     return (
-      `🎁 SUPER AKSIYA! ${thr} so‘m+ buyurtmaga — 1L ichimlik ` +
-      `(yoki shu narxdagi boshqa mahsulot, limi ${lim} so‘m) bepul, ` +
-      `tanlov o‘zingizniki!`
+      `Buyurtma ${thr} so‘mga yetganda bonus yani sovg‘a beriladi. ` +
+      `1L COCA COLA yoki 1L PEPSI yoki 1L FANTA ` +
+      `yoki shu narxdagi mahsulot beriladi. Tanlov o‘zingizniki.`
     );
   }
 
   function giftProgressText(subtotal) {
     const thr = giftThreshold();
-    const lim = formatMoney(giftValueLimit()).replace(" so'm", "");
     if (subtotal >= thr) {
       return (
-        `🎉 Tabriklaymiz! Sovg‘angiz: 1L ichimlik ` +
-        `(yoki shu narxdagi mahsulot, limi ${lim} so‘m) — tanlov o‘zingizniki!`
+        `🎉 Sovg‘a tayyor! 1L COCA COLA / PEPSI / FANTA ` +
+        `yoki shu narxdagi mahsulot — tanlov o‘zingizniki.`
       );
     }
     const left = thr - subtotal;
     return (
-      `🎁 Yana ${formatMoney(left)} qo‘shsangiz — 1L ichimlik ` +
-      `(yoki shu narxdagi mahsulot, limi ${lim} so‘m) bepul!`
+      `🎁 Yana ${formatMoney(left)} qo‘shsangiz — sovg‘a: ` +
+      `1L COCA COLA / PEPSI / FANTA yoki shu narxdagi mahsulot.`
     );
   }
 
@@ -179,7 +177,7 @@
       "🎊🎆🎈<br/><b style='color:#fff;font-size:0.42em;font-family:system-ui,sans-serif;" +
       "letter-spacing:0.04em;text-shadow:0 2px 12px rgba(0,0,0,.5)'>BONUS SOHIBI!</b>" +
       "<br/><span style='color:#ffe9a8;font-size:0.28em;font-family:system-ui,sans-serif;" +
-      "text-shadow:0 2px 10px rgba(0,0,0,.55)'>🎁 1L ichimlik yoki shu narxdagi mahsulot</span>" +
+      "text-shadow:0 2px 10px rgba(0,0,0,.55)'>🎁 COCA COLA / PEPSI / FANTA 1L</span>" +
       "<br/>🎆🎉🎈";
     if (!document.getElementById("celebrate-style")) {
       const style = document.createElement("style");
@@ -1457,7 +1455,7 @@
       if (willCelebrate) {
         fireCelebration();
         els.status.textContent =
-          "🎊 Tabriklaymiz! Sovg‘angiz: 1L ichimlik (yoki shu narxdagi mahsulot) — tanlov o‘zingizniki! Buyurtma botga yuborildi…";
+          "🎊 Tabriklaymiz! Sovg‘a: 1L COCA COLA / PEPSI / FANTA yoki shu narxdagi mahsulot — tanlov o‘zingizniki! Buyurtma botga yuborildi…";
       } else {
         els.status.textContent = "Buyurtma botga yuborildi…";
       }
@@ -1508,7 +1506,7 @@
       if (celebrate) {
         fireCelebration();
         els.status.textContent =
-          `🎊 Tabriklaymiz! Buyurtma #${result.order_id} — sovg‘angiz: 1L ichimlik (yoki shu narxdagi mahsulot), tanlov o‘zingizniki!`;
+          `🎊 Tabriklaymiz! Buyurtma #${result.order_id} — sovg‘a: 1L COCA COLA / PEPSI / FANTA yoki shu narxdagi mahsulot!`;
       } else {
         els.status.textContent = `Buyurtma #${result.order_id} qabul qilindi!`;
       }
