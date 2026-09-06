@@ -593,6 +593,45 @@ main {
   color: var(--deep);
 }
 
+.gift-picker {
+  margin: 2px 0 4px;
+  padding: 12px;
+  border: 1.5px solid var(--lime);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, #eef8df, #f7fbf2);
+}
+
+.gift-picker-title {
+  margin: 0 0 4px;
+  font-weight: 800;
+  color: var(--deep);
+}
+
+.gift-drink-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.gift-drink-options button {
+  text-align: left;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-family: inherit;
+  font-weight: 650;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.gift-drink-options button.active {
+  border-color: var(--deep);
+  background: #dff0c4;
+  color: var(--deep);
+}
+
 .checkout {
   display: flex;
   flex-direction: column;

@@ -21,6 +21,9 @@
     cart: loadCart(),
     bonusPoints: 0,
     discount: 0,
+    giftKey: "",
+    giftProductId: null,
+    giftCustom: "",
   };
 
   const els = {
@@ -29,6 +32,13 @@
     giftPromo: document.getElementById("giftPromo"),
     giftPromoText: document.getElementById("giftPromoText"),
     giftProgress: document.getElementById("giftProgress"),
+    giftPicker: document.getElementById("giftPicker"),
+    giftPickerHint: document.getElementById("giftPickerHint"),
+    giftDrinkOptions: document.getElementById("giftDrinkOptions"),
+    giftAltWrap: document.getElementById("giftAltWrap"),
+    giftAlt: document.getElementById("giftAlt"),
+    giftCustomWrap: document.getElementById("giftCustomWrap"),
+    giftCustom: document.getElementById("giftCustom"),
     productSearch: document.getElementById("productSearch"),
     searchClear: document.getElementById("searchClear"),
     categories: document.getElementById("categories"),
@@ -144,7 +154,7 @@
     if (subtotal >= thr) {
       return (
         `🎉 Sovg‘a tayyor! 1L COCA COLA / PEPSI / FANTA ` +
-        `yoki shu narxdagi mahsulot — tanlov o‘zingizniki.`
+        `yoki shu narxdagi mahsulot — pastdan tanlang.`
       );
     }
     const left = thr - subtotal;
@@ -152,6 +162,115 @@
       `🎁 Yana ${formatMoney(left)} qo‘shsangiz — sovg‘a: ` +
       `1L COCA COLA / PEPSI / FANTA yoki shu narxdagi mahsulot.`
     );
+  }
+
+  function clearGiftSelection() {
+    state.giftKey = "";
+    state.giftProductId = null;
+    state.giftCustom = "";
+    if (els.giftAlt) els.giftAlt.value = "";
+    if (els.giftCustom) els.giftCustom.value = "";
+    if (els.giftDrinkOptions) {
+      els.giftDrinkOptions.querySelectorAll("button").forEach((b) => {
+        b.classList.remove("active");
+      });
+    }
+  }
+
+  function selectedGiftLabel() {
+    if (state.giftKey) {
+      const drinks = (state.config && state.config.gift_drinks) || [];
+      const hit = drinks.find((d) => d.key === state.giftKey);
+      if (hit) return hit.label;
+      if (state.giftKey === "cola") return "Coca-Cola 1L";
+      if (state.giftKey === "pepsi") return "Pepsi 1L";
+      if (state.giftKey === "fanta") return "Fanta 1L";
+    }
+    if (state.giftProductId && els.giftAlt) {
+      const opt = els.giftAlt.selectedOptions[0];
+      if (opt && opt.value) return opt.textContent.replace(/\s—\s.*$/, "").trim();
+    }
+    if (state.giftCustom) return state.giftCustom;
+    return "";
+  }
+
+  function giftPayloadFields() {
+    const out = {
+      gift_key: state.giftKey || "",
+      gift_choice: selectedGiftLabel() || "",
+      gift_product_id: state.giftProductId || undefined,
+    };
+    return out;
+  }
+
+  function renderGiftPicker(subtotal) {
+    if (!els.giftPicker) return;
+    const eligible = subtotal >= giftThreshold();
+    els.giftPicker.hidden = !eligible;
+    if (!eligible) {
+      clearGiftSelection();
+      return;
+    }
+    const limit = giftValueLimit();
+    if (els.giftPickerHint) {
+      els.giftPickerHint.textContent =
+        `Coca-Cola / Pepsi / Fanta 1L yoki shu narxdagi mahsulot ` +
+        `(maks ${formatMoney(limit)}).`;
+    }
+    const drinks = (state.config && state.config.gift_drinks) || [
+      { key: "cola", label: "Coca-Cola 1L" },
+      { key: "pepsi", label: "Pepsi 1L" },
+      { key: "fanta", label: "Fanta 1L" },
+    ];
+    if (els.giftDrinkOptions && !els.giftDrinkOptions.dataset.ready) {
+      els.giftDrinkOptions.innerHTML = "";
+      drinks.forEach((d) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.dataset.key = d.key;
+        btn.textContent = d.label || d.key;
+        btn.addEventListener("click", () => {
+          state.giftKey = d.key;
+          state.giftProductId = null;
+          state.giftCustom = "";
+          if (els.giftAlt) els.giftAlt.value = "";
+          if (els.giftCustom) els.giftCustom.value = "";
+          if (els.giftAltWrap) els.giftAltWrap.hidden = true;
+          if (els.giftCustomWrap) els.giftCustomWrap.hidden = true;
+          els.giftDrinkOptions.querySelectorAll("button").forEach((b) => {
+            b.classList.toggle("active", b.dataset.key === d.key);
+          });
+        });
+        els.giftDrinkOptions.appendChild(btn);
+      });
+      const other = document.createElement("button");
+      other.type = "button";
+      other.dataset.key = "other";
+      other.textContent = "Boshqa mahsulot (shu narxda)";
+      other.addEventListener("click", () => {
+        state.giftKey = "";
+        state.giftProductId = null;
+        els.giftDrinkOptions.querySelectorAll("button").forEach((b) => {
+          b.classList.toggle("active", b.dataset.key === "other");
+        });
+        if (els.giftAltWrap) {
+          const alts = (state.config && state.config.gift_alts) || [];
+          els.giftAltWrap.hidden = alts.length === 0;
+        }
+        if (els.giftCustomWrap) els.giftCustomWrap.hidden = false;
+      });
+      els.giftDrinkOptions.appendChild(other);
+      els.giftDrinkOptions.dataset.ready = "1";
+    }
+    const alts = (state.config && state.config.gift_alts) || [];
+    if (els.giftAlt && els.giftAlt.options.length <= 1 && alts.length) {
+      alts.forEach((a) => {
+        const opt = document.createElement("option");
+        opt.value = String(a.product_id);
+        opt.textContent = `${a.label} — ${formatMoney(a.price)}`;
+        els.giftAlt.appendChild(opt);
+      });
+    }
   }
 
   function fireCelebration() {
@@ -1212,6 +1331,7 @@
         els.giftProgress.hidden = true;
       }
     }
+    renderGiftPicker(subtotal);
     if (els.discountLabel) {
       const off = discount + bonus;
       els.discountLabel.textContent =
@@ -1352,6 +1472,35 @@
       els.bonus.addEventListener("input", () => renderCart());
       els.bonus.addEventListener("change", () => renderCart());
     }
+    if (els.giftAlt) {
+      els.giftAlt.addEventListener("change", () => {
+        const v = els.giftAlt.value;
+        state.giftKey = "";
+        state.giftProductId = v ? Number(v) : null;
+        state.giftCustom = "";
+        if (els.giftCustom) els.giftCustom.value = "";
+        if (els.giftDrinkOptions) {
+          els.giftDrinkOptions.querySelectorAll("button").forEach((b) => {
+            b.classList.toggle("active", b.dataset.key === "other");
+          });
+        }
+      });
+    }
+    if (els.giftCustom) {
+      els.giftCustom.addEventListener("input", () => {
+        state.giftCustom = (els.giftCustom.value || "").trim();
+        if (state.giftCustom) {
+          state.giftKey = "";
+          state.giftProductId = null;
+          if (els.giftAlt) els.giftAlt.value = "";
+          if (els.giftDrinkOptions) {
+            els.giftDrinkOptions.querySelectorAll("button").forEach((b) => {
+              b.classList.toggle("active", b.dataset.key === "other");
+            });
+          }
+        }
+      });
+    }
 
     const [config, categories] = await Promise.all([
       api("/api/config"),
@@ -1415,6 +1564,9 @@
           promo_code: payload.promo_code || "",
           bonus_spent: payload.bonus_spent || 0,
           payment_method: payload.payment_method || "pending",
+          gift_key: payload.gift_key || "",
+          gift_choice: payload.gift_choice || "",
+          gift_product_id: payload.gift_product_id || undefined,
         })
       );
       return true;
@@ -1440,6 +1592,7 @@
     const params = new URLSearchParams(window.location.search);
     const devUser = params.get("dev_user_id");
     const { bonus } = calcTotals();
+    const giftFields = giftPayloadFields();
 
     const payload = {
       initData,
@@ -1451,6 +1604,9 @@
       promo_code: "",
       bonus_spent: bonus,
       payment_method: (els.paymentMethod && els.paymentMethod.value) || "pending",
+      gift_key: giftFields.gift_key,
+      gift_choice: giftFields.gift_choice,
+      gift_product_id: giftFields.gift_product_id,
       items: state.cart.map((item) => ({
         product_id: item.product_id,
         quantity: item.quantity,
@@ -1464,18 +1620,31 @@
       payload.dev_user_id = Number(devUser);
     }
 
+    const checkoutTotals = calcTotals();
+    if (checkoutTotals.subtotal >= giftThreshold()) {
+      const label = selectedGiftLabel();
+      if (!label) {
+        els.status.hidden = false;
+        els.status.classList.add("error");
+        els.status.textContent =
+          "100 000+ so‘m — sovg‘ani tanlang (Cola / Pepsi / Fanta yoki boshqa).";
+        return;
+      }
+    }
+
     els.submit.disabled = true;
     els.submit.textContent = "Yuborilmoqda...";
 
     // 1) Eng ishonchli: botga sendData (klaviatura Do'kon tugmasi)
-    const checkoutTotals = calcTotals();
     const willCelebrate = shouldCelebrateOrder(
       checkoutTotals.subtotal,
       checkoutTotals.total
     );
+    const giftLabel = selectedGiftLabel();
     if (checkoutViaSendData(payload)) {
       state.cart = [];
       state.discount = 0;
+      clearGiftSelection();
       if (els.bonus) els.bonus.value = "";
       saveCart();
       updateBadge();
@@ -1485,7 +1654,7 @@
       if (willCelebrate) {
         fireCelebration();
         els.status.textContent =
-          "🎊 Tabriklaymiz! Sovg‘a: 1L COCA COLA / PEPSI / FANTA yoki shu narxdagi mahsulot — tanlov o‘zingizniki! Buyurtma botga yuborildi…";
+          `🎊 Tabriklaymiz! Sovg‘angiz: ${giftLabel}. Buyurtma botga yuborildi…`;
       } else {
         els.status.textContent = "Buyurtma botga yuborildi…";
       }
@@ -1524,6 +1693,7 @@
       });
       state.cart = [];
       state.discount = 0;
+      clearGiftSelection();
       if (els.bonus) els.bonus.value = "";
       saveCart();
       updateBadge();
@@ -1536,7 +1706,7 @@
       if (celebrate) {
         fireCelebration();
         els.status.textContent =
-          `🎊 Tabriklaymiz! Buyurtma #${result.order_id} — sovg‘a: 1L COCA COLA / PEPSI / FANTA yoki shu narxdagi mahsulot!`;
+          `🎊 Tabriklaymiz! Buyurtma #${result.order_id} — sovg‘angiz: ${giftLabel}!`;
       } else {
         els.status.textContent = `Buyurtma #${result.order_id} qabul qilindi!`;
       }

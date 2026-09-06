@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=25" />
+  <link rel="stylesheet" href="styles.css?v=26" />
 </head>
 <body>
   <header class="topbar">
@@ -97,6 +97,21 @@
           </select>
         </label>
         <p class="pay-note">To‘lov faqat naqd. Qarzga berilmaydi — tushunganingiz uchun rahmat.</p>
+        <div id="giftPicker" class="gift-picker" hidden>
+          <p class="gift-picker-title">🎁 Sovg‘angizni tanlang</p>
+          <p id="giftPickerHint" class="hint"></p>
+          <div id="giftDrinkOptions" class="gift-drink-options"></div>
+          <label id="giftAltWrap" hidden>
+            Yoki shu narxdagi mahsulot
+            <select id="giftAlt">
+              <option value="">— tanlang —</option>
+            </select>
+          </label>
+          <label id="giftCustomWrap" hidden>
+            Boshqa mahsulot nomi
+            <input id="giftCustom" type="text" maxlength="80" placeholder="Masalan: Sprite 1L" />
+          </label>
+        </div>
         <label>
           Izoh (ixtiyoriy)
           <textarea id="note" rows="2" placeholder="Qo'ng'iroq qiling / eshik oldida qoldiring"></textarea>
@@ -139,6 +154,6 @@
     </div>
   </dialog>
 
-  <script src="app.js?v=25"></script>
+  <script src="app.js?v=26"></script>
 </body>
 </html>

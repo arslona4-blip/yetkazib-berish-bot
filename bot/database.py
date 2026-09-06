@@ -246,6 +246,7 @@ def _migrate_features(conn: sqlite3.Connection) -> None:
         ("discount", "INTEGER NOT NULL DEFAULT 0"),
         ("bonus_spent", "INTEGER NOT NULL DEFAULT 0"),
         ("subtotal", "INTEGER NOT NULL DEFAULT 0"),
+        ("gift_choice", "TEXT"),
     ]:
         if col not in order_cols:
             conn.execute(f"ALTER TABLE orders ADD COLUMN {col} {sql_type}")
@@ -1069,6 +1070,7 @@ def create_order(
     discount: int = 0,
     bonus_spent: int = 0,
     subtotal: int = 0,
+    gift_choice: str = "",
 ) -> int:
     now = _now_iso()
     with get_connection() as conn:
@@ -1077,9 +1079,9 @@ def create_order(
             INSERT INTO orders (
                 user_id, pickup_address, delivery_address, latitude, longitude,
                 description, phone, price, status, payment_status, created_at, updated_at,
-                delivery_slot, promo_code, discount, bonus_spent, subtotal
+                delivery_slot, promo_code, discount, bonus_spent, subtotal, gift_choice
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new', 'pending', ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new', 'pending', ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 user_id,
@@ -1097,6 +1099,7 @@ def create_order(
                 discount,
                 bonus_spent,
                 subtotal,
+                (gift_choice or "").strip(),
             ),
         )
         return int(cursor.lastrowid)
@@ -1376,6 +1379,11 @@ def format_order(row: sqlite3.Row) -> str:
     bonus = row["bonus_spent"] if "bonus_spent" in row.keys() else 0
     if bonus:
         parts.append(f"🎁 Bonus: −{bonus:,} so'm")
+    gift = ""
+    if "gift_choice" in row.keys():
+        gift = (row["gift_choice"] or "").strip()
+    if gift:
+        parts.append(f"🎁 Sovg‘a: {gift}")
     parts.extend(
         [
             f"📍 Qayerdan: {row['pickup_address']}",

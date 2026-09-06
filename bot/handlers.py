@@ -122,6 +122,7 @@ from bot.keyboards import (
     contact_keyboard,
     courier_order_keyboard,
     delivery_slots_keyboard,
+    gift_choice_keyboard,
     location_keyboard,
     main_menu_keyboard,
     more_menu_keyboard,
@@ -147,6 +148,7 @@ class OrderState(IntEnum):
     SLOT = 5
     PROMO = 6
     BONUS = 7
+    GIFT = 8
 
 
 class ProductAdminState(IntEnum):
@@ -440,6 +442,10 @@ async def webapp_scan_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         from bot.webapp import place_miniapp_order
 
         try:
+            gift_pid_raw = payload.get("gift_product_id")
+            gift_product_id = None
+            if gift_pid_raw not in (None, "", 0, "0"):
+                gift_product_id = int(gift_pid_raw)
             order_id, total, _sub, _delivery, text = place_miniapp_order(
                 user_id=user.id,
                 full_name=user.full_name or user.first_name or "Mijoz",
@@ -452,6 +458,9 @@ async def webapp_scan_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 promo_code=str(payload.get("promo_code") or "").strip(),
                 bonus_spent=int(payload.get("bonus_spent") or 0),
                 payment_method=str(payload.get("payment_method") or "pending"),
+                gift_choice=str(payload.get("gift_choice") or "").strip(),
+                gift_key=str(payload.get("gift_key") or "").strip(),
+                gift_product_id=gift_product_id,
             )
         except ValueError as exc:
             await msg.reply_text(f"❌ {exc}", reply_markup=menu_for(user.id))
@@ -1026,6 +1035,7 @@ async def start_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         "bonus_spent": 0,
         "delivery_slot": "",
         "description": "",
+        "gift_choice": "",
     }
 
     last_addr = get_last_delivery_address(user_id)
@@ -1331,6 +1341,119 @@ async def receive_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         "Yetkazishda shu raqam orqali bog‘lanamiz.",
         parse_mode="HTML",
     )
+    return await ask_gift_or_summary(update, context)
+
+
+async def ask_gift_or_summary(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    """100k+ bo‘lsa sovg‘a tanlash; aks holda xulosa."""
+    order = context.user_data.setdefault("order", {})
+    user_id = update.effective_user.id
+    _, subtotal = get_cart_totals(user_id)
+    if subtotal < GIFT_DRINK_THRESHOLD:
+        order.pop("gift_choice", None)
+        return await show_order_summary(update, context)
+    if (order.get("gift_choice") or "").strip():
+        return await show_order_summary(update, context)
+    return await ask_gift_choice(update, context)
+
+
+async def ask_gift_choice(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    from bot.gift_value import get_gift_value_limit, list_gift_options
+
+    options = list_gift_options(alt_limit=8)
+    limit = get_gift_value_limit()
+    _som_thr = f"{GIFT_DRINK_THRESHOLD:,}".replace(",", " ")
+    _som_lim = f"{limit:,}".replace(",", " ")
+    msg = update.effective_message
+    await msg.reply_text(
+        "🎁 <b>Sovg‘angizni tanlang</b>\n\n"
+        f"Buyurtma {_som_thr} so‘mdan yuqori — "
+        "1L Coca-Cola / Pepsi / Fanta yoki shu narxdagi mahsulot "
+        f"(maks ~{_som_lim} so‘m).\n\n"
+        "Tanlovingizni bosing 👇",
+        reply_markup=gift_choice_keyboard(options.get("alts") or []),
+        parse_mode="HTML",
+    )
+    return OrderState.GIFT
+
+
+async def receive_gift_callback(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    query = update.callback_query
+    await query.answer()
+    if query.data == "order:cancel":
+        await query.edit_message_text("Buyurtma bekor qilindi.")
+        context.user_data.pop("order", None)
+        await query.message.reply_text(
+            "Asosiy menyu:",
+            reply_markup=menu_for(query.from_user.id),
+        )
+        return ConversationHandler.END
+
+    data = query.data or ""
+    order = context.user_data.setdefault("order", {})
+
+    if data == "gift:custom":
+        order["gift_awaiting_custom"] = True
+        await query.edit_message_text(
+            "✍️ Sovg‘a sifatida olmoqchi bo‘lgan mahsulot nomini yozing "
+            "(Coca-Cola 1L narxiga teng yoki arzonroq)."
+        )
+        return OrderState.GIFT
+
+    try:
+        from bot.gift_value import resolve_gift_choice
+
+        if data.startswith("gift:p:"):
+            pid = int(data.split(":")[2])
+            label = resolve_gift_choice(gift_product_id=pid)
+        elif data.startswith("gift:"):
+            key = data.split(":", 1)[1]
+            label = resolve_gift_choice(gift_key=key)
+        else:
+            await query.answer("Noto‘g‘ri tanlov", show_alert=True)
+            return OrderState.GIFT
+    except ValueError as exc:
+        await query.answer(str(exc), show_alert=True)
+        return OrderState.GIFT
+
+    order["gift_choice"] = label
+    order.pop("gift_awaiting_custom", None)
+    await query.edit_message_text(f"🎁 Sovg‘a: <b>{label}</b>", parse_mode="HTML")
+    return await show_order_summary_message(
+        query.message, query.from_user, context
+    )
+
+
+async def receive_gift_text(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    if update.message.text == "❌ Bekor qilish":
+        return await cancel_order_flow(update, context)
+    order = context.user_data.setdefault("order", {})
+    if not order.get("gift_awaiting_custom"):
+        await update.message.reply_text(
+            "Yuqoridagi tugmalardan sovg‘ani tanlang yoki «✍️ Boshqa» ni bosing."
+        )
+        return OrderState.GIFT
+    text = (update.message.text or "").strip()
+    try:
+        from bot.gift_value import resolve_gift_choice
+
+        label = resolve_gift_choice(gift_choice=text)
+    except ValueError as exc:
+        await update.message.reply_text(f"❌ {exc}")
+        return OrderState.GIFT
+    order["gift_choice"] = label
+    order.pop("gift_awaiting_custom", None)
+    await update.message.reply_text(
+        f"🎁 Sovg‘a: <b>{label}</b>", parse_mode="HTML"
+    )
     return await show_order_summary(update, context)
 
 
@@ -1357,6 +1480,10 @@ async def show_order_summary_message(message, user, context: ContextTypes.DEFAUL
     discount_line = ""
     if discount:
         discount_line = f"🏷 Chegirma: −{discount:,}\n"
+    gift_line = ""
+    gift_choice = (order.get("gift_choice") or "").strip()
+    if gift_choice:
+        gift_line = f"🎁 Sovg‘a: <b>{gift_choice}</b>\n"
     summary = (
         f"🧾 <b>Buyurtmani tekshiring</b>\n"
         f"{format_now_html()}\n\n"
@@ -1366,6 +1493,7 @@ async def show_order_summary_message(message, user, context: ContextTypes.DEFAUL
         f"{delivery_rates_html()}\n"
         f"{gift_drink_progress_html(subtotal)}\n"
         f"{discount_line}"
+        f"{gift_line}"
         f"🎁 Bonus: −{bonus_spent:,}\n"
         f"📍 Qayerdan: {order['pickup_address']}\n"
         f"🏁 Qayerga: {delivery}\n"
@@ -1428,6 +1556,10 @@ async def confirm_order_callback(
         return ConversationHandler.END
 
     _, subtotal = get_cart_totals(user_id)
+    if subtotal >= GIFT_DRINK_THRESHOLD and not (order_data.get("gift_choice") or "").strip():
+        await query.answer("Avval sovg‘ani tanlang", show_alert=True)
+        return await ask_gift_choice(update, context)
+
     discount = int(order_data.get("discount") or 0)
     bonus_spent = int(order_data.get("bonus_spent") or 0)
     delivery_fee, _zone = _order_delivery_fee(order_data, subtotal=subtotal)
@@ -1437,6 +1569,7 @@ async def confirm_order_callback(
         await query.edit_message_text("Bonus yetarli emas. Qaytadan urinib ko'ring.")
         return ConversationHandler.END
 
+    gift_choice = (order_data.get("gift_choice") or "").strip()
     order_id = create_order(
         user_id=user_id,
         pickup_address=order_data["pickup_address"],
@@ -1451,6 +1584,7 @@ async def confirm_order_callback(
         discount=discount,
         bonus_spent=bonus_spent,
         subtotal=subtotal,
+        gift_choice=gift_choice,
     )
     save_order_items(order_id, user_id)
     decrease_stock_for_cart(user_id, order_id=order_id)
@@ -1458,18 +1592,12 @@ async def confirm_order_callback(
     context.user_data.pop("order", None)
 
     gift_line = ""
-    admin_extra = ""
-    if subtotal >= GIFT_DRINK_THRESHOLD:
-        gift_line = (
-            "\n\n🎉 Sovg‘angiz: 1L COCA COLA yoki 1L PEPSI yoki 1L FANTA "
-            "yoki shu narxdagi mahsulot — tanlov o‘zingizniki!"
-        )
-        admin_extra = (
-            "\n\n🎁 SOVG‘A: Cola/Pepsi/Fanta 1L yoki shu narxdagi mahsulot"
-        )
+    if gift_choice:
+        gift_line = f"\n\n🎉 Sovg‘angiz: <b>{gift_choice}</b>"
     await query.edit_message_text(
         f"✅ Buyurtma qabul qilindi!\nBuyurtma raqami: #{order_id}\n"
-        f"💰 Jami: {total:,} so'm{gift_line}"
+        f"💰 Jami: {total:,} so'm{gift_line}",
+        parse_mode="HTML",
     )
     await query.message.reply_text(
         "💵 <b>To‘lov faqat naqd</b>\n"
@@ -1495,7 +1623,7 @@ async def confirm_order_callback(
         try:
             await context.bot.send_message(
                 chat_id=admin_id,
-                text=f"🆕 Yangi buyurtma #{order_id}\n\n{format_order(order)}{admin_extra}",
+                text=f"🆕 Yangi buyurtma #{order_id}\n\n{format_order(order)}",
                 reply_markup=admin_order_keyboard(order_id),
             )
             if order["latitude"] is not None and order["longitude"] is not None:
@@ -3312,6 +3440,13 @@ def build_order_conversation() -> ConversationHandler:
                     filters.CONTACT | (filters.TEXT & ~filters.COMMAND),
                     receive_phone,
                 )
+            ],
+            OrderState.GIFT: [
+                CallbackQueryHandler(
+                    receive_gift_callback,
+                    pattern=r"^(gift:(cola|pepsi|fanta|custom|p:\d+)|order:cancel)$",
+                ),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_gift_text),
             ],
             OrderState.CONFIRM: [
                 CallbackQueryHandler(confirm_order_callback, pattern=r"^order:")

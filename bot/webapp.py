@@ -477,6 +477,9 @@ def place_miniapp_order(
     promo_code: str = "",
     bonus_spent: int = 0,
     payment_method: str = "pending",
+    gift_choice: str = "",
+    gift_key: str = "",
+    gift_product_id: int | None = None,
 ) -> tuple[int, int, int, int, str]:
     """Buyurtmani DB ga yozadi. Qaytaradi: order_id, total, subtotal, delivery, text."""
     if not phone:
@@ -488,6 +491,16 @@ def place_miniapp_order(
     order_items, subtotal = resolve_order_items(items_raw)
     if subtotal < MIN_ORDER_AMOUNT:
         raise ValueError(f"Minimal buyurtma: {MIN_ORDER_AMOUNT:,} so'm")
+
+    resolved_gift = ""
+    if subtotal >= GIFT_DRINK_THRESHOLD:
+        from bot.gift_value import resolve_gift_choice
+
+        resolved_gift = resolve_gift_choice(
+            gift_key=gift_key,
+            gift_choice=gift_choice,
+            gift_product_id=gift_product_id,
+        )
 
     promo_code = (promo_code or "").strip()
     discount = 0
@@ -527,6 +540,7 @@ def place_miniapp_order(
         discount=discount,
         bonus_spent=bonus_spent,
         subtotal=subtotal,
+        gift_choice=resolved_gift,
     )
     save_order_items_direct(order_id, order_items)
     from bot.database import decrease_stock_for_order_items
@@ -631,6 +645,9 @@ async def api_health(_request: web.Request) -> web.Response:
 
 
 async def api_config(_request: web.Request) -> web.Response:
+    from bot.gift_value import list_gift_options
+
+    gift_opts = list_gift_options(alt_limit=30)
     return web.json_response(
         {
             "shop_name": SHOP_NAME,
@@ -644,6 +661,8 @@ async def api_config(_request: web.Request) -> web.Response:
             "delivery_fee_high": DELIVERY_FEE_HIGH,
             "gift_drink_threshold": GIFT_DRINK_THRESHOLD,
             "gift_value_limit": get_gift_value_limit(),
+            "gift_drinks": gift_opts.get("drinks") or [],
+            "gift_alts": gift_opts.get("alts") or [],
             "min_order": MIN_ORDER_AMOUNT,
             "slots": get_delivery_slots(),
             "payme_link": PAYME_LINK or payment_link_with_amount("", 0, 0),
@@ -819,6 +838,12 @@ async def api_order(request: web.Request) -> web.Response:
     except (TypeError, ValueError):
         raise web.HTTPBadRequest(text="bonus_spent noto'g'ri")
 
+    gift_pid = body.get("gift_product_id")
+    try:
+        gift_product_id = int(gift_pid) if gift_pid not in (None, "", 0, "0") else None
+    except (TypeError, ValueError):
+        gift_product_id = None
+
     try:
         order_id, total, subtotal, delivery_fee, text = place_miniapp_order(
             user_id=user_id,
@@ -832,6 +857,9 @@ async def api_order(request: web.Request) -> web.Response:
             promo_code=str(body.get("promo_code") or "").strip(),
             bonus_spent=bonus_spent,
             payment_method=str(body.get("payment_method") or "pending"),
+            gift_choice=str(body.get("gift_choice") or "").strip(),
+            gift_key=str(body.get("gift_key") or "").strip(),
+            gift_product_id=gift_product_id,
         )
     except ValueError as exc:
         raise web.HTTPBadRequest(text=str(exc)) from exc

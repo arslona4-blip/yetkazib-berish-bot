@@ -546,6 +546,37 @@ def confirm_order_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def gift_choice_keyboard(alts: list[dict] | None = None) -> InlineKeyboardMarkup:
+    """100k+ sovg‘a: Cola / Pepsi / Fanta + shu narxdagi mahsulotlar."""
+    rows = [
+        [
+            InlineKeyboardButton("🥤 Coca-Cola 1L", callback_data="gift:cola"),
+            InlineKeyboardButton("🥤 Pepsi 1L", callback_data="gift:pepsi"),
+        ],
+        [
+            InlineKeyboardButton("🥤 Fanta 1L", callback_data="gift:fanta"),
+        ],
+    ]
+    for opt in (alts or [])[:8]:
+        label = str(opt.get("label") or "")
+        pid = int(opt.get("product_id") or 0)
+        if not label or not pid:
+            continue
+        btn = f"🎁 {label}"
+        if len(btn) > 64:
+            btn = btn[:61] + "…"
+        rows.append(
+            [InlineKeyboardButton(btn, callback_data=f"gift:p:{pid}")]
+        )
+    rows.append(
+        [InlineKeyboardButton("✍️ Boshqa (yozaman)", callback_data="gift:custom")]
+    )
+    rows.append(
+        [InlineKeyboardButton("❌ Bekor", callback_data="order:cancel")]
+    )
+    return InlineKeyboardMarkup(rows)
+
+
 def payment_keyboard(
     order_id: int, amount: int | None = None
 ) -> InlineKeyboardMarkup:
