@@ -774,6 +774,8 @@ main {
   border-radius: 22px;
   padding: 0;
   width: min(92vw, 360px);
+  max-height: min(82vh, 560px);
+  overflow: hidden;
   box-shadow: 0 16px 48px rgba(0, 77, 38, 0.2);
   font-family: var(--font);
 }
@@ -783,12 +785,16 @@ main {
   backdrop-filter: blur(2px);
 }
 
-#variantForm {
+.variant-sheet {
+  display: flex;
+  flex-direction: column;
+  max-height: min(82vh, 560px);
   padding: 18px;
 }
 
-#variantForm h3 {
+.variant-sheet h3 {
   margin: 0 0 14px;
+  flex: 0 0 auto;
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--deep);
@@ -799,15 +805,23 @@ main {
   flex-direction: column;
   gap: 8px;
   margin-bottom: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: min(52vh, 360px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 2px;
 }
 
 .variant-options button {
+  flex: 0 0 auto;
   text-align: left;
   border: 1px solid var(--border);
   background: var(--surface);
   border-radius: var(--radius-sm);
-  padding: 13px;
+  padding: 13px 14px;
   font-family: inherit;
+  font-size: 0.95rem;
   font-weight: 650;
   color: var(--text);
   cursor: pointer;
@@ -818,6 +832,16 @@ main {
 .variant-options button:active {
   border-color: var(--lime);
   background: var(--lime-soft);
+}
+
+#variantForm {
+  flex: 0 0 auto;
+  padding: 0;
+  margin: 0;
+}
+
+#variantForm .btn.ghost {
+  width: 100%;
 }
 
 .qty-custom {

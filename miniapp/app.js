@@ -963,16 +963,17 @@
     const money = product.kg_money || [];
     const liters = product.liter_packs || [];
     const pieces = product.piece_packs || [];
-    if (variants.length) {
-      openVariantPicker(product);
-      return;
-    }
+    // Hajm/qadoq (250g/500g/1kg) avval — DB variantlari («kg») ustunlik qilmasin
     if (product.ask_qty) {
       openQtyPicker(product);
       return;
     }
     if (packs.length || money.length || liters.length || pieces.length) {
       openKgPicker(product);
+      return;
+    }
+    if (variants.length) {
+      openVariantPicker(product);
       return;
     }
     upsertCartItem({
@@ -1079,11 +1080,19 @@
   }
 
   function openKgPicker(product) {
-    els.variantTitle.textContent = `${product.card_name || product.name} — tanlang`;
+    els.variantTitle.textContent = `${product.card_name || product.name} — hajm tanlang`;
     els.variantOptions.innerHTML = "";
     const stem = productStem(product.name) || product.name;
-    (product.kg_packs || []).forEach((pack) => {
-      addOptionButton(`${pack.label} — ${formatMoney(pack.price)}`, () => {
+    const packs = product.kg_packs || [];
+    const liters = product.liter_packs || [];
+    const pieces = product.piece_packs || [];
+    const money = product.kg_money || [];
+
+    packs.forEach((pack) => {
+      const label = pack.label || (pack.grams >= 1000
+        ? `${pack.grams / 1000} kg`
+        : `${pack.grams} gramm`);
+      addOptionButton(`${label} — ${formatMoney(pack.price)}`, () => {
         const useReal = !pack.virtual;
         upsertCartItem({
           product_id: pack.product_id || product.id,
@@ -1091,13 +1100,13 @@
           pack_grams: useReal ? 0 : pack.grams,
           name: useReal && product.id === pack.product_id
             ? product.name
-            : `${stem} ${pack.label}`.trim(),
+            : `${stem} ${label}`.trim(),
           price: pack.price,
           quantity: 1,
         });
       });
     });
-    (product.liter_packs || []).forEach((pack) => {
+    liters.forEach((pack) => {
       addOptionButton(`${pack.label} — ${formatMoney(pack.price)}`, () => {
         const useReal = !pack.virtual;
         upsertCartItem({
@@ -1112,7 +1121,7 @@
         });
       });
     });
-    (product.piece_packs || []).forEach((pack) => {
+    pieces.forEach((pack) => {
       addOptionButton(`${pack.label} — ${formatMoney(pack.price)}`, () => {
         upsertCartItem({
           product_id: pack.product_id || product.id,
@@ -1123,9 +1132,9 @@
         });
       });
     });
-    (product.kg_money || []).forEach((opt) => {
+    money.forEach((opt) => {
       const detail = opt.detail ? ` (${opt.detail})` : "";
-      addOptionButton(`${opt.label}${detail} — ${formatMoney(opt.amount)}`, () => {
+      addOptionButton(`${opt.label}${detail}`, () => {
         upsertCartItem({
           product_id: opt.product_id || product.id,
           variant_id: 0,
@@ -1136,6 +1145,18 @@
         });
       });
     });
+
+    if (!els.variantOptions.children.length) {
+      addOptionButton(`${formatMoney(product.price)} — 1 kg`, () => {
+        upsertCartItem({
+          product_id: product.id,
+          variant_id: 0,
+          name: product.name,
+          price: product.price,
+          quantity: 1,
+        });
+      });
+    }
     els.variantDialog.showModal();
   }
 
