@@ -712,6 +712,40 @@ def grams_for_money(price_1kg: int, amount: int) -> int:
 
 KG_PACK_GRAMS = (250, 500, 1000)
 
+# Nomida kg/g yo‘q, lekin 1 kg narxida sotiladigan sabzavotlar
+_BULK_KG_PRODUCE = frozenset(
+    {
+        "kartoshka",
+        "piyoz",
+        "sabzi",
+        "morkov",
+        "pomidor",
+        "bodring",
+        "baqlajon",
+        "qovoq",
+        "karam",
+        "lavlagi",
+        "turp",
+        "ismaloq",
+        "ukrop",
+        "petrushka",
+        "sarimsoq",
+        "chasnich",
+        "redis",
+    }
+)
+
+
+def _is_bulk_kg_produce(name: str) -> bool:
+    """«Kartoshka», «Piyoz», «Sabzi» — hajmsiz nom, 1kg narxi."""
+    key = kg_stem_key(name)
+    if not key:
+        return False
+    if key in _BULK_KG_PRODUCE:
+        return True
+    tokens = set(key.split())
+    return bool(tokens & _BULK_KG_PRODUCE)
+
 
 def _product_grams(product: Any) -> int | None:
     size, unit = _pack_size_from_name(str(product["name"]))
@@ -721,6 +755,16 @@ def _product_grams(product: Any) -> int | None:
         return int(round(size))
     if unit == "kg":
         return int(round(size * 1000))
+    return None
+
+
+def _effective_kg_grams(product: Any) -> int | None:
+    """Hajm: nomdagi g/kg yoki bulk sabzavot → 1000g."""
+    grams = _product_grams(product)
+    if grams:
+        return grams
+    if _is_bulk_kg_produce(str(product["name"])) and not _product_ml(product):
+        return 1000
     return None
 
 
@@ -746,7 +790,7 @@ def expand_kg_packs(products: list[Any]) -> list[dict[str, Any]]:
     ref_grams = 1000
     if ref is None:
         for p in products:
-            grams = _product_grams(p)
+            grams = _effective_kg_grams(p)
             if grams and grams >= 1000:
                 ref, ref_grams = p, grams
                 break
@@ -759,17 +803,24 @@ def expand_kg_packs(products: list[Any]) -> list[dict[str, Any]]:
         grams = _product_grams(p)
         if grams:
             by_grams[grams] = p
+        elif _is_bulk_kg_produce(str(p["name"])) and not _product_ml(p):
+            by_grams.setdefault(1000, p)
     wanted = sorted(set(KG_PACK_GRAMS) | set(by_grams.keys()))
     out: list[dict[str, Any]] = []
     for grams in wanted:
         if grams <= 0:
             continue
         real = by_grams.get(grams)
-        price = (
-            int(real["price"])
-            if real is not None
-            else max(100, int(round(price_kg * grams / 1000.0)))
-        )
+        # Bulk «Kartoshka» (hajmsiz) — 1kg real, 250/500 virtual
+        if real is not None and grams == 1000 and not _product_grams(real):
+            price = int(real["price"])
+            is_virtual = False
+        elif real is not None:
+            price = int(real["price"])
+            is_virtual = False
+        else:
+            price = max(100, int(round(price_kg * grams / 1000.0)))
+            is_virtual = True
         if grams >= 1000 and grams % 1000 == 0:
             label = f"{grams // 1000} kg"
         else:
@@ -780,7 +831,7 @@ def expand_kg_packs(products: list[Any]) -> list[dict[str, Any]]:
                 "price": price,
                 "label": label,
                 "product_id": int(real["id"]) if real is not None else int(ref["id"]),
-                "virtual": real is None,
+                "virtual": is_virtual,
                 "kg_product_id": int(ref["id"]),
             }
         )
@@ -801,11 +852,13 @@ def kg_family_for_product(product: Any) -> tuple[str, list[Any]]:
     """Katalog oilasi: faqat BIR XIL stem (Guruch 250g+1kg).
 
     Hajmsiz «NESTOGEN 3» ham shu oilaga kiradi — bitta kartochka bo‘lishi uchun.
+    Bulk sabzavot (kartoshka/piyoz/sabzi) ham kg oilasi.
     """
     key = kg_stem_key(str(product["name"]))
     if not key:
         return "", [product]
-    if not _product_grams(product) and not _kg_stem_has_grams(key):
+    bulk = _is_bulk_kg_produce(str(product["name"]))
+    if not _product_grams(product) and not _kg_stem_has_grams(key) and not bulk:
         return "", [product]
     family: list[Any] = []
     seen: set[int] = set()
@@ -821,7 +874,7 @@ def kg_family_for_product(product: Any) -> tuple[str, list[Any]]:
         family.append(p)
     if int(product["id"]) not in seen:
         family.insert(0, product)
-    family.sort(key=lambda p: (_product_grams(p) or 0, int(p["id"])))
+    family.sort(key=lambda p: (_effective_kg_grams(p) or 0, int(p["id"])))
     return key, family
 
 
@@ -839,6 +892,13 @@ def expand_gram_family_packs(family: list[Any]) -> list[dict[str, Any]]:
     """Kg oilasi uchun tanlash: hajmsiz a'zo bo‘lsa nom+narx ro‘yxati."""
     if not family:
         return []
+    # Kartoshka/piyoz/sabzi — 250g/500g/1kg
+    if any(_is_bulk_kg_produce(str(p["name"])) for p in family) and not any(
+        _product_ml(p) for p in family
+    ):
+        packs = expand_kg_packs(family)
+        if packs:
+            return packs
     if any(not _product_grams(p) for p in family):
         return expand_piece_packs(family)
     return expand_kg_packs(family) or expand_real_gram_packs(family)
@@ -1796,6 +1856,11 @@ def _find_1kg_product(variants: list[Any]):
             return p
         if unit in {"g", "gr"} and abs(size - 1000.0) < 0.01:
             return p
+    # Hajmsiz sabzavot — narx 1 kg uchun
+    for p in variants:
+        if _is_bulk_kg_produce(str(p["name"])) and not _product_ml(p):
+            if not _product_grams(p):
+                return p
     return None
 
 
