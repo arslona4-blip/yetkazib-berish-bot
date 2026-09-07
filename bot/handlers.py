@@ -1651,6 +1651,11 @@ async def cancel_order_flow(
 
 
 async def my_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    from bot.keyboards import (
+        customer_clear_orders_keyboard,
+        order_actions_keyboard,
+    )
+
     orders = get_user_orders(update.effective_user.id)
     if not orders:
         await update.message.reply_text(
@@ -1666,19 +1671,31 @@ async def my_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"📋 <b>Buyurtmalaringiz</b>\n{format_now_html()}",
         parse_mode="HTML",
     )
+    finished = 0
     for order in orders:
         payment = order["payment_status"]
         can_pay = payment in {"pending", "rejected"}
         can_cancel = order["status"] in {"new", "accepted"}
+        can_delete = order["status"] in {"cancelled", "delivered"}
+        if can_delete:
+            finished += 1
         await update.message.reply_text(
             format_order(order),
-            reply_markup=order_actions_keyboard(order["id"], can_pay, can_cancel),
+            reply_markup=order_actions_keyboard(
+                order["id"], can_pay, can_cancel, can_delete=can_delete
+            ),
         )
         if can_pay:
             await update.message.reply_text(
                 "To'lov usuli:",
                 reply_markup=payment_keyboard(order["id"]),
             )
+    if finished:
+        await update.message.reply_text(
+            f"🗑 Tugagan buyurtmalar: {finished} ta\n"
+            "Keraksizlarini o‘chirish mumkin.",
+            reply_markup=customer_clear_orders_keyboard(),
+        )
 
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

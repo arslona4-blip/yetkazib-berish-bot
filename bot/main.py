@@ -28,6 +28,7 @@ from bot.extras import (
     build_extra_conversations,
     cancel_order_callback,
     courier_panel,
+    delete_order_callback,
     fav_callback,
     reorder_callback,
     show_bonus,
@@ -223,6 +224,12 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(fav_callback, pattern=r"^fav:\d+$"))
     app.add_handler(CallbackQueryHandler(reorder_callback, pattern=r"^reorder:\d+$"))
     app.add_handler(CallbackQueryHandler(cancel_order_callback, pattern=r"^cancel_order:\d+$"))
+    app.add_handler(
+        CallbackQueryHandler(
+            delete_order_callback,
+            pattern=r"^(delete_order(_yes|_no)?:\d+|clear_orders(_yes|_no)?)$",
+        )
+    )
     app.add_handler(CallbackQueryHandler(language_callback, pattern=r"^lang:(uz|ru)$"))
     app.add_handler(CallbackQueryHandler(rating_callback, pattern=r"^rate:\d+:\d+$"))
     app.add_handler(

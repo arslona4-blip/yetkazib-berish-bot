@@ -1269,6 +1269,31 @@ def delete_order(order_id: int) -> bool:
     return True
 
 
+def delete_user_finished_orders(user_id: int) -> int:
+    """Mijozning tugagan (yetkazilgan/bekor) buyurtmalarini o‘chiradi. Qaytaradi: soni."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT id FROM orders
+            WHERE user_id = ? AND status IN ('cancelled', 'delivered')
+            """,
+            (int(user_id),),
+        ).fetchall()
+        ids = [int(r["id"]) for r in rows]
+        if not ids:
+            return 0
+        placeholders = ",".join("?" * len(ids))
+        conn.execute(
+            f"DELETE FROM order_items WHERE order_id IN ({placeholders})",
+            ids,
+        )
+        conn.execute(
+            f"DELETE FROM orders WHERE id IN ({placeholders})",
+            ids,
+        )
+        return len(ids)
+
+
 def get_user_orders(user_id: int, limit: int = 10) -> list[sqlite3.Row]:
     with get_connection() as conn:
         rows = conn.execute(

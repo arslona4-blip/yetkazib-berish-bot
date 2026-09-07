@@ -185,7 +185,10 @@ async def cancel_order_callback(
         return
     update_order_status(order_id, "cancelled")
     await query.answer()
-    await query.edit_message_text(f"❌ Buyurtma #{order_id} bekor qilindi.")
+    await query.edit_message_text(
+        f"❌ Buyurtma #{order_id} bekor qilindi.\n"
+        "Xotiradan o‘chirish: «📋 Mening buyurtmalarim» → 🗑 O‘chirish"
+    )
     for admin_id in ADMIN_IDS:
         try:
             await context.bot.send_message(
@@ -193,6 +196,104 @@ async def cancel_order_callback(
             )
         except Exception:
             pass
+
+
+async def delete_order_callback(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Mijoz tugagan buyurtmasini o‘chiradi."""
+    from bot.database import delete_order, delete_user_finished_orders
+    from bot.keyboards import (
+        customer_clear_orders_confirm_keyboard,
+        customer_delete_order_confirm_keyboard,
+        order_actions_keyboard,
+    )
+
+    query = update.callback_query
+    data = query.data or ""
+    user_id = query.from_user.id
+
+    if data == "clear_orders":
+        await query.answer()
+        await query.edit_message_text(
+            "🗑 Barcha <b>yetkazilgan</b> va <b>bekor</b> qilingan "
+            "buyurtmalar o‘chirilsinmi?\n"
+            "Faol (yangi / yo‘lda) buyurtmalar saqlanadi.",
+            parse_mode="HTML",
+            reply_markup=customer_clear_orders_confirm_keyboard(),
+        )
+        return
+
+    if data == "clear_orders_no":
+        await query.answer("Bekor qilindi")
+        await query.edit_message_text("Tarix saqlanib qoldi.")
+        return
+
+    if data == "clear_orders_yes":
+        n = delete_user_finished_orders(user_id)
+        await query.answer()
+        if n:
+            await query.edit_message_text(f"🗑 {n} ta tugagan buyurtma o‘chirildi.")
+        else:
+            await query.edit_message_text("O‘chirish uchun tugagan buyurtma yo‘q.")
+        return
+
+    if data.startswith("delete_order_no:"):
+        order_id = int(data.split(":")[1])
+        order = get_order(order_id)
+        await query.answer()
+        if not order or int(order["user_id"]) != user_id:
+            await query.edit_message_text("Buyurtma topilmadi.")
+            return
+        payment = order["payment_status"]
+        can_pay = payment in {"pending", "rejected"}
+        can_cancel = order["status"] in {"new", "accepted"}
+        can_delete = order["status"] in {"cancelled", "delivered"}
+        await query.edit_message_text(
+            format_order(order),
+            reply_markup=order_actions_keyboard(
+                order_id, can_pay, can_cancel, can_delete=can_delete
+            ),
+        )
+        return
+
+    if data.startswith("delete_order_yes:"):
+        order_id = int(data.split(":")[1])
+        order = get_order(order_id)
+        if not order or int(order["user_id"]) != user_id:
+            await query.answer("Ruxsat yo'q", show_alert=True)
+            return
+        if order["status"] not in {"cancelled", "delivered"}:
+            await query.answer(
+                "Faqat yetkazilgan yoki bekor qilingan buyurtmani o‘chirish mumkin",
+                show_alert=True,
+            )
+            return
+        if delete_order(order_id):
+            await query.answer()
+            await query.edit_message_text(f"🗑 Buyurtma #{order_id} o‘chirildi.")
+        else:
+            await query.answer("Topilmadi", show_alert=True)
+        return
+
+    if data.startswith("delete_order:"):
+        order_id = int(data.split(":")[1])
+        order = get_order(order_id)
+        if not order or int(order["user_id"]) != user_id:
+            await query.answer("Ruxsat yo'q", show_alert=True)
+            return
+        if order["status"] not in {"cancelled", "delivered"}:
+            await query.answer(
+                "Avval bekor qiling yoki yetkazilguncha kuting",
+                show_alert=True,
+            )
+            return
+        await query.answer()
+        await query.edit_message_text(
+            f"🗑 Buyurtma #{order_id} ni butunlay o‘chirasizmi?",
+            reply_markup=customer_delete_order_confirm_keyboard(order_id),
+        )
+        return
 
 
 async def courier_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

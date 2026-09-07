@@ -784,7 +784,12 @@ def bonus_keyboard(bonus: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(rows)
 
 
-def order_actions_keyboard(order_id: int, can_pay: bool, can_cancel: bool) -> InlineKeyboardMarkup:
+def order_actions_keyboard(
+    order_id: int,
+    can_pay: bool,
+    can_cancel: bool,
+    can_delete: bool = False,
+) -> InlineKeyboardMarkup:
     rows = []
     if can_pay:
         rows.append(
@@ -812,7 +817,62 @@ def order_actions_keyboard(order_id: int, can_pay: bool, can_cancel: bool) -> In
                 )
             ]
         )
+    if can_delete:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    "🗑 O‘chirish", callback_data=f"delete_order:{order_id}"
+                )
+            ]
+        )
     return InlineKeyboardMarkup(rows)
+
+
+def customer_delete_order_confirm_keyboard(order_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "✅ Ha, o‘chirilsin",
+                    callback_data=f"delete_order_yes:{order_id}",
+                ),
+                InlineKeyboardButton(
+                    "❌ Yo‘q",
+                    callback_data=f"delete_order_no:{order_id}",
+                ),
+            ]
+        ]
+    )
+
+
+def customer_clear_orders_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "🗑 Tugagan buyurtmalarni o‘chirish",
+                    callback_data="clear_orders",
+                )
+            ]
+        ]
+    )
+
+
+def customer_clear_orders_confirm_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "✅ Ha, tozalansin",
+                    callback_data="clear_orders_yes",
+                ),
+                InlineKeyboardButton(
+                    "❌ Yo‘q",
+                    callback_data="clear_orders_no",
+                ),
+            ]
+        ]
+    )
 
 
 def favorite_toggle_keyboard(product_id: int, is_fav: bool) -> InlineKeyboardMarkup:
