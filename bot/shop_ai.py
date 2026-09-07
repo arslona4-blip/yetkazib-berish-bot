@@ -232,6 +232,8 @@ _ALIASES = {
     "layschips": "lays",
     "hotlunch": "hotlunch",
     "hotlanch": "hotlunch",
+    "mariagold": "mariagold",
+    "mariogold": "mariagold",
     "ryabina": "ryabina",
     "рябина": "ryabina",
     "antijir": "antijir",
@@ -245,7 +247,7 @@ _ALIASES = {
 # NESTOGEN 1/2/3 alohida — bosqich raqami mahsulot nomining bir qismi
 _LINE_FAMILY_BASES = frozenset({
     "ekler", "kolonka", "fonex", "moloko", "ryabina", "antijir", "colgate", "salfetka",
-    "bellakt", "lays", "hotlunch",
+    "bellakt", "lays", "hotlunch", "mariagold",
 })
 _LINE_FAMILY_CARD_NAMES = {
     "ekler": "Ekler",
@@ -259,6 +261,7 @@ _LINE_FAMILY_CARD_NAMES = {
     "bellakt": "Bellakt",
     "lays": "Lays",
     "hotlunch": "Hot Lunch",
+    "mariagold": "Maria Gold",
 }
 # Ikki so‘zli nomlar → bitta qator
 _LINE_FAMILY_PHRASE_BASES = {
@@ -270,6 +273,12 @@ _LINE_FAMILY_PHRASE_BASES = {
     "hot lanch": "hotlunch",
     "hot lanсh": "hotlunch",  # kirill с
     "lay s": "lays",
+    "maria gold": "mariagold",
+    "mario gold": "mariagold",
+    "mariagold": "mariagold",
+    "mariogold": "mariagold",
+    "maria gold moloko": "mariagold",
+    "mario gold moloko": "mariagold",
 }
 # Faqat shu brendlarda oxirgi raqam variant (BELLAKT 12 → BELLAKT)
 _TRAILING_VARIANT_STRIP_HEADS = frozenset({"bellakt"})
