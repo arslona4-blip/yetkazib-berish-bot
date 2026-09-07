@@ -976,6 +976,12 @@ def admin_category_item_keyboard(category_id: int) -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
+                    "📝 Nomni o‘zgartirish",
+                    callback_data=f"admin_prod:renamecat:{category_id}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     "➕ Mahsulot qo'shish",
                     callback_data=f"admin_prod:addin:{category_id}",
                 )
@@ -999,6 +1005,12 @@ def admin_category_products_list_keyboard(
             InlineKeyboardButton(
                 "➕ Mahsulot qo'shish",
                 callback_data=f"admin_prod:addin:{category_id}",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "📝 Nomni o‘zgartirish",
+                callback_data=f"admin_prod:renamecat:{category_id}",
             )
         ],
         [
@@ -1039,6 +1051,12 @@ def admin_category_products_header_keyboard(category_id: int) -> InlineKeyboardM
                 InlineKeyboardButton(
                     "➕ Mahsulot qo'shish",
                     callback_data=f"admin_prod:addin:{category_id}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "📝 Nomni o‘zgartirish",
+                    callback_data=f"admin_prod:renamecat:{category_id}",
                 )
             ],
             [

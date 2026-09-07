@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   api,
   clearAuth,
@@ -19,6 +19,8 @@ import type {
   StatsPayload,
   Tab,
 } from './types'
+import { alertNewOrder, unlockAdminSound } from './sound'
+import { enableAdminPush } from './push'
 import './styles.css'
 
 declare global {
@@ -125,6 +127,9 @@ export default function App() {
   const [showCode, setShowCode] = useState(false)
   const [booting, setBooting] = useState(true)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [orderAlert, setOrderAlert] = useState('')
+  const seenNewIdsRef = useRef<Set<number> | null>(null)
+  const alertTimerRef = useRef<number | null>(null)
 
   const cartTotal = useMemo(
     () => cart.reduce((s, l) => s + l.price * l.quantity, 0),
@@ -133,7 +138,7 @@ export default function App() {
 
   const kassaFiltered = useMemo(() => {
     const q = kassaSearch.trim().toLowerCase()
-    const list = catalog.filter((p) => p.is_active && p.stock > 0)
+    const list = catalog.filter((p) => p.is_active)
     if (!q) return list.slice(0, 40)
     return list
       .filter(
@@ -160,6 +165,10 @@ export default function App() {
       setShop(me.shop_name || 'Admin')
       saveAuth(a)
       setAuth(a)
+      void unlockAdminSound({ confirm: false })
+      void enableAdminPush(a).catch(() => {
+        /* ruxsat/SW — tugma orqali qayta */
+      })
       await refreshAll(a)
     } catch (e) {
       clearAuth()
@@ -184,6 +193,10 @@ export default function App() {
       setShop(res.shop_name || 'Admin')
       saveAuth(next)
       setAuth(next)
+      void unlockAdminSound({ confirm: false })
+      void enableAdminPush(next).catch(() => {
+        /* ruxsat/SW — tugma orqali qayta */
+      })
       await refreshAll(next)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Kod xato')
@@ -236,22 +249,51 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  function notifyNewOrders(fresh: Order[]) {
+    const ids = fresh.map((o) => o.id)
+    if (seenNewIdsRef.current == null) {
+      seenNewIdsRef.current = new Set(ids)
+      return
+    }
+    const novel = ids.filter((id) => !seenNewIdsRef.current!.has(id))
+    for (const id of ids) seenNewIdsRef.current.add(id)
+    if (!novel.length) return
+    alertNewOrder({
+      count: novel.length,
+      orderId: novel.length === 1 ? novel[0] : undefined,
+    })
+    const msg =
+      novel.length === 1
+        ? `🔔 Yangi buyurtma #${novel[0]}`
+        : `🔔 ${novel.length} ta yangi buyurtma`
+    setOrderAlert(msg)
+    if (alertTimerRef.current) window.clearTimeout(alertTimerRef.current)
+    alertTimerRef.current = window.setTimeout(() => setOrderAlert(''), 8000)
+    try {
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        new Notification('Baraka Admin', { body: msg, tag: 'new-order' })
+      }
+    } catch { /* ignore */ }
+  }
+
   async function refreshAll(a: AuthState | null = auth, silent = false) {
     if (!a) return
     if (!silent) setBusy(true)
     setError('')
     try {
-      const [st, or, pay, cat] = await Promise.all([
+      const [st, or, pay, cat, freshNew] = await Promise.all([
         api.stats(a),
         api.orders(a, orderStatus, orderQuery),
         api.orders(a, 'payments'),
         api.products(a),
+        api.orders(a, 'new'),
       ])
       setStats(st)
       setOrders(or.orders)
       setPayments(pay.orders)
       setCatalog(cat.products)
       setLastSync(new Date().toLocaleTimeString('uz-UZ'))
+      notifyNewOrders(freshNew.orders || [])
     } catch (e) {
       if (!silent) setError(e instanceof Error ? e.message : 'Yuklash xato')
     } finally {
@@ -261,9 +303,18 @@ export default function App() {
 
   useEffect(() => {
     if (!auth) return
+    const unlock = () => {
+      void unlockAdminSound({ confirm: false })
+    }
+    document.addEventListener('pointerdown', unlock, { once: true })
+    return () => document.removeEventListener('pointerdown', unlock)
+  }, [auth])
+
+  useEffect(() => {
+    if (!auth) return
     const id = window.setInterval(() => {
       void refreshAll(auth, true)
-    }, 20000)
+    }, 12000)
     return () => window.clearInterval(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth, orderStatus, orderQuery])
@@ -473,8 +524,12 @@ export default function App() {
       if (i >= 0) {
         const next = [...prev]
         const line = next[i]
-        const q = Math.min(p.stock, line.quantity + qty)
-        next[i] = { ...line, quantity: q, stock: p.stock, price: p.price }
+        next[i] = {
+          ...line,
+          quantity: line.quantity + qty,
+          stock: p.stock,
+          price: p.price,
+        }
         return next
       }
       return [
@@ -483,7 +538,7 @@ export default function App() {
           product_id: p.id,
           name: p.name,
           price: p.price,
-          quantity: Math.min(qty, p.stock),
+          quantity: qty,
           stock: p.stock,
         },
       ]
@@ -496,7 +551,7 @@ export default function App() {
       prev
         .map((l) =>
           l.product_id === productId
-            ? { ...l, quantity: Math.max(0, Math.min(l.stock, quantity)) }
+            ? { ...l, quantity: Math.max(0, quantity) }
             : l,
         )
         .filter((l) => l.quantity > 0),
@@ -651,6 +706,39 @@ export default function App() {
       await loadCatalogCats()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Toifa xato')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function renameCategory() {
+    if (!auth) return
+    const cid = Number(productForm.category_id)
+    if (!cid) {
+      setError('Avval toifani tanlang')
+      return
+    }
+    const current = catalogCats.find((c) => c.id === cid)
+    const next = window.prompt(
+      'Toifa yangi nomi (emoji ixtiyoriy):',
+      current ? categoryChipLabel(current.name, current.emoji) : '',
+    )
+    if (next === null) return
+    const name = next.trim()
+    if (name.length < 2) {
+      setError('Toifa nomi juda qisqa')
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      await api.updateCategory(auth, cid, name)
+      await loadCatalogCats()
+      setOrderAlert('✅ Toifa nomi yangilandi')
+      if (alertTimerRef.current) window.clearTimeout(alertTimerRef.current)
+      alertTimerRef.current = window.setTimeout(() => setOrderAlert(''), 4000)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Toifa tahrirlash xato')
     } finally {
       setBusy(false)
     }
@@ -927,9 +1015,99 @@ export default function App() {
             type="button"
             className="pos-ico"
             title="Yangilash"
-            onClick={() => void refreshAll()}
+            onClick={() => {
+              void unlockAdminSound({ confirm: false })
+              try {
+                if (Notification.permission === 'default') {
+                  void Notification.requestPermission()
+                }
+              } catch { /* ignore */ }
+              void refreshAll()
+            }}
           >
             ↻
+          </button>
+          <button
+            type="button"
+            className="pos-ico"
+            title="Beep sinovi"
+            onClick={() => {
+              void (async () => {
+                const ok = await unlockAdminSound({ confirm: true })
+                if (ok) {
+                  setOrderAlert(
+                    '🔊 Beep yoqildi — yangi buyurtmada chaladi',
+                  )
+                } else {
+                  setOrderAlert(
+                    '⚠️ Beep ochilmadi. Chrome da oching, telefon ovozini yoqing, 🔊 ni qayta bosing',
+                  )
+                }
+                if (alertTimerRef.current) window.clearTimeout(alertTimerRef.current)
+                alertTimerRef.current = window.setTimeout(() => setOrderAlert(''), 5000)
+              })()
+            }}
+          >
+            🔊
+          </button>
+          <button
+            type="button"
+            className="pos-ico"
+            title="Telegram bildirishnoma testi"
+            onClick={() => {
+              if (!auth) return
+              void (async () => {
+                try {
+                  const res = await api.telegramNotifyTest(auth)
+                  setOrderAlert(
+                    `🔔 Telegram ga test yuborildi (${res.sent || 0}). Bot chatini tekshiring — ovoz bilan kelishi kerak`,
+                  )
+                } catch (e) {
+                  const msg =
+                    e instanceof Error ? e.message : 'Telegram test xato'
+                  setOrderAlert(`⚠️ ${msg}`)
+                }
+                if (alertTimerRef.current) window.clearTimeout(alertTimerRef.current)
+                alertTimerRef.current = window.setTimeout(
+                  () => setOrderAlert(''),
+                  14000,
+                )
+              })()
+            }}
+          >
+            📣
+          </button>
+          <button
+            type="button"
+            className="pos-ico"
+            title="Web Push (ixtiyoriy, faqat Chrome)"
+            onClick={() => {
+              if (!auth) return
+              void (async () => {
+                try {
+                  await enableAdminPush(auth)
+                  try {
+                    await api.pushTest(auth)
+                    setOrderAlert(
+                      '🔔 Chrome Push yoqildi — test yuborildi',
+                    )
+                  } catch {
+                    setOrderAlert('🔔 Chrome Push saqlandi')
+                  }
+                } catch (e) {
+                  const msg =
+                    e instanceof Error ? e.message : 'Push yoqilmadi'
+                  setOrderAlert(`⚠️ Push: ${msg}`)
+                }
+                if (alertTimerRef.current) window.clearTimeout(alertTimerRef.current)
+                alertTimerRef.current = window.setTimeout(
+                  () => setOrderAlert(''),
+                  12000,
+                )
+              })()
+            }}
+          >
+            Push
           </button>
           <button
             type="button"
@@ -949,6 +1127,7 @@ export default function App() {
       </header>
 
       {error ? <div className="error">{error}</div> : null}
+      {orderAlert ? <div className="order-alert">{orderAlert}</div> : null}
 
       {tab === 'dash' && stats ? (
         <>
@@ -1177,8 +1356,7 @@ export default function App() {
                   <span className="mono">{money(p.price)}</span>
                 </div>
                 <p>
-                  Qoldiq: {p.stock}
-                  {p.barcode ? ` · ${p.barcode}` : ''}
+                  {p.barcode ? p.barcode : '—'}
                 </p>
               </button>
             ))}
@@ -1715,16 +1893,6 @@ export default function App() {
                 />
               </div>
               <div className="field">
-                <label>Boshlang‘ich qoldiq</label>
-                <input
-                  value={productForm.stock}
-                  onChange={(e) =>
-                    setProductForm((s) => ({ ...s, stock: e.target.value }))
-                  }
-                  inputMode="numeric"
-                />
-              </div>
-              <div className="field">
                 <label>Barkod</label>
                 <input
                   value={productForm.barcode}
@@ -1765,6 +1933,15 @@ export default function App() {
                 >
                   Toifa +
                 </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={!productForm.category_id}
+                  onClick={() => void renameCategory()}
+                  title="Tanlangan toifa nomini o‘zgartirish"
+                >
+                  ✏️ Nomni o‘zgartirish
+                </button>
               </div>
               <div className="field">
                 <label>Izoh</label>
@@ -1796,7 +1973,7 @@ export default function App() {
                       {p.is_active ? '✅' : '🚫'} {p.name}
                     </h3>
                     <p>
-                      {p.category_name} · {p.stock} dona
+                      {p.category_name || '—'}
                     </p>
                   </div>
                   <div className="mono">{money(p.price)}</div>

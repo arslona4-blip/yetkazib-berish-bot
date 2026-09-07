@@ -238,7 +238,7 @@ def main() -> None:
     app.add_handler(
         CallbackQueryHandler(
             admin_product_callback,
-            pattern=r"^admin_prod:(list|cats|viewcat:\d+|item:\d+|toggle:\d+|del:\d+|delcat:\d+|delsize:\d+|addcat)$",
+            pattern=r"^admin_prod:(list|cats|viewcat:\d+|item:\d+|toggle:\d+|del:\d+|delcat:\d+|renamecat:\d+|delsize:\d+|addcat)$",
         )
     )
     app.add_handler(CallbackQueryHandler(admin_status_callback, pattern=r"^admin_status:"))

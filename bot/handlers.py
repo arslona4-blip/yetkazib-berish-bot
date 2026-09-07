@@ -91,6 +91,7 @@ from bot.database import (
     spend_bonus,
     update_order_status,
     update_payment_status,
+    update_category,
     update_product_fields,
     update_product_price,
     upsert_user,
@@ -2100,6 +2101,31 @@ async def admin_product_callback(
         )
         return None
 
+    if action == "renamecat":
+        category_id = int(parts[2])
+        category = get_category(category_id)
+        if not category:
+            await query.answer("Toifa topilmadi.", show_alert=True)
+            return None
+        _force_end_product_admin(update, context)
+        context.user_data["awaiting_admin"] = "category_rename"
+        context.user_data["rename_category_id"] = category_id
+        context.user_data.pop("admin_product", None)
+        await query.edit_message_text(
+            f"📝 Toifa nomini o‘zgartirish\n"
+            f"Hozirgi: <b>{category_label(category)}</b>",
+            parse_mode="HTML",
+        )
+        await query.message.reply_text(
+            "Yangi nomni yozing.\n\n"
+            "💡 Emoji ixtiyoriy:\n"
+            "• <code>🍎 Meva</code>\n"
+            "• <code>💄 Parfyumeriya</code>",
+            reply_markup=cancel_keyboard(),
+            parse_mode="HTML",
+        )
+        return None
+
     if action == "addin":
         # Toifa ichidan yangi mahsulot — avval nom / kod
         category_id = int(parts[2])
@@ -2812,18 +2838,70 @@ async def admin_category_name(
     return ConversationHandler.END
 
 
+async def admin_category_rename(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    left = await exit_admin_if_menu(update, context)
+    if left is not None:
+        return left
+    text = (update.message.text or "").strip()
+    if text == "❌ Bekor qilish":
+        context.user_data.pop("awaiting_admin", None)
+        context.user_data.pop("rename_category_id", None)
+        return await cancel_product_admin(update, context)
+
+    category_id = int(context.user_data.get("rename_category_id") or 0)
+    if not category_id:
+        context.user_data.pop("awaiting_admin", None)
+        await update.message.reply_text("Toifa topilmadi. Qaytadan tanlang.")
+        return ConversationHandler.END
+
+    from bot.category_emoji import parse_category_name
+
+    _emoji, clean_name = parse_category_name(text)
+    if len(clean_name.strip()) < 2:
+        context.user_data["awaiting_admin"] = "category_rename"
+        await update.message.reply_text("Toifa nomi juda qisqa. Qayta yozing:")
+        return ConversationHandler.END
+
+    try:
+        update_category(category_id, text)
+    except ValueError as exc:
+        context.user_data["awaiting_admin"] = "category_rename"
+        await update.message.reply_text(f"❌ {exc}\nBoshqa nom yozing:")
+        return ConversationHandler.END
+
+    context.user_data.pop("awaiting_admin", None)
+    context.user_data.pop("rename_category_id", None)
+    cat = get_category(category_id)
+    label = category_label(cat) if cat else text
+    await update.message.reply_text(
+        f"✅ Toifa nomi yangilandi: <b>{label}</b>",
+        parse_mode="HTML",
+        reply_markup=admin_category_products_list_keyboard(
+            category_id,
+            get_products(active_only=False, category_id=category_id),
+        ),
+    )
+    return ConversationHandler.END
+
+
 async def admin_category_awaiting_text(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
-    """Toifa qo'shish — mahsulot conversationidan oldin ishlashi kerak."""
+    """Toifa qo'shish / nomini o‘zgartirish — mahsulot conversationidan oldin."""
     from telegram.ext import ApplicationHandlerStop
 
     if not update.message or not is_admin(update.effective_user.id):
         return
-    if context.user_data.get("awaiting_admin") != "category_name":
+    mode = context.user_data.get("awaiting_admin")
+    if mode not in {"category_name", "category_rename"}:
         return
     _force_end_product_admin(update, context)
-    await admin_category_name(update, context)
+    if mode == "category_rename":
+        await admin_category_rename(update, context)
+    else:
+        await admin_category_name(update, context)
     raise ApplicationHandlerStop
 
 
@@ -2859,6 +2937,8 @@ async def admin_awaiting_text(
         await admin_product_pick_category_hint(update, context)
     elif mode == "category_name":
         await admin_category_name(update, context)
+    elif mode == "category_rename":
+        await admin_category_rename(update, context)
     elif mode == "product_description":
         await admin_product_description(update, context)
     elif mode == "product_stock":

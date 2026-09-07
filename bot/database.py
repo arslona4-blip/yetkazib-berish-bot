@@ -602,12 +602,13 @@ def create_category(name: str, emoji: str | None = None) -> int:
 
 def update_category(category_id: int, name: str, emoji: str | None = None) -> None:
     """Toifa nomini (va ixtiyoriy emoji) yangilash."""
-    from bot.category_emoji import parse_category_name
+    from bot.category_emoji import category_norm_key, parse_category_name
 
     parsed_emoji, clean_name = parse_category_name(name)
     if not clean_name:
         raise ValueError("Toifa nomi kerak")
     icon = (emoji or "").strip() or parsed_emoji
+    key = category_norm_key(clean_name)
     with get_connection() as conn:
         row = conn.execute(
             "SELECT id FROM categories WHERE id = ?",
@@ -621,6 +622,13 @@ def update_category(category_id: int, name: str, emoji: str | None = None) -> No
         ).fetchone()
         if clash:
             raise ValueError("Bunday toifa nomi allaqachon bor")
+        if key:
+            for other in conn.execute(
+                "SELECT id, name FROM categories WHERE id != ? AND is_active = 1",
+                (int(category_id),),
+            ).fetchall():
+                if category_norm_key(str(other["name"] or "")) == key:
+                    raise ValueError("Bunday toifa nomi allaqachon bor")
         conn.execute(
             "UPDATE categories SET name = ?, emoji = ?, is_active = 1 WHERE id = ?",
             (clean_name, icon, int(category_id)),
