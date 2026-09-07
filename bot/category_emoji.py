@@ -87,3 +87,35 @@ def category_label(category) -> str:
     lead, rest = extract_leading_emoji(name)
     display = rest if lead == emoji and rest else name
     return f"{emoji} {display}".strip()
+
+
+# Bir xil toifa (emoji / imlo farqi) — bitta kalit
+_CATEGORY_KEY_ALIASES = {
+    "parfumeriya": "parfyumeriya",
+    "parfyumeriya": "parfyumeriya",
+    "kosmetika": "parfyumeriya",
+    "kosmetikaparfyumeriya": "parfyumeriya",
+    "parfyum": "parfyumeriya",
+    "tozalash": "tozalash",
+    "tozalashvositalari": "tozalash",
+    "tozalovchi": "tozalash",
+    "tozalovchivositalar": "tozalash",
+    "tozalik": "tozalash",
+    "tozalikvositalari": "tozalash",
+    "bytovayahimiya": "tozalash",
+    "maishiykimyo": "tozalash",
+}
+
+
+def category_norm_key(name: str) -> str:
+    """Dublikat toifalarni topish uchun kalit (emoji/imlo farqsiz)."""
+    from bot.translit import to_search_text
+
+    _, rest = extract_leading_emoji(str(name or ""))
+    raw = rest or str(name or "")
+    s = to_search_text(raw).casefold()
+    s = s.replace("'", "").replace("‘", "").replace("’", "").replace("`", "")
+    s = re.sub(r"[^a-z0-9]+", "", s)
+    if not s:
+        return ""
+    return _CATEGORY_KEY_ALIASES.get(s, s)

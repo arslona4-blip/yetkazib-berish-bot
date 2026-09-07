@@ -733,20 +733,26 @@ async def api_promo(request: web.Request) -> web.Response:
 
 
 async def api_categories(_request: web.Request) -> web.Response:
-    from bot.category_emoji import category_label
+    from bot.category_emoji import category_label, category_norm_key
 
     cats = get_categories(active_only=True)
-    return web.json_response(
-        [
+    # Xavfsizlik: dublikat kalitlarni yashirish (migratsiya ishlamasa ham)
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for c in cats:
+        key = category_norm_key(str(c["name"] or "")) or f"id:{c['id']}"
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(
             {
                 "id": int(c["id"]),
                 "name": c["name"],
                 "emoji": (c["emoji"] if "emoji" in c.keys() else "") or "📦",
                 "label": category_label(c),
             }
-            for c in cats
-        ]
-    )
+        )
+    return web.json_response(out)
 
 
 async def api_products(request: web.Request) -> web.Response:
@@ -758,11 +764,54 @@ async def api_products(request: web.Request) -> web.Response:
         except ValueError:
             raise web.HTTPBadRequest(text="category_id noto'g'ri")
 
-    products = get_products(active_only=True, category_id=category_id)
+    if category_id is not None:
+        from bot.category_emoji import category_norm_key
+
+        target = get_category(category_id)
+        key = category_norm_key(str(target["name"])) if target else ""
+        if key:
+            products = []
+            seen_ids: set[int] = set()
+            for c in get_categories(active_only=True):
+                if category_norm_key(str(c["name"] or "")) != key:
+                    continue
+                for p in get_products(active_only=True, category_id=int(c["id"])):
+                    pid = int(p["id"])
+                    if pid in seen_ids:
+                        continue
+                    seen_ids.add(pid)
+                    products.append(p)
+        else:
+            products = list(get_products(active_only=True, category_id=category_id))
+    else:
+        products = list(get_products(active_only=True, category_id=None))
+
     from bot.shop_ai import collapse_catalog_families
 
     products = collapse_catalog_families(list(products))
     payload = [_product_api_payload(p) for p in products]
+    # Bo‘lim sarlavhalari dublikat chiqmasin — kalit bo‘yicha bir xil category_id
+    if category_id is None:
+        from bot.category_emoji import category_norm_key
+
+        canon: dict[str, tuple[int, str]] = {}
+        for c in get_categories(active_only=True):
+            k = category_norm_key(str(c["name"] or ""))
+            if not k or k in canon:
+                continue
+            canon[k] = (int(c["id"]), str(c["name"]))
+        id_to_key = {
+            int(c["id"]): category_norm_key(str(c["name"] or ""))
+            for c in get_categories(active_only=False)
+        }
+        for item in payload:
+            cid = item.get("category_id")
+            if cid is None:
+                continue
+            k = id_to_key.get(int(cid), "")
+            if k and k in canon:
+                item["category_id"] = canon[k][0]
+                item["category_name"] = canon[k][1]
     return web.json_response(payload)
 
 

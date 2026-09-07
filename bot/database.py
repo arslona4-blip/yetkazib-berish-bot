@@ -178,6 +178,63 @@ def init_db() -> None:
         _migrate_features(conn)
 
 
+def _merge_duplicate_categories(conn: sqlite3.Connection) -> None:
+    """Parfyumeriya / Tozalash kabi dublikat toifalarni bitta qiladi."""
+    from bot.category_emoji import category_norm_key
+
+    rows = conn.execute(
+        "SELECT id, name, emoji FROM categories WHERE is_active = 1"
+    ).fetchall()
+    groups: dict[str, list] = {}
+    for row in rows:
+        key = category_norm_key(str(row["name"] or ""))
+        if not key:
+            continue
+        groups.setdefault(key, []).append(row)
+    for _key, members in groups.items():
+        if len(members) < 2:
+            continue
+        scored: list[tuple[tuple[int, int], Any]] = []
+        for m in members:
+            cnt = conn.execute(
+                """
+                SELECT COUNT(*) FROM products
+                WHERE category_id = ? AND is_active = 1
+                """,
+                (int(m["id"]),),
+            ).fetchone()[0]
+            scored.append(((-int(cnt), int(m["id"])), m))
+        scored.sort(key=lambda x: x[0])
+        keep = scored[0][1]
+        keep_id = int(keep["id"])
+        # Nomdan emoji qoldiqlarini tozalash
+        from bot.category_emoji import parse_category_name
+
+        emoji, clean = parse_category_name(str(keep["name"] or ""))
+        icon = (keep["emoji"] if "emoji" in keep.keys() else "") or emoji
+        if clean and clean != keep["name"]:
+            try:
+                conn.execute(
+                    "UPDATE categories SET name = ?, emoji = ? WHERE id = ?",
+                    (clean, icon or "📦", keep_id),
+                )
+            except sqlite3.IntegrityError:
+                conn.execute(
+                    "UPDATE categories SET emoji = ? WHERE id = ?",
+                    (icon or "📦", keep_id),
+                )
+        for _score, dup in scored[1:]:
+            dup_id = int(dup["id"])
+            conn.execute(
+                "UPDATE products SET category_id = ? WHERE category_id = ?",
+                (keep_id, dup_id),
+            )
+            conn.execute(
+                "UPDATE categories SET is_active = 0 WHERE id = ?",
+                (dup_id,),
+            )
+
+
 def _migrate_features(conn: sqlite3.Connection) -> None:
     user_cols = {r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
     if "bonus_points" not in user_cols:
@@ -250,6 +307,8 @@ def _migrate_features(conn: sqlite3.Connection) -> None:
     ]:
         if col not in order_cols:
             conn.execute(f"ALTER TABLE orders ADD COLUMN {col} {sql_type}")
+
+    _merge_duplicate_categories(conn)
 
     conn.executescript(
         """
@@ -502,22 +561,37 @@ def get_category(category_id: int) -> sqlite3.Row | None:
 
 
 def create_category(name: str, emoji: str | None = None) -> int:
-    from bot.category_emoji import parse_category_name
+    from bot.category_emoji import category_norm_key, parse_category_name
 
     parsed_emoji, clean_name = parse_category_name(name)
     icon = (emoji or "").strip() or parsed_emoji
     if not clean_name:
         raise ValueError("Toifa nomi kerak")
+    key = category_norm_key(clean_name)
     with get_connection() as conn:
         existing = conn.execute(
             "SELECT id FROM categories WHERE name = ?",
             (clean_name,),
         ).fetchone()
+        if not existing and key:
+            # Dublikat (emoji/imlo farqi) — mavjud toifani qayta faollashtirish
+            for row in conn.execute(
+                "SELECT id, name FROM categories"
+            ).fetchall():
+                if category_norm_key(str(row["name"] or "")) == key:
+                    existing = row
+                    break
         if existing:
-            conn.execute(
-                "UPDATE categories SET is_active = 1, emoji = ? WHERE id = ?",
-                (icon, existing["id"]),
-            )
+            try:
+                conn.execute(
+                    "UPDATE categories SET is_active = 1, emoji = ?, name = ? WHERE id = ?",
+                    (icon, clean_name, existing["id"]),
+                )
+            except sqlite3.IntegrityError:
+                conn.execute(
+                    "UPDATE categories SET is_active = 1, emoji = ? WHERE id = ?",
+                    (icon, existing["id"]),
+                )
             return int(existing["id"])
         cursor = conn.execute(
             "INSERT INTO categories (name, is_active, emoji) VALUES (?, 1, ?)",

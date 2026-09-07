@@ -231,12 +231,17 @@ def cancel_keyboard() -> ReplyKeyboardMarkup:
 
 
 def catalog_categories_keyboard(categories) -> InlineKeyboardMarkup:
-    from bot.category_emoji import category_label
+    from bot.category_emoji import category_label, category_norm_key
     from bot.database import get_products
     from bot.shop_ai import collapse_catalog_families
 
     rows = []
+    seen: set[str] = set()
     for category in categories:
+        key = category_norm_key(str(category["name"] or "")) or f"id:{category['id']}"
+        if key in seen:
+            continue
+        seen.add(key)
         count = len(
             collapse_catalog_families(get_products(category_id=category["id"]))
         )
