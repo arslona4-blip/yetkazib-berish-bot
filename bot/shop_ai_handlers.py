@@ -187,14 +187,31 @@ async def show_kg_product_options(update: Update, product) -> bool:
         await query.message.reply_text("Menyu:", reply_markup=_menu(uid))
         return True
 
+    from bot.shop_ai import (
+        expand_line_packs,
+        line_card_name,
+        line_family_for_product,
+    )
+
+    lkey, lfamily = line_family_for_product(product)
+    if expand_line_packs(lfamily):
+        await query.answer()
+        title = line_card_name(lkey, product)
+        text = format_variants(title, lfamily)
+        kb = shop_ai_results_keyboard(lfamily)
+        uid = query.from_user.id
+        await query.message.reply_text(text, parse_mode="HTML", reply_markup=kb)
+        await query.message.reply_text("Menyu:", reply_markup=_menu(uid))
+        return True
+
     if _product_ml(product):
         from bot.shop_ai import expand_liter_packs, liter_family_for_product as _lf
-        _lk, lfamily = _lf(product)
-        if len(expand_liter_packs(lfamily)) >= 2:
+        _lk, litfamily = _lf(product)
+        if len(expand_liter_packs(litfamily)) >= 2:
             await query.answer()
             title = display_stem_name(str(product["name"])) or str(product["name"])
-            text = format_variants(title, lfamily)
-            kb = shop_ai_results_keyboard(lfamily)
+            text = format_variants(title, litfamily)
+            kb = shop_ai_results_keyboard(litfamily)
             uid = query.from_user.id
             await query.message.reply_text(text, parse_mode="HTML", reply_markup=kb)
             await query.message.reply_text("Menyu:", reply_markup=_menu(uid))

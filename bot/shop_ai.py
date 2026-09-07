@@ -227,6 +227,11 @@ _ALIASES = {
     "фонex": "fonex",
     "молоко": "moloko",
     "moloko": "moloko",
+    "lays": "lays",
+    "lay's": "lays",
+    "layschips": "lays",
+    "hotlunch": "hotlunch",
+    "hotlanch": "hotlunch",
     "ryabina": "ryabina",
     "рябина": "ryabina",
     "antijir": "antijir",
@@ -240,7 +245,7 @@ _ALIASES = {
 # NESTOGEN 1/2/3 alohida — bosqich raqami mahsulot nomining bir qismi
 _LINE_FAMILY_BASES = frozenset({
     "ekler", "kolonka", "fonex", "moloko", "ryabina", "antijir", "colgate", "salfetka",
-    "bellakt",
+    "bellakt", "lays", "hotlunch",
 })
 _LINE_FAMILY_CARD_NAMES = {
     "ekler": "Ekler",
@@ -252,6 +257,8 @@ _LINE_FAMILY_CARD_NAMES = {
     "colgate": "Colgate tish pastasi",
     "salfetka": "Nam salfetkalar",
     "bellakt": "Bellakt",
+    "lays": "Lays",
+    "hotlunch": "Hot Lunch",
 }
 # Ikki so‘zli nomlar → bitta qator
 _LINE_FAMILY_PHRASE_BASES = {
@@ -259,6 +266,10 @@ _LINE_FAMILY_PHRASE_BASES = {
     "nam salfetka": "salfetka",
     "vlajnye salfetki": "salfetka",
     "nam salfetkalar": "salfetka",
+    "hot lunch": "hotlunch",
+    "hot lanch": "hotlunch",
+    "hot lanсh": "hotlunch",  # kirill с
+    "lay s": "lays",
 }
 # Faqat shu brendlarda oxirgi raqam variant (BELLAKT 12 → BELLAKT)
 _TRAILING_VARIANT_STRIP_HEADS = frozenset({"bellakt"})
@@ -1111,6 +1122,30 @@ def _strip_line_variant_markers(stem: str, *, trailing_age: bool = True) -> str:
 
 def line_stem_key(name: str) -> str:
     """Bir xil brend/qator: EKLER oq/shokolad → ekler; MOLOKO 500g/1L → moloko."""
+    # Translit (moloko→sut) va apostrof (LAY'S) dan oldin brendni ushlash
+    light = (
+        str(name or "")
+        .lower()
+        .replace("‘", "")
+        .replace("’", "")
+        .replace("'", "")
+        .replace("-", " ")
+        .replace("_", " ")
+    )
+    light = re.sub(r"\s+", " ", light).strip()
+    for phrase, base in sorted(
+        _LINE_FAMILY_PHRASE_BASES.items(), key=lambda x: -len(x[0])
+    ):
+        if phrase in light:
+            return base
+    light_tokens = [t for t in re.split(r"\W+", light) if t]
+    for tok in light_tokens:
+        mapped = _ALIASES.get(tok, tok)
+        if mapped in _LINE_FAMILY_BASES:
+            return mapped
+        if tok in _LINE_FAMILY_BASES:
+            return tok
+
     stem = _norm(display_stem_name(name))
     for phrase, base in sorted(
         _LINE_FAMILY_PHRASE_BASES.items(), key=lambda x: -len(x[0])
@@ -1130,27 +1165,22 @@ def line_stem_key(name: str) -> str:
 
 
 def line_family_key(product: Any) -> tuple[int, str] | None:
-    try:
-        cid = int(product["category_id"]) if product["category_id"] else None
-    except (KeyError, TypeError, ValueError):
-        cid = None
-    if not cid:
-        return None
+    """Brend qatori kaliti (Hot Lunch / Lays / Moloko) — toifadan qat'i nazar."""
     key = line_stem_key(str(product["name"]))
-    if not key or len(key) < 2:
+    if key not in _LINE_FAMILY_BASES:
         return None
-    return cid, key
+    return 0, key
 
 
 def line_family_for_product(product: Any) -> tuple[str, list[Any]]:
-    """Bir xil brend, turli variant (BELLAKT 0-6 / 12)."""
+    """Bir xil brend, turli variant (Lays ta'mlari, Moloko 500g/1L, Hot Lunch)."""
     fk = line_family_key(product)
-    if not fk or fk[1] not in _LINE_FAMILY_BASES:
+    if not fk:
         return "", []
     _cid, lkey = fk
     family: list[Any] = []
     seen: set[int] = set()
-    for p in db.get_products(category_id=fk[0]):
+    for p in db.get_products():
         if line_family_key(p) != fk:
             continue
         pid = int(p["id"])
@@ -1607,7 +1637,7 @@ def _try_append_line_group(
     out: list[Any],
 ) -> bool:
     fk = line_family_key(p)
-    if not fk or fk[1] not in _LINE_FAMILY_BASES:
+    if not fk:
         return False
     members = [
         x
@@ -1624,19 +1654,23 @@ def _try_append_line_group(
 
 
 def collapse_catalog_families(products: list[Any]) -> list[Any]:
-    """Bir xil nom yoki bir xil ichimlik — bitta kartochka; qolgan mahsulotlar alohida."""
+    """Bir xil nom / brend / ichimlik — bitta kartochka; qolganlari alohida."""
     if not products:
         return []
     list_ids = {int(p["id"]) for p in products}
     used: set[int] = set()
     out: list[Any] = []
     exact_groups: dict[tuple[int, str], list[Any]] = {}
+    line_groups: dict[tuple[int, str], list[Any]] = {}
     liter_groups: dict[tuple[int, str], list[Any]] = {}
     kg_groups: dict[tuple[int, str], list[Any]] = {}
     for p in products:
         enk = catalog_exact_name_key(p)
         if enk:
             exact_groups.setdefault(enk, []).append(p)
+        lf = line_family_key(p)
+        if lf:
+            line_groups.setdefault(lf, []).append(p)
         try:
             cid = int(p["category_id"]) if p["category_id"] else None
         except (KeyError, TypeError, ValueError):
@@ -1656,6 +1690,8 @@ def collapse_catalog_families(products: list[Any]) -> list[Any]:
         if pid in used:
             continue
         if _try_append_exact_name_group(p, exact_groups, list_ids, used, out):
+            continue
+        if _try_append_line_group(p, line_groups, list_ids, used, out):
             continue
         try:
             cid = int(p["category_id"]) if p["category_id"] else None
@@ -1706,6 +1742,7 @@ def format_variants(query: str, products: list[Any]) -> str:
     else:
         packs = (
             expand_exact_name_packs(products)
+            or expand_line_packs(products)
             or expand_kg_packs(products)
             or expand_real_gram_packs(products)
             or expand_liter_packs(products)

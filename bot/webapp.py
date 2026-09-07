@@ -282,9 +282,12 @@ def _kg_api_fields(product: Any) -> dict[str, Any]:
         exact_name_family_for_product,
         expand_exact_name_packs,
         expand_gram_family_packs,
+        expand_line_packs,
         expand_liter_packs,
         kg_family_for_product,
         kg_money_options,
+        line_card_name,
+        line_family_for_product,
         liter_family_for_product,
     )
 
@@ -292,24 +295,31 @@ def _kg_api_fields(product: Any) -> dict[str, Any]:
     money_opts: list = []
     liter_packs: list = []
     piece_packs: list = []
+    card_name: str | None = None
 
     _etitle, efamily = exact_name_family_for_product(product)
     exact_packs = expand_exact_name_packs(efamily)
     if exact_packs:
         piece_packs = exact_packs
-    elif _product_ml(product):
-        _lk, lfamily = liter_family_for_product(product)
-        liter_packs = expand_liter_packs(lfamily)
     else:
-        _query, family = kg_family_for_product(product)
-        gram_packs = expand_gram_family_packs(family)
-        if gram_packs and "grams" in gram_packs[0]:
-            packs = gram_packs
+        lkey, lfamily = line_family_for_product(product)
+        line_packs = expand_line_packs(lfamily)
+        if line_packs:
+            piece_packs = line_packs
+            card_name = line_card_name(lkey, product)
+        elif _product_ml(product):
+            _lk, litfamily = liter_family_for_product(product)
+            liter_packs = expand_liter_packs(litfamily)
         else:
-            piece_packs = gram_packs
-        money_opts = kg_money_options(family)
+            _query, family = kg_family_for_product(product)
+            gram_packs = expand_gram_family_packs(family)
+            if gram_packs and "grams" in gram_packs[0]:
+                packs = gram_packs
+            else:
+                piece_packs = gram_packs
+            money_opts = kg_money_options(family)
 
-    return {
+    out: dict[str, Any] = {
         "kg_packs": [
             {
                 "grams": int(opt["grams"]),
@@ -342,6 +352,9 @@ def _kg_api_fields(product: Any) -> dict[str, Any]:
             for opt in piece_packs
         ],
     }
+    if card_name:
+        out["card_name"] = card_name
+    return out
 
 
 def _product_api_payload(product: Any, *, extra: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -383,7 +396,8 @@ def _product_api_payload(product: Any, *, extra: dict[str, Any] | None = None) -
     if len(priced) >= 2:
         from bot.shop_ai import display_stem_name
 
-        payload["card_name"] = display_stem_name(str(product["name"]))
+        if not payload.get("card_name"):
+            payload["card_name"] = display_stem_name(str(product["name"]))
         prices = [int(x["price"]) for x in priced]
         lo, hi = min(prices), max(prices)
         if lo != hi:

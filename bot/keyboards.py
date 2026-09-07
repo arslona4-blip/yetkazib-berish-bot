@@ -274,9 +274,12 @@ def catalog_keyboard(
         display_stem_name,
         expand_exact_name_packs,
         expand_gram_family_packs,
+        expand_line_packs,
         expand_liter_packs,
         exact_name_family_for_product,
         kg_family_for_product,
+        line_card_name,
+        line_family_for_product,
         liter_family_for_product,
         asks_piece_qty,
         qty_card_name,
@@ -294,14 +297,18 @@ def catalog_keyboard(
         _etitle, efamily = exact_name_family_for_product(product)
         if expand_exact_name_packs(efamily):
             label_name = str(product["name"]).strip()
-        elif _product_ml(product):
-            _lk, lfamily = liter_family_for_product(product)
-            if len(expand_liter_packs(lfamily)) >= 2:
-                label_name = display_stem_name(str(product["name"]))
         else:
-            _query, family = kg_family_for_product(product)
-            if len(expand_gram_family_packs(family)) >= 2:
-                label_name = display_stem_name(str(product["name"]))
+            lkey, lfamily = line_family_for_product(product)
+            if expand_line_packs(lfamily):
+                label_name = line_card_name(lkey, product)
+            elif _product_ml(product):
+                _lk, litfamily = liter_family_for_product(product)
+                if len(expand_liter_packs(litfamily)) >= 2:
+                    label_name = display_stem_name(str(product["name"]))
+            else:
+                _query, family = kg_family_for_product(product)
+                if len(expand_gram_family_packs(family)) >= 2:
+                    label_name = display_stem_name(str(product["name"]))
         if asks_piece_qty(product):
             label_name = qty_card_name(product)
         btn_text = f"{label_name} — {product_display_price(product)}{mark}"
@@ -440,6 +447,10 @@ def shop_ai_results_keyboard(products) -> InlineKeyboardMarkup | None:
             buttons.append([InlineKeyboardButton(btn, callback_data=cb)])
     else:
         exact_packs = expand_exact_name_packs(products)
+        if not exact_packs:
+            from bot.shop_ai import expand_line_packs
+
+            exact_packs = expand_line_packs(products)
         if exact_packs:
             for opt in exact_packs:
                 btn = str(opt["label"])
