@@ -229,9 +229,9 @@ def _int_field(raw: dict[str, Any], key: str) -> int:
 
 def _kg_line_from_pack(product: Any, pack_grams: int, pack_amount: int) -> tuple[str, int]:
     """Kg mahsulot: 250g/500g yoki so‘mlik. Narxni server hisoblaydi."""
-    from bot.shop_ai import _money_label, _product_grams, grams_for_money
+    from bot.shop_ai import _effective_kg_grams, _money_label, grams_for_money
 
-    prod_grams = _product_grams(product)
+    prod_grams = _effective_kg_grams(product)
     if not prod_grams:
         raise ValueError(f"'{product['name']}' uchun gramm/so'mlik yo'q")
     price = int(effective_product_price(product))
@@ -461,9 +461,32 @@ def resolve_order_items(
             unit_price = int(variant["price"])
             name = f"{product['name']} ({variant['name']})"
         else:
+            # DB variantlari («kg») — kg/hajm oilasi bo‘lsa majburiy emas
             variants = get_variants(product_id, active_only=True)
             if variants:
-                raise ValueError(f"'{product['name']}' uchun o'lcham tanlang")
+                from bot.shop_ai import (
+                    _effective_kg_grams,
+                    _product_ml,
+                    expand_gram_family_packs,
+                    expand_liter_packs,
+                    expand_line_packs,
+                    kg_family_for_product,
+                    line_family_for_product,
+                    liter_family_for_product,
+                )
+
+                allow_plain = bool(_effective_kg_grams(product) or _product_ml(product))
+                if not allow_plain:
+                    _q, family = kg_family_for_product(product)
+                    allow_plain = len(expand_gram_family_packs(family)) >= 2
+                if not allow_plain:
+                    _lk, lfamily = liter_family_for_product(product)
+                    allow_plain = len(expand_liter_packs(lfamily)) >= 2
+                if not allow_plain:
+                    _ln, lnf = line_family_for_product(product)
+                    allow_plain = len(expand_line_packs(lnf)) >= 2
+                if not allow_plain:
+                    raise ValueError(f"'{product['name']}' uchun o'lcham tanlang")
             unit_price = int(effective_product_price(product))
             name = str(product["name"])
         subtotal += unit_price * quantity

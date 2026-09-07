@@ -1212,14 +1212,12 @@
         ? `${pack.grams / 1000} kg`
         : `${pack.grams} gramm`);
       addOptionButton(`${label} — ${formatMoney(pack.price)}`, () => {
-        const useReal = !pack.virtual;
         upsertCartItem({
           product_id: pack.product_id || product.id,
           variant_id: 0,
-          pack_grams: useReal ? 0 : pack.grams,
-          name: useReal && product.id === pack.product_id
-            ? product.name
-            : `${stem} ${label}`.trim(),
+          // Haqiqiy 1kg ham pack_grams bilan — checkoutda «o'lcham» xatosi bo'lmasin
+          pack_grams: Number(pack.grams) || 0,
+          name: `${stem} ${label}`.trim(),
           price: pack.price,
           quantity: 1,
         });
@@ -1227,14 +1225,11 @@
     });
     liters.forEach((pack) => {
       addOptionButton(`${pack.label} — ${formatMoney(pack.price)}`, () => {
-        const useReal = !pack.virtual;
         upsertCartItem({
           product_id: pack.product_id || product.id,
           variant_id: 0,
-          pack_ml: useReal ? 0 : pack.ml,
-          name: useReal && product.id === pack.product_id
-            ? product.name
-            : `${stem} ${pack.label}`.trim(),
+          pack_ml: Number(pack.ml) || 0,
+          name: `${stem} ${pack.label}`.trim(),
           price: pack.price,
           quantity: 1,
         });
