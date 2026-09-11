@@ -586,6 +586,8 @@ def place_miniapp_order(
     gift_choice: str = "",
     gift_key: str = "",
     gift_product_id: int | None = None,
+    latitude: float | None = None,
+    longitude: float | None = None,
 ) -> tuple[int, int, int, int, str]:
     """Buyurtmani DB ga yozadi. Qaytaradi: order_id, total, subtotal, delivery, text."""
     if not phone:
@@ -641,6 +643,8 @@ def place_miniapp_order(
         description=note,
         phone=phone,
         price=total,
+        latitude=latitude,
+        longitude=longitude,
         delivery_slot=slot,
         promo_code=promo_code,
         discount=discount,
@@ -987,6 +991,27 @@ async def api_order(request: web.Request) -> web.Response:
     except (TypeError, ValueError):
         gift_product_id = None
 
+    def _coord(raw: Any) -> float | None:
+        if raw in (None, "", "null"):
+            return None
+        try:
+            val = float(raw)
+        except (TypeError, ValueError):
+            return None
+        if not (-90 <= val <= 90) and not (-180 <= val <= 180):
+            # latitude checked separately below
+            pass
+        return val
+
+    lat = _coord(body.get("latitude"))
+    lon = _coord(body.get("longitude"))
+    if lat is not None and not (-90.0 <= lat <= 90.0):
+        lat = None
+    if lon is not None and not (-180.0 <= lon <= 180.0):
+        lon = None
+    if lat is None or lon is None:
+        lat, lon = None, None
+
     try:
         order_id, total, subtotal, delivery_fee, text = place_miniapp_order(
             user_id=user_id,
@@ -1003,6 +1028,8 @@ async def api_order(request: web.Request) -> web.Response:
             gift_choice=str(body.get("gift_choice") or "").strip(),
             gift_key=str(body.get("gift_key") or "").strip(),
             gift_product_id=gift_product_id,
+            latitude=lat,
+            longitude=lon,
         )
     except ValueError as exc:
         raise web.HTTPBadRequest(text=str(exc)) from exc
@@ -1019,6 +1046,12 @@ async def api_order(request: web.Request) -> web.Response:
                     f"🆕 Mini App\n{text}",
                     reply_markup=admin_order_keyboard(order_id),
                 )
+                if lat is not None and lon is not None:
+                    await _bot.send_location(
+                        admin_id,
+                        latitude=lat,
+                        longitude=lon,
+                    )
             except Exception as exc:
                 logger.warning("Admin xabar xatosi %s: %s", admin_id, exc)
         try:

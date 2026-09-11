@@ -26,6 +26,8 @@
     giftKey: "",
     giftProductId: null,
     giftCustom: "",
+    latitude: null,
+    longitude: null,
   };
 
   const els = {
@@ -55,6 +57,8 @@
     bonusHint: document.getElementById("bonusHint"),
     phone: document.getElementById("phone"),
     address: document.getElementById("address"),
+    geoBtn: document.getElementById("geoBtn"),
+    geoStatus: document.getElementById("geoStatus"),
     slot: document.getElementById("slot"),
     bonus: document.getElementById("bonus"),
     paymentMethod: document.getElementById("paymentMethod"),
@@ -1597,6 +1601,11 @@
     });
 
     els.form.addEventListener("submit", onCheckout);
+    if (els.geoBtn) {
+      els.geoBtn.addEventListener("click", () => {
+        onGeoClick().catch(() => {});
+      });
+    }
 
     if (els.productSearch) {
       let searchTimer = null;
@@ -1737,6 +1746,135 @@
     };
   }
 
+  function setGeoStatus(text, isError) {
+    if (!els.geoStatus) return;
+    if (!text) {
+      els.geoStatus.hidden = true;
+      els.geoStatus.textContent = "";
+      els.geoStatus.classList.remove("error");
+      return;
+    }
+    els.geoStatus.hidden = false;
+    els.geoStatus.textContent = text;
+    els.geoStatus.classList.toggle("error", !!isError);
+  }
+
+  function applyGeoCoords(lat, lon, addressHint) {
+    const latitude = Number(lat);
+    const longitude = Number(lon);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      setGeoStatus("Joylashuv o‘qilmadi", true);
+      return;
+    }
+    state.latitude = latitude;
+    state.longitude = longitude;
+    const pin = `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+    const maps = `https://maps.google.com/?q=${latitude},${longitude}`;
+    let next = String(addressHint || "").trim();
+    if (!next) {
+      const current = (els.address && els.address.value.trim()) || "";
+      if (current && !/maps\.google|GPS:|Lokatsiya/i.test(current)) {
+        next = `${current}\n📍 ${pin}`;
+      } else {
+        next = `📍 GPS: ${pin}`;
+      }
+    }
+    if (!next.includes("maps.google")) {
+      next = `${next}\n${maps}`;
+    }
+    if (els.address) els.address.value = next;
+    setGeoStatus("GPS olindi ✓", false);
+  }
+
+  function reverseGeocode(lat, lon) {
+    const url =
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}` +
+      `&lon=${encodeURIComponent(lon)}&accept-language=uz,ru,en`;
+    return fetch(url, {
+      headers: { Accept: "application/json" },
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => (data && data.display_name) || "")
+      .catch(() => "");
+  }
+
+  function readBrowserGeo() {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error("GPS qo‘llab-quvvatlanmaydi"));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          resolve({
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+          });
+        },
+        (err) => reject(err || new Error("GPS rad etildi")),
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+      );
+    });
+  }
+
+  function readTelegramGeo() {
+    return new Promise((resolve, reject) => {
+      const lm = tg && tg.LocationManager;
+      if (!lm || typeof lm.init !== "function") {
+        reject(new Error("no-tg-location"));
+        return;
+      }
+      const finish = (loc) => {
+        if (!loc || loc.latitude == null || loc.longitude == null) {
+          reject(new Error("Joylashuv bo‘sh"));
+          return;
+        }
+        resolve({ latitude: loc.latitude, longitude: loc.longitude });
+      };
+      try {
+        lm.init(() => {
+          try {
+            if (typeof lm.getLocation === "function") {
+              lm.getLocation(finish);
+            } else {
+              reject(new Error("no-tg-location"));
+            }
+          } catch (e) {
+            reject(e);
+          }
+        });
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  async function onGeoClick() {
+    if (!els.geoBtn) return;
+    els.geoBtn.disabled = true;
+    setGeoStatus("Aniqlanmoqda…", false);
+    try {
+      let coords = null;
+      try {
+        coords = await readTelegramGeo();
+      } catch (_) {
+        coords = await readBrowserGeo();
+      }
+      setGeoStatus("Manzil izlanmoqda…", false);
+      const hint = await Promise.race([
+        reverseGeocode(coords.latitude, coords.longitude),
+        new Promise((resolve) => setTimeout(() => resolve(""), 3500)),
+      ]);
+      applyGeoCoords(coords.latitude, coords.longitude, hint);
+    } catch (_) {
+      state.latitude = null;
+      state.longitude = null;
+      setGeoStatus("GPS ochilmadi — ruxsat bering yoki manzilni yozing", true);
+    } finally {
+      els.geoBtn.disabled = false;
+    }
+  }
+
   function checkoutViaSendData(payload) {
     if (!tg || typeof tg.sendData !== "function") return false;
     try {
@@ -1754,6 +1892,8 @@
           gift_key: payload.gift_key || "",
           gift_choice: payload.gift_choice || "",
           gift_product_id: payload.gift_product_id || undefined,
+          latitude: payload.latitude,
+          longitude: payload.longitude,
         })
       );
       return true;
@@ -1794,6 +1934,8 @@
       gift_key: giftFields.gift_key,
       gift_choice: giftFields.gift_choice,
       gift_product_id: giftFields.gift_product_id,
+      latitude: state.latitude,
+      longitude: state.longitude,
       items: state.cart.map((item) => ({
         product_id: item.product_id,
         quantity: item.quantity,
@@ -1831,6 +1973,9 @@
     if (checkoutViaSendData(payload)) {
       state.cart = [];
       state.discount = 0;
+      state.latitude = null;
+      state.longitude = null;
+      setGeoStatus("", false);
       clearGiftSelection();
       if (els.bonus) els.bonus.value = "";
       saveCart();
@@ -1880,6 +2025,9 @@
       });
       state.cart = [];
       state.discount = 0;
+      state.latitude = null;
+      state.longitude = null;
+      setGeoStatus("", false);
       clearGiftSelection();
       if (els.bonus) els.bonus.value = "";
       saveCart();

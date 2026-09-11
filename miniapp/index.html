@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=35" />
+  <link rel="stylesheet" href="styles.css?v=36" />
 </head>
 <body>
   <header class="topbar">
@@ -79,9 +79,13 @@
           Telefon
           <input id="phone" type="tel" inputmode="tel" placeholder="+998 90 123 45 67" required />
         </label>
-        <label>
+        <label class="address-field">
           Manzil
           <textarea id="address" rows="2" placeholder="Ko'cha, uy, mo'ljal" required></textarea>
+          <div class="geo-row">
+            <button type="button" id="geoBtn" class="btn geo">📍 GPS joylashuv</button>
+            <span id="geoStatus" class="geo-status" hidden></span>
+          </div>
         </label>
         <label>
           Yetkazish vaqti
@@ -158,6 +162,6 @@
     </div>
   </dialog>
 
-  <script src="app.js?v=35"></script>
+  <script src="app.js?v=36"></script>
 </body>
 </html>

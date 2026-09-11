@@ -447,6 +447,22 @@ async def webapp_scan_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             gift_product_id = None
             if gift_pid_raw not in (None, "", 0, "0"):
                 gift_product_id = int(gift_pid_raw)
+
+            def _coord(raw):
+                if raw in (None, "", "null"):
+                    return None
+                try:
+                    return float(raw)
+                except (TypeError, ValueError):
+                    return None
+
+            lat = _coord(payload.get("latitude"))
+            lon = _coord(payload.get("longitude"))
+            if lat is None or lon is None or not (-90 <= lat <= 90) or not (
+                -180 <= lon <= 180
+            ):
+                lat, lon = None, None
+
             order_id, total, _sub, _delivery, text = place_miniapp_order(
                 user_id=user.id,
                 full_name=user.full_name or user.first_name or "Mijoz",
@@ -462,6 +478,8 @@ async def webapp_scan_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 gift_choice=str(payload.get("gift_choice") or "").strip(),
                 gift_key=str(payload.get("gift_key") or "").strip(),
                 gift_product_id=gift_product_id,
+                latitude=lat,
+                longitude=lon,
             )
         except ValueError as exc:
             await msg.reply_text(f"❌ {exc}", reply_markup=menu_for(user.id))
@@ -499,6 +517,12 @@ async def webapp_scan_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                     f"🆕 Mini App\n{text}",
                     reply_markup=admin_order_keyboard(order_id),
                 )
+                if lat is not None and lon is not None:
+                    await context.bot.send_location(
+                        admin_id,
+                        latitude=lat,
+                        longitude=lon,
+                    )
             except Exception:
                 pass
         return
