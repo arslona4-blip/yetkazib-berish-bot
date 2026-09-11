@@ -840,6 +840,22 @@ def get_variants(product_id: int, active_only: bool = True) -> list[sqlite3.Row]
     return list(rows)
 
 
+def get_all_active_variants_map() -> dict[int, list[sqlite3.Row]]:
+    """Barcha faol variantlar — bir so‘rovda (Mini App katalog tezligi)."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM product_variants
+            WHERE is_active = 1
+            ORDER BY product_id, price, id
+            """
+        ).fetchall()
+    out: dict[int, list[sqlite3.Row]] = {}
+    for row in rows:
+        out.setdefault(int(row["product_id"]), []).append(row)
+    return out
+
+
 def get_variant(variant_id: int) -> sqlite3.Row | None:
     with get_connection() as conn:
         row = conn.execute(

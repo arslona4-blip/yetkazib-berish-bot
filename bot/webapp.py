@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -57,6 +58,7 @@ from bot.database import (
     get_user,
     get_variant,
     get_variants,
+    get_all_active_variants_map,
     product_display_price,
     save_order_items_direct,
     save_shajara_share,
@@ -358,8 +360,14 @@ def _kg_api_fields(product: Any) -> dict[str, Any]:
     return out
 
 
-def _product_api_payload(product: Any, *, extra: dict[str, Any] | None = None) -> dict[str, Any]:
-    variants = get_variants(int(product["id"]), active_only=True)
+def _product_api_payload(
+    product: Any,
+    *,
+    extra: dict[str, Any] | None = None,
+    variants: list[Any] | None = None,
+) -> dict[str, Any]:
+    if variants is None:
+        variants = get_variants(int(product["id"]), active_only=True)
     has_photo = bool(product["image_file_id"]) if "image_file_id" in product.keys() else False
     payload: dict[str, Any] = {
         "id": int(product["id"]),
@@ -417,6 +425,66 @@ def _product_api_payload(product: Any, *, extra: dict[str, Any] | None = None) -
         )
     if extra:
         payload.update(extra)
+    return payload
+
+
+_CATALOG_CACHE_LOCK = threading.Lock()
+_CATALOG_CACHE: dict[str, Any] = {"ts": 0.0, "payload": None}
+_CATALOG_CACHE_TTL_SEC = 90.0
+
+
+def invalidate_catalog_cache() -> None:
+    with _CATALOG_CACHE_LOCK:
+        _CATALOG_CACHE["ts"] = 0.0
+        _CATALOG_CACHE["payload"] = None
+
+
+def _build_full_catalog_payload() -> list[dict[str, Any]]:
+    from bot.category_emoji import category_norm_key
+    from bot.shop_ai import collapse_catalog_families
+
+    products = list(get_products(active_only=True, category_id=None))
+    products = collapse_catalog_families(list(products))
+    variants_map = get_all_active_variants_map()
+    payload = [
+        _product_api_payload(
+            p,
+            variants=variants_map.get(int(p["id"]), []),
+        )
+        for p in products
+    ]
+    canon: dict[str, tuple[int, str]] = {}
+    for c in get_categories(active_only=True):
+        k = category_norm_key(str(c["name"] or ""))
+        if not k or k in canon:
+            continue
+        canon[k] = (int(c["id"]), str(c["name"]))
+    id_to_key = {
+        int(c["id"]): category_norm_key(str(c["name"] or ""))
+        for c in get_categories(active_only=False)
+    }
+    for item in payload:
+        cid = item.get("category_id")
+        if cid is None:
+            continue
+        k = id_to_key.get(int(cid), "")
+        if k and k in canon:
+            item["category_id"] = canon[k][0]
+            item["category_name"] = canon[k][1]
+    return payload
+
+
+def _get_cached_full_catalog() -> list[dict[str, Any]]:
+    now = time.monotonic()
+    with _CATALOG_CACHE_LOCK:
+        cached = _CATALOG_CACHE.get("payload")
+        ts = float(_CATALOG_CACHE.get("ts") or 0.0)
+        if cached is not None and (now - ts) < _CATALOG_CACHE_TTL_SEC:
+            return cached
+    payload = _build_full_catalog_payload()
+    with _CATALOG_CACHE_LOCK:
+        _CATALOG_CACHE["payload"] = payload
+        _CATALOG_CACHE["ts"] = time.monotonic()
     return payload
 
 
@@ -788,54 +856,42 @@ async def api_products(request: web.Request) -> web.Response:
         except ValueError:
             raise web.HTTPBadRequest(text="category_id noto'g'ri")
 
-    if category_id is not None:
-        from bot.category_emoji import category_norm_key
+    # Mini App asosan to‘liq katalogni oladi — kesh bilan tez
+    if category_id is None:
+        payload = await asyncio.to_thread(_get_cached_full_catalog)
+        return web.json_response(
+            payload,
+            headers={
+                "Cache-Control": "public, max-age=30",
+            },
+        )
 
-        target = get_category(category_id)
-        key = category_norm_key(str(target["name"])) if target else ""
-        if key:
-            products = []
-            seen_ids: set[int] = set()
-            for c in get_categories(active_only=True):
-                if category_norm_key(str(c["name"] or "")) != key:
-                    continue
-                for p in get_products(active_only=True, category_id=int(c["id"])):
-                    pid = int(p["id"])
-                    if pid in seen_ids:
-                        continue
-                    seen_ids.add(pid)
-                    products.append(p)
-        else:
-            products = list(get_products(active_only=True, category_id=category_id))
-    else:
-        products = list(get_products(active_only=True, category_id=None))
-
+    from bot.category_emoji import category_norm_key
     from bot.shop_ai import collapse_catalog_families
 
-    products = collapse_catalog_families(list(products))
-    payload = [_product_api_payload(p) for p in products]
-    # Bo‘lim sarlavhalari dublikat chiqmasin — kalit bo‘yicha bir xil category_id
-    if category_id is None:
-        from bot.category_emoji import category_norm_key
-
-        canon: dict[str, tuple[int, str]] = {}
+    target = get_category(category_id)
+    key = category_norm_key(str(target["name"])) if target else ""
+    if key:
+        products = []
+        seen_ids: set[int] = set()
         for c in get_categories(active_only=True):
-            k = category_norm_key(str(c["name"] or ""))
-            if not k or k in canon:
+            if category_norm_key(str(c["name"] or "")) != key:
                 continue
-            canon[k] = (int(c["id"]), str(c["name"]))
-        id_to_key = {
-            int(c["id"]): category_norm_key(str(c["name"] or ""))
-            for c in get_categories(active_only=False)
-        }
-        for item in payload:
-            cid = item.get("category_id")
-            if cid is None:
-                continue
-            k = id_to_key.get(int(cid), "")
-            if k and k in canon:
-                item["category_id"] = canon[k][0]
-                item["category_name"] = canon[k][1]
+            for p in get_products(active_only=True, category_id=int(c["id"])):
+                pid = int(p["id"])
+                if pid in seen_ids:
+                    continue
+                seen_ids.add(pid)
+                products.append(p)
+    else:
+        products = list(get_products(active_only=True, category_id=category_id))
+
+    products = collapse_catalog_families(list(products))
+    variants_map = get_all_active_variants_map()
+    payload = [
+        _product_api_payload(p, variants=variants_map.get(int(p["id"]), []))
+        for p in products
+    ]
     return web.json_response(payload)
 
 

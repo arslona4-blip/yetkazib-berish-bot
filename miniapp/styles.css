@@ -673,14 +673,14 @@ main {
   display: block;
   width: 100%;
   height: auto;
-  max-height: 196px;
+  max-height: 140px;
   object-fit: cover;
 }
 
 .gift-promo p {
   margin: 0;
-  padding: 10px 14px 12px;
-  font-size: 0.86rem;
+  padding: 8px 12px 10px;
+  font-size: 0.82rem;
   font-weight: 750;
   line-height: 1.3;
   letter-spacing: -0.01em;

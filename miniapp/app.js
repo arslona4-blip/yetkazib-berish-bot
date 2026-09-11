@@ -1513,18 +1513,53 @@
     });
   }
 
+  const PRODUCTS_CACHE_KEY = "miniapp_products_v2";
+  const PRODUCTS_CACHE_MS = 6 * 60 * 60 * 1000;
+
+  function readProductsCache() {
+    try {
+      const raw = localStorage.getItem(PRODUCTS_CACHE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || !Array.isArray(parsed.products) || !parsed.products.length) {
+        return null;
+      }
+      if (Date.now() - Number(parsed.ts || 0) > PRODUCTS_CACHE_MS) return null;
+      return parsed.products;
+    } catch {
+      return null;
+    }
+  }
+
+  function writeProductsCache(products) {
+    try {
+      localStorage.setItem(
+        PRODUCTS_CACHE_KEY,
+        JSON.stringify({ ts: Date.now(), products: products || [] })
+      );
+    } catch {
+      /* quota */
+    }
+  }
+
   async function loadProducts() {
     const seq = ++state.productsLoadSeq;
-    if (els.products) {
+    const cached = readProductsCache();
+    if (cached && cached.length) {
+      state.allProducts = cached;
+      applyCatalogFilter();
+    } else if (els.products && !state.allProducts.length) {
       els.products.innerHTML = `<p class="empty">Mahsulotlar yuklanmoqda…</p>`;
     }
     try {
       const data = await api("/api/products");
       if (seq !== state.productsLoadSeq) return;
       state.allProducts = Array.isArray(data) ? data : [];
+      writeProductsCache(state.allProducts);
       applyCatalogFilter();
     } catch (err) {
       if (seq !== state.productsLoadSeq) return;
+      if (state.allProducts.length) return;
       if (els.products) {
         els.products.innerHTML = `<p class="empty">Yuklashda xato. Qayta urinib ko‘ring.</p>`;
       }
@@ -1649,6 +1684,9 @@
       });
     }
 
+    const productsPromise = loadProducts();
+    const bonusPromise = loadUserBonus();
+
     const [config, categories] = await Promise.all([
       api("/api/config"),
       api("/api/categories"),
@@ -1675,7 +1713,9 @@
     fillSlots();
     renderCategories();
     updateBadge();
-    await Promise.all([loadProducts(), loadUserBonus()]);
+    // Cache bo‘lsa allaqachon chizilgan; yangi javobni kutamiz
+    if (state.allProducts.length) applyCatalogFilter();
+    await Promise.all([productsPromise, bonusPromise]);
   }
 
   function getInitData() {
