@@ -900,6 +900,21 @@
     return { recipe: matched, products: found, missing: cleanMissing, menu: false };
   }
 
+  function searchTermGroups(rawQuery) {
+    const q = normalizeSearch(rawQuery);
+    if (!q) return [];
+    // «guruch, cola» yoki «guruch;cola» yoki «guruch + cola» → alohida so‘zlar (OR)
+    const parts = q
+      .split(/\s*[,;+|]\s*|\s+va\s+/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+    return parts.map((part) => part.split(/\s+/).filter(Boolean)).filter((t) => t.length);
+  }
+
+  function productMatchesTermTokens(hay, tokens) {
+    return tokens.every((t) => hay.includes(t));
+  }
+
   function filteredProducts() {
     const q = normalizeSearch(state.searchQuery);
     if (!q) return state.products;
@@ -907,10 +922,18 @@
     if (recipeHit && recipeHit.recipe && recipeHit.products) {
       return recipeHit.products;
     }
-    const tokens = q.split(" ").filter(Boolean);
+    const groups = searchTermGroups(state.searchQuery);
+    if (!groups.length) return state.products;
     return state.products.filter((p) => {
       const hay = productSearchHay(p);
-      return tokens.every((t) => hay.includes(t));
+      return groups.some((tokens) => productMatchesTermTokens(hay, tokens));
+    }).sort((a, b) => {
+      if (groups.length < 2) return 0;
+      const hayA = productSearchHay(a);
+      const hayB = productSearchHay(b);
+      const iA = groups.findIndex((t) => productMatchesTermTokens(hayA, t));
+      const iB = groups.findIndex((t) => productMatchesTermTokens(hayB, t));
+      return (iA < 0 ? 99 : iA) - (iB < 0 ? 99 : iB);
     });
   }
 
@@ -996,6 +1019,17 @@
       return;
     }
 
+    const termGroups = searchTermGroups(state.searchQuery);
+    const multiSearch = termGroups.length > 1;
+    if (multiSearch && !(recipeHit && recipeHit.recipe)) {
+      const hint = document.createElement("p");
+      hint.className = "search-multi-hint";
+      hint.textContent = `${termGroups.length} ta so‘z: ${termGroups
+        .map((t) => t.join(" "))
+        .join(" · ")}`;
+      els.products.appendChild(hint);
+    }
+
     const showSections =
       state.categoryId == null &&
       state.categories.length > 0 &&
@@ -1021,6 +1055,19 @@
             : product.category_name
               ? `📦 ${product.category_name}`
               : "📦 Boshqa";
+          els.products.appendChild(section);
+        }
+      } else if (multiSearch && !(recipeHit && recipeHit.recipe)) {
+        const hay = productSearchHay(product);
+        const matchKey =
+          termGroups.find((tokens) => productMatchesTermTokens(hay, tokens))?.join(
+            " "
+          ) || "";
+        if (matchKey && matchKey !== lastKey) {
+          lastKey = matchKey;
+          const section = document.createElement("h2");
+          section.className = "category-section";
+          section.textContent = `🔍 ${matchKey}`;
           els.products.appendChild(section);
         }
       }
