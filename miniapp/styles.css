@@ -774,7 +774,7 @@ main {
 .geo-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   margin-top: 8px;
   flex-wrap: wrap;
 }
@@ -789,8 +789,24 @@ main {
   font-weight: 750;
 }
 
+.btn.geo.has-pin {
+  background: linear-gradient(180deg, #0a7a42 0%, var(--forest) 100%);
+  border-color: var(--forest);
+  color: #fff;
+}
+
 .btn.geo:disabled {
   opacity: 0.65;
+}
+
+.btn.geo-clear {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--muted);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 0.88rem;
+  font-weight: 700;
 }
 
 .geo-status {
@@ -803,10 +819,11 @@ main {
   color: var(--danger);
 }
 
-.geo-map-link {
-  color: var(--forest);
-  text-decoration: underline;
-  font-weight: 750;
+.geo-hint {
+  margin: 6px 0 0;
+  font-size: 0.75rem;
+  font-weight: 550;
+  color: var(--muted);
 }
 
 .pay-note {

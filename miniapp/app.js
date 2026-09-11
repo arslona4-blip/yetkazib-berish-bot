@@ -58,6 +58,7 @@
     phone: document.getElementById("phone"),
     address: document.getElementById("address"),
     geoBtn: document.getElementById("geoBtn"),
+    geoClear: document.getElementById("geoClear"),
     geoStatus: document.getElementById("geoStatus"),
     slot: document.getElementById("slot"),
     bonus: document.getElementById("bonus"),
@@ -1606,6 +1607,9 @@
         onGeoClick().catch(() => {});
       });
     }
+    if (els.geoClear) {
+      els.geoClear.addEventListener("click", () => clearGeoPin());
+    }
 
     if (els.productSearch) {
       let searchTimer = null;
@@ -1751,7 +1755,6 @@
     if (!text) {
       els.geoStatus.hidden = true;
       els.geoStatus.textContent = "";
-      els.geoStatus.innerHTML = "";
       els.geoStatus.classList.remove("error");
       return;
     }
@@ -1760,65 +1763,43 @@
     els.geoStatus.classList.toggle("error", !!isError);
   }
 
-  function shortenAddressHint(raw) {
-    let s = String(raw || "").trim();
-    if (!s) return "";
-    s = s
-      .replace(/,\s*\d{5,6}\s*,?\s*O['’`]?zbekiston.*$/i, "")
-      .replace(/,\s*Uzbekistan.*$/i, "")
-      .replace(/,\s*Toshkent shahri/gi, ", Toshkent")
-      .replace(/,\s*город Ташкент/gi, ", Toshkent");
-    const parts = s
-      .split(",")
-      .map((p) => p.trim())
-      .filter(Boolean);
-    return parts.slice(0, 3).join(", ");
+  function syncGeoUi() {
+    const hasPin = state.latitude != null && state.longitude != null;
+    if (els.geoBtn) {
+      els.geoBtn.classList.toggle("has-pin", hasPin);
+      els.geoBtn.textContent = hasPin ? "📍 Lokatsiya biriktirildi" : "📍 Lokatsiya";
+    }
+    if (els.geoClear) els.geoClear.hidden = !hasPin;
   }
 
-  function applyGeoCoords(lat, lon, addressHint) {
+  function clearGeoPin() {
+    state.latitude = null;
+    state.longitude = null;
+    setGeoStatus("", false);
+    syncGeoUi();
+  }
+
+  function applyGeoCoords(lat, lon) {
     const latitude = Number(lat);
     const longitude = Number(lon);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       setGeoStatus("Joylashuv o‘qilmadi", true);
       return;
     }
+    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+      setGeoStatus("Joylashuv noto‘g‘ri", true);
+      return;
+    }
     state.latitude = latitude;
     state.longitude = longitude;
-    const maps = `https://maps.google.com/?q=${latitude},${longitude}`;
-    const short = shortenAddressHint(addressHint);
-    const current = ((els.address && els.address.value) || "")
-      .replace(/\n?https?:\/\/maps\.google[^\s]*/gi, "")
-      .replace(/\n?📍[^\n]*/g, "")
-      .replace(/\n?GPS:\s*[-0-9.,\s]+/gi, "")
-      .trim();
-
-    if (els.address) {
-      if (short) {
-        els.address.value = short;
-      } else if (!current) {
-        els.address.value = `GPS ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
-      }
-      // foydalanuvchi yozgan manzil bo‘lsa va short yo‘q — qoldiramiz
+    // Manzil maydoniga matn yozilmaydi — faqat pin
+    setGeoStatus("Xarita pin tayyor ✓", false);
+    syncGeoUi();
+    if (tg && tg.HapticFeedback) {
+      try {
+        tg.HapticFeedback.notificationOccurred("success");
+      } catch (_) {}
     }
-
-    if (els.geoStatus) {
-      els.geoStatus.hidden = false;
-      els.geoStatus.classList.remove("error");
-      els.geoStatus.innerHTML =
-        `GPS ✓ · <a class="geo-map-link" href="${maps}" target="_blank" rel="noopener">xarita</a>`;
-    }
-  }
-
-  function reverseGeocode(lat, lon) {
-    const url =
-      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}` +
-      `&lon=${encodeURIComponent(lon)}&accept-language=uz,ru,en`;
-    return fetch(url, {
-      headers: { Accept: "application/json" },
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => (data && data.display_name) || "")
-      .catch(() => "");
   }
 
   function readBrowserGeo() {
@@ -1875,7 +1856,7 @@
   async function onGeoClick() {
     if (!els.geoBtn) return;
     els.geoBtn.disabled = true;
-    setGeoStatus("Aniqlanmoqda…", false);
+    setGeoStatus("Lokatsiya olinmoqda…", false);
     try {
       let coords = null;
       try {
@@ -1883,19 +1864,22 @@
       } catch (_) {
         coords = await readBrowserGeo();
       }
-      setGeoStatus("Manzil izlanmoqda…", false);
-      const hint = await Promise.race([
-        reverseGeocode(coords.latitude, coords.longitude),
-        new Promise((resolve) => setTimeout(() => resolve(""), 3500)),
-      ]);
-      applyGeoCoords(coords.latitude, coords.longitude, hint);
+      applyGeoCoords(coords.latitude, coords.longitude);
     } catch (_) {
-      state.latitude = null;
-      state.longitude = null;
-      setGeoStatus("GPS ochilmadi — ruxsat bering yoki manzilni yozing", true);
+      clearGeoPin();
+      setGeoStatus("Lokatsiya ochilmadi — ruxsat bering", true);
+      syncGeoUi();
     } finally {
       els.geoBtn.disabled = false;
     }
+  }
+
+  function resolveCheckoutAddress() {
+    const typed = (els.address && els.address.value.trim()) || "";
+    const hasPin = state.latitude != null && state.longitude != null;
+    if (typed) return typed;
+    if (hasPin) return "Lokatsiya";
+    return "";
   }
 
   function checkoutViaSendData(payload) {
@@ -1944,11 +1928,20 @@
     const { bonus } = calcTotals();
     const giftFields = giftPayloadFields();
 
+    const address = resolveCheckoutAddress();
+    const hasPin = state.latitude != null && state.longitude != null;
+    if (!address && !hasPin) {
+      els.status.hidden = false;
+      els.status.classList.add("error");
+      els.status.textContent = "Lokatsiya yuboring yoki manzil yozing";
+      return;
+    }
+
     const payload = {
       initData,
       telegram_user: telegramUser,
       phone: els.phone.value.trim(),
-      address: els.address.value.trim(),
+      address: address || "Lokatsiya",
       slot: els.slot.value,
       note: els.note.value.trim(),
       promo_code: "",
@@ -1999,6 +1992,7 @@
       state.latitude = null;
       state.longitude = null;
       setGeoStatus("", false);
+      syncGeoUi();
       clearGiftSelection();
       if (els.bonus) els.bonus.value = "";
       saveCart();
@@ -2051,6 +2045,7 @@
       state.latitude = null;
       state.longitude = null;
       setGeoStatus("", false);
+      syncGeoUi();
       clearGiftSelection();
       if (els.bonus) els.bonus.value = "";
       saveCart();

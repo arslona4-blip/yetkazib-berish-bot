@@ -81,11 +81,13 @@
         </label>
         <label class="address-field">
           Manzil
-          <textarea id="address" rows="2" placeholder="Ko'cha, uy, mo'ljal" required></textarea>
+          <textarea id="address" rows="2" placeholder="Uy, mo'ljal (masalan: 15-uy, 2-qavat)"></textarea>
           <div class="geo-row">
-            <button type="button" id="geoBtn" class="btn geo">📍 GPS joylashuv</button>
+            <button type="button" id="geoBtn" class="btn geo">📍 Lokatsiya</button>
+            <button type="button" id="geoClear" class="btn geo-clear" hidden>✕</button>
             <span id="geoStatus" class="geo-status" hidden></span>
           </div>
+          <p class="geo-hint">Telegramdagi kabi xarita pin — manzil maydoniga yozilmaydi</p>
         </label>
         <label>
           Yetkazish vaqti
