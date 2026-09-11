@@ -62,6 +62,7 @@
     status: document.getElementById("orderStatus"),
     cartBadge: document.getElementById("cartBadge"),
     variantDialog: document.getElementById("variantDialog"),
+    variantHero: document.getElementById("variantHero"),
     variantTitle: document.getElementById("variantTitle"),
     variantOptions: document.getElementById("variantOptions"),
   };
@@ -514,7 +515,20 @@
     });
   }
 
-  function photoEl(product) {
+  function photoEl(product, onTap) {
+    const wrap = document.createElement("button");
+    wrap.type = "button";
+    wrap.className = "card-photo-btn";
+    wrap.setAttribute(
+      "aria-label",
+      `${product.card_name || product.name} — hajm va narx`
+    );
+    if (typeof onTap === "function") {
+      wrap.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        onTap();
+      });
+    }
     if (product.photo_url) {
       const img = document.createElement("img");
       img.className = "card-photo";
@@ -524,9 +538,11 @@
       img.onerror = () => {
         img.replaceWith(placeholderEl(product.name));
       };
-      return img;
+      wrap.appendChild(img);
+    } else {
+      wrap.appendChild(placeholderEl(product.name));
     }
-    return placeholderEl(product.name);
+    return wrap;
   }
 
   function placeholderEl(name) {
@@ -534,6 +550,58 @@
     div.className = "card-photo placeholder";
     div.textContent = (name || "?").trim().charAt(0).toUpperCase();
     return div;
+  }
+
+  function fillVariantHero(product) {
+    if (!els.variantHero) return;
+    els.variantHero.innerHTML = "";
+    if (!product || !product.photo_url) {
+      els.variantHero.hidden = true;
+      return;
+    }
+    const img = document.createElement("img");
+    img.src = product.photo_url;
+    img.alt = product.card_name || product.name || "";
+    img.loading = "lazy";
+    els.variantHero.appendChild(img);
+    els.variantHero.hidden = false;
+  }
+
+  function openProductSheet(product) {
+    const variants = product.variants || [];
+    const packs = product.kg_packs || [];
+    const money = product.kg_money || [];
+    const liters = product.liter_packs || [];
+    const pieces = product.piece_packs || [];
+    if (product.ask_qty) {
+      openQtyPicker(product);
+      return;
+    }
+    if (packs.length || money.length || liters.length || pieces.length) {
+      openKgPicker(product);
+      return;
+    }
+    if (variants.length) {
+      openVariantPicker(product);
+      return;
+    }
+    // Oddiy mahsulot: rasm + narx ko‘rsatib qo‘shish
+    fillVariantHero(product);
+    els.variantTitle.textContent = product.card_name || product.name;
+    els.variantOptions.innerHTML = "";
+    addOptionButton(
+      `${product.display_price || formatMoney(product.price)} — Qo‘shish`,
+      () => {
+        upsertCartItem({
+          product_id: product.id,
+          variant_id: 0,
+          name: product.name,
+          price: product.price,
+          quantity: 1,
+        });
+      }
+    );
+    els.variantDialog.showModal();
   }
 
   function cyrillicToLatin(text) {
@@ -1061,7 +1129,7 @@
 
       const card = document.createElement("article");
       card.className = "card";
-      card.appendChild(photoEl(product));
+      card.appendChild(photoEl(product, () => openProductSheet(product)));
 
       const body = document.createElement("div");
       body.className = "card-body";
@@ -1103,7 +1171,7 @@
           : pieces.length
             ? "Tanlash"
             : "Hajm tanlash";
-      addBtn.addEventListener("click", () => addProduct(product));
+      addBtn.addEventListener("click", () => openProductSheet(product));
       body.appendChild(addBtn);
 
       card.appendChild(body);
@@ -1112,31 +1180,7 @@
   }
 
   function addProduct(product) {
-    const variants = product.variants || [];
-    const packs = product.kg_packs || [];
-    const money = product.kg_money || [];
-    const liters = product.liter_packs || [];
-    const pieces = product.piece_packs || [];
-    // Hajm/qadoq (250g/500g/1kg) avval — DB variantlari («kg») ustunlik qilmasin
-    if (product.ask_qty) {
-      openQtyPicker(product);
-      return;
-    }
-    if (packs.length || money.length || liters.length || pieces.length) {
-      openKgPicker(product);
-      return;
-    }
-    if (variants.length) {
-      openVariantPicker(product);
-      return;
-    }
-    upsertCartItem({
-      product_id: product.id,
-      variant_id: 0,
-      name: product.name,
-      price: product.price,
-      quantity: 1,
-    });
+    openProductSheet(product);
   }
 
   function addOptionButton(text, onPick) {
@@ -1151,7 +1195,8 @@
   }
 
   function openVariantPicker(product) {
-    els.variantTitle.textContent = product.name;
+    fillVariantHero(product);
+    els.variantTitle.textContent = product.card_name || product.name;
     els.variantOptions.innerHTML = "";
     (product.variants || []).forEach((v) => {
       addOptionButton(`${v.name} — ${formatMoney(v.price)}`, () => {
@@ -1168,6 +1213,7 @@
   }
 
   function openQtyPicker(product) {
+    fillVariantHero(product);
     const title = product.card_name || product.name;
     els.variantTitle.textContent = `${title} — nechta dona?`;
     els.variantOptions.innerHTML = "";
@@ -1234,6 +1280,7 @@
   }
 
   function openKgPicker(product) {
+    fillVariantHero(product);
     els.variantTitle.textContent = `${product.card_name || product.name} — hajm tanlang`;
     els.variantOptions.innerHTML = "";
     const stem = productStem(product.name) || product.name;
