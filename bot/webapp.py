@@ -47,6 +47,7 @@ from bot.database import (
     format_order,
     get_bonus,
     get_categories,
+    get_category,
     get_delivery_fee,
     get_order,
     get_product,

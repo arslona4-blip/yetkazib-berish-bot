@@ -15,9 +15,11 @@
   const state = {
     config: null,
     categories: [],
+    allProducts: [],
     products: [],
     categoryId: null,
     searchQuery: "",
+    productsLoadSeq: 0,
     cart: loadCart(),
     bonusPoints: 0,
     discount: 0,
@@ -476,6 +478,24 @@
     if (name === "cart") renderCart();
   }
 
+  function clearSearchInput() {
+    state.searchQuery = "";
+    if (els.productSearch) els.productSearch.value = "";
+    syncSearchClear();
+  }
+
+  function applyCatalogFilter() {
+    const source = Array.isArray(state.allProducts) ? state.allProducts : [];
+    const cid = state.categoryId;
+    if (cid == null || cid === "") {
+      state.products = source.slice();
+    } else {
+      const id = Number(cid);
+      state.products = source.filter((p) => Number(p.category_id) === id);
+    }
+    renderProducts();
+  }
+
   function renderCategories() {
     els.categories.innerHTML = "";
     const all = document.createElement("button");
@@ -484,20 +504,23 @@
     all.textContent = "Hammasi";
     all.addEventListener("click", () => {
       state.categoryId = null;
+      clearSearchInput();
       renderCategories();
-      loadProducts();
+      applyCatalogFilter();
     });
     els.categories.appendChild(all);
 
     state.categories.forEach((cat) => {
       const btn = document.createElement("button");
+      const catId = Number(cat.id);
       btn.type = "button";
-      btn.className = `chip${state.categoryId === cat.id ? " active" : ""}`;
+      btn.className = `chip${Number(state.categoryId) === catId ? " active" : ""}`;
       btn.textContent = cat.label || `${cat.emoji || "📦"} ${cat.name}`.trim();
       btn.addEventListener("click", () => {
-        state.categoryId = cat.id;
+        state.categoryId = catId;
+        clearSearchInput();
         renderCategories();
-        loadProducts();
+        applyCatalogFilter();
       });
       els.categories.appendChild(btn);
     });
@@ -832,7 +855,7 @@
 
     let best = null;
     let bestScore = 0;
-    state.products.forEach((p) => {
+    state.allProducts.forEach((p) => {
       if (usedIds.has(Number(p.id))) return;
       const hay = productSearchHay(p);
       if (!recipeNameOk(query, hay)) return;
@@ -972,14 +995,20 @@
 
   function filteredProducts() {
     const q = normalizeSearch(state.searchQuery);
-    if (!q) return state.products;
+    // Qidiruvda butun katalog; toifa filtri faqat qidiruvsız
+    const source = q
+      ? Array.isArray(state.allProducts) && state.allProducts.length
+        ? state.allProducts
+        : state.products
+      : state.products;
+    if (!q) return source;
     const recipeHit = detectRecipe(state.searchQuery);
     if (recipeHit && recipeHit.recipe && recipeHit.products) {
       return recipeHit.products;
     }
     const groups = searchTermGroups(state.searchQuery);
-    if (!groups.length) return state.products;
-    return state.products.filter((p) => {
+    if (!groups.length) return source;
+    return source.filter((p) => {
       const hay = productSearchHay(p);
       return groups.some((tokens) => productMatchesTermTokens(hay, tokens));
     }).sort((a, b) => {
@@ -1074,6 +1103,7 @@
       return;
     }
 
+    const frag = document.createDocumentFragment();
     const termGroups = searchTermGroups(state.searchQuery);
     const multiSearch = termGroups.length > 1;
     if (multiSearch && !(recipeHit && recipeHit.recipe)) {
@@ -1082,7 +1112,7 @@
       hint.textContent = `${termGroups.length} ta so‘z: ${termGroups
         .map((t) => t.join(" "))
         .join(" · ")}`;
-      els.products.appendChild(hint);
+      frag.appendChild(hint);
     }
 
     const showSections =
@@ -1110,7 +1140,7 @@
             : product.category_name
               ? `📦 ${product.category_name}`
               : "📦 Boshqa";
-          els.products.appendChild(section);
+          frag.appendChild(section);
         }
       } else if (multiSearch && !(recipeHit && recipeHit.recipe)) {
         const hay = productSearchHay(product);
@@ -1123,7 +1153,7 @@
           const section = document.createElement("h2");
           section.className = "category-section";
           section.textContent = `🔍 ${matchKey}`;
-          els.products.appendChild(section);
+          frag.appendChild(section);
         }
       }
 
@@ -1175,8 +1205,9 @@
       body.appendChild(addBtn);
 
       card.appendChild(body);
-      els.products.appendChild(card);
+      frag.appendChild(card);
     });
+    els.products.appendChild(frag);
   }
 
   function addProduct(product) {
@@ -1483,12 +1514,22 @@
   }
 
   async function loadProducts() {
-    const q =
-      state.categoryId != null
-        ? `/api/products?category_id=${encodeURIComponent(state.categoryId)}`
-        : "/api/products";
-    state.products = await api(q);
-    renderProducts();
+    const seq = ++state.productsLoadSeq;
+    if (els.products) {
+      els.products.innerHTML = `<p class="empty">Mahsulotlar yuklanmoqda…</p>`;
+    }
+    try {
+      const data = await api("/api/products");
+      if (seq !== state.productsLoadSeq) return;
+      state.allProducts = Array.isArray(data) ? data : [];
+      applyCatalogFilter();
+    } catch (err) {
+      if (seq !== state.productsLoadSeq) return;
+      if (els.products) {
+        els.products.innerHTML = `<p class="empty">Yuklashda xato. Qayta urinib ko‘ring.</p>`;
+      }
+      throw err;
+    }
   }
 
   async function loadUserBonus() {
