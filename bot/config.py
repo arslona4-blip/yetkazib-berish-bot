@@ -43,7 +43,7 @@ PAYMENT_STATUS_LABELS = {
     "rejected": "❌ Rad etildi",
 }
 
-DELIVERY_FEE_THRESHOLD = int(os.getenv("DELIVERY_FEE_THRESHOLD", "50000"))
+DELIVERY_FEE_THRESHOLD = int(os.getenv("DELIVERY_FEE_THRESHOLD", "100000"))
 DELIVERY_FEE_LOW = int(os.getenv("DELIVERY_FEE_LOW", "5000"))
 DELIVERY_FEE_HIGH = int(
     os.getenv("DELIVERY_FEE_HIGH") or os.getenv("DELIVERY_PRICE", "10000")
