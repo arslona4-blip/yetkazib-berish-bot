@@ -1447,6 +1447,35 @@
         syncSearchClear();
         renderProducts();
       };
+      const keepSearchVisible = () => {
+        if (document.activeElement !== els.productSearch) return;
+        const wrap = els.productSearch.closest(".search-wrap");
+        if (!wrap) return;
+        const vv = window.visualViewport;
+        const rect = wrap.getBoundingClientRect();
+        if (vv) {
+          const top = rect.top - vv.offsetTop;
+          if (top < 4 || rect.bottom - vv.offsetTop > vv.height - 8) {
+            window.scrollBy({ top: top - 8, left: 0, behavior: "smooth" });
+          }
+        } else {
+          wrap.scrollIntoView({ block: "start", behavior: "smooth" });
+        }
+      };
+      els.productSearch.addEventListener("focus", () => {
+        document.body.classList.add("search-focused");
+        requestAnimationFrame(() => {
+          keepSearchVisible();
+          setTimeout(keepSearchVisible, 280);
+        });
+      });
+      els.productSearch.addEventListener("blur", () => {
+        document.body.classList.remove("search-focused");
+      });
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", keepSearchVisible);
+        window.visualViewport.addEventListener("scroll", keepSearchVisible);
+      }
       els.productSearch.addEventListener("input", () => {
         clearTimeout(searchTimer);
         searchTimer = setTimeout(applySearch, 120);
