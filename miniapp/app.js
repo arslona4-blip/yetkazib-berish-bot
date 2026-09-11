@@ -121,7 +121,7 @@
 
   function deliveryRatesText() {
     const cfg = state.config || {};
-    const thr = Number(cfg.delivery_fee_threshold) || 50000;
+    const thr = Number(cfg.delivery_fee_threshold) || 100000;
     const low = Number(cfg.delivery_fee_low) || 5000;
     const high =
       Number(cfg.delivery_fee_high) || Number(cfg.delivery_price) || 10000;
@@ -441,7 +441,7 @@
 
   function deliveryFeeFor(subtotal) {
     const cfg = state.config || {};
-    const thr = Number(cfg.delivery_fee_threshold) || 50000;
+    const thr = Number(cfg.delivery_fee_threshold) || 100000;
     const low = Number(cfg.delivery_fee_low) || 5000;
     const high =
       Number(cfg.delivery_fee_high) || Number(cfg.delivery_price) || 10000;
