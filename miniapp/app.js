@@ -932,8 +932,9 @@
   }
 
   function syncSearchClear() {
-    if (!els.searchClear) return;
-    els.searchClear.hidden = !normalizeSearch(state.searchQuery);
+    const hasQuery = !!normalizeSearch(state.searchQuery);
+    if (els.searchClear) els.searchClear.hidden = !hasQuery;
+    document.body.classList.toggle("searching", hasQuery);
   }
 
   function renderProducts() {

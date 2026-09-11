@@ -62,7 +62,7 @@ body {
   animation: topbarIn 0.5s var(--ease) both;
 }
 
-/* Qidiruvda: brand ixcham, pastki nav yashirin — klaviatura yopmasin */
+/* Qidiruvda: brand ixcham, banner/nav yashirin — natijalar ko‘rinsin */
 body.search-focused .brand-eyebrow,
 body.search-focused #shopMeta {
   display: none;
@@ -84,6 +84,24 @@ body.search-focused .bottom-nav {
 
 body.search-focused {
   padding-bottom: 16px;
+}
+
+body.search-focused .gift-promo,
+body.searching .gift-promo {
+  display: none !important;
+}
+
+body.search-focused .brand {
+  display: none;
+}
+
+body.search-focused .topbar {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+body.search-focused .search-wrap {
+  margin-top: 0;
 }
 
 @keyframes topbarIn {
