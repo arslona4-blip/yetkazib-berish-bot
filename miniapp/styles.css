@@ -803,6 +803,12 @@ main {
   color: var(--danger);
 }
 
+.geo-map-link {
+  color: var(--forest);
+  text-decoration: underline;
+  font-weight: 750;
+}
+
 .pay-note {
   margin: -2px 0 0;
   padding: 12px 14px;

@@ -1751,12 +1751,28 @@
     if (!text) {
       els.geoStatus.hidden = true;
       els.geoStatus.textContent = "";
+      els.geoStatus.innerHTML = "";
       els.geoStatus.classList.remove("error");
       return;
     }
     els.geoStatus.hidden = false;
     els.geoStatus.textContent = text;
     els.geoStatus.classList.toggle("error", !!isError);
+  }
+
+  function shortenAddressHint(raw) {
+    let s = String(raw || "").trim();
+    if (!s) return "";
+    s = s
+      .replace(/,\s*\d{5,6}\s*,?\s*O['’`]?zbekiston.*$/i, "")
+      .replace(/,\s*Uzbekistan.*$/i, "")
+      .replace(/,\s*Toshkent shahri/gi, ", Toshkent")
+      .replace(/,\s*город Ташкент/gi, ", Toshkent");
+    const parts = s
+      .split(",")
+      .map((p) => p.trim())
+      .filter(Boolean);
+    return parts.slice(0, 3).join(", ");
   }
 
   function applyGeoCoords(lat, lon, addressHint) {
@@ -1768,22 +1784,29 @@
     }
     state.latitude = latitude;
     state.longitude = longitude;
-    const pin = `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
     const maps = `https://maps.google.com/?q=${latitude},${longitude}`;
-    let next = String(addressHint || "").trim();
-    if (!next) {
-      const current = (els.address && els.address.value.trim()) || "";
-      if (current && !/maps\.google|GPS:|Lokatsiya/i.test(current)) {
-        next = `${current}\n📍 ${pin}`;
-      } else {
-        next = `📍 GPS: ${pin}`;
+    const short = shortenAddressHint(addressHint);
+    const current = ((els.address && els.address.value) || "")
+      .replace(/\n?https?:\/\/maps\.google[^\s]*/gi, "")
+      .replace(/\n?📍[^\n]*/g, "")
+      .replace(/\n?GPS:\s*[-0-9.,\s]+/gi, "")
+      .trim();
+
+    if (els.address) {
+      if (short) {
+        els.address.value = short;
+      } else if (!current) {
+        els.address.value = `GPS ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
       }
+      // foydalanuvchi yozgan manzil bo‘lsa va short yo‘q — qoldiramiz
     }
-    if (!next.includes("maps.google")) {
-      next = `${next}\n${maps}`;
+
+    if (els.geoStatus) {
+      els.geoStatus.hidden = false;
+      els.geoStatus.classList.remove("error");
+      els.geoStatus.innerHTML =
+        `GPS ✓ · <a class="geo-map-link" href="${maps}" target="_blank" rel="noopener">xarita</a>`;
     }
-    if (els.address) els.address.value = next;
-    setGeoStatus("GPS olindi ✓", false);
   }
 
   function reverseGeocode(lat, lon) {
