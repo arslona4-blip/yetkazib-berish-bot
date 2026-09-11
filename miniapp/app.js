@@ -126,10 +126,7 @@
     const high =
       Number(cfg.delivery_fee_high) || Number(cfg.delivery_price) || 10000;
     const fmt = (n) => formatMoney(n).replace(" so'm", "");
-    return (
-      `Yetkazish narxi: ${fmt(thr)} so‘mgacha — ${fmt(low)} so‘m; ` +
-      `${fmt(thr)} so‘mdan yuqori — ${fmt(high)} so‘m`
-    );
+    return `🚚 ≤${fmt(thr)} → ${fmt(low)} · >${fmt(thr)} → ${fmt(high)}`;
   }
 
   function giftThreshold() {
@@ -142,26 +139,16 @@
 
   function giftPromoText() {
     const thr = formatMoney(giftThreshold()).replace(" so'm", "");
-    return (
-      `Buyurtma ${thr} so‘mga yetganda bonus yani sovg‘a beriladi. ` +
-      `1L COCA COLA yoki 1L PEPSI yoki 1L FANTA ` +
-      `yoki shu narxdagi mahsulot beriladi. Tanlov o‘zingizniki.`
-    );
+    return `${thr}+ → bepul 1L Cola/Pepsi/Fanta yoki shu narxdagi mahsulot`;
   }
 
   function giftProgressText(subtotal) {
     const thr = giftThreshold();
     if (subtotal >= thr) {
-      return (
-        `🎉 Sovg‘a tayyor! 1L COCA COLA / PEPSI / FANTA ` +
-        `yoki shu narxdagi mahsulot — pastdan tanlang.`
-      );
+      return "🎁 Sovg‘a tayyor — pastdan tanlang";
     }
     const left = thr - subtotal;
-    return (
-      `🎁 Yana ${formatMoney(left)} qo‘shsangiz — sovg‘a: ` +
-      `1L COCA COLA / PEPSI / FANTA yoki shu narxdagi mahsulot.`
-    );
+    return `🎁 Yana ${formatMoney(left)} — bepul 1L ichimlik/sovg‘a`;
   }
 
   function clearGiftSelection() {
