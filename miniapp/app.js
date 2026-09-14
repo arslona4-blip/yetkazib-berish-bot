@@ -551,6 +551,83 @@
     });
   }
 
+  function moneyForSpeech(amount) {
+    const n = Math.round(Number(amount) || 0);
+    return `${String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " ")} so'm`;
+  }
+
+  function pickSpeechVoice() {
+    if (!window.speechSynthesis) return null;
+    const voices = window.speechSynthesis.getVoices() || [];
+    const prefer = ["uz-UZ", "uz", "ru-RU", "ru", "en-US", "en"];
+    for (const code of prefer) {
+      const hit = voices.find((v) =>
+        String(v.lang || "")
+          .toLowerCase()
+          .startsWith(code.toLowerCase())
+      );
+      if (hit) return hit;
+    }
+    return voices[0] || null;
+  }
+
+  function speakText(text) {
+    const raw = String(text || "").trim();
+    if (!raw) return;
+    if (!window.speechSynthesis) {
+      if (tg && tg.showAlert) {
+        try {
+          tg.showAlert("Bu qurilmada ovozli o‘qish yo‘q");
+        } catch (_) {}
+      }
+      return;
+    }
+    try {
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(raw);
+      u.rate = 0.92;
+      u.pitch = 1;
+      u.volume = 1;
+      const voice = pickSpeechVoice();
+      if (voice) {
+        u.voice = voice;
+        u.lang = voice.lang || "uz-UZ";
+      } else {
+        u.lang = "uz-UZ";
+      }
+      window.speechSynthesis.speak(u);
+      if (tg && tg.HapticFeedback) {
+        try {
+          tg.HapticFeedback.impactOccurred("light");
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
+
+  function productSpeechText(product) {
+    const name = product.card_name || product.name || "Mahsulot";
+    const price = product.display_price || moneyForSpeech(product.price);
+    const packs = []
+      .concat(product.kg_packs || [])
+      .concat(product.liter_packs || [])
+      .concat(product.piece_packs || []);
+    if (packs.length >= 2) {
+      const labels = packs
+        .slice(0, 4)
+        .map((p) => `${p.label} ${moneyForSpeech(p.price)}`)
+        .join(", ");
+      return `${name}. Variantlar: ${labels}`;
+    }
+    if (product.ask_qty) {
+      return `${name}. Narxi: ${price} dona`;
+    }
+    return `${name}. Narxi: ${price}`;
+  }
+
+  function speakProduct(product) {
+    speakText(productSpeechText(product));
+  }
+
   function photoEl(product, onTap) {
     const wrap = document.createElement("button");
     wrap.type = "button";
@@ -1203,6 +1280,20 @@
         body.appendChild(hint);
       }
 
+      const actions = document.createElement("div");
+      actions.className = "card-actions";
+
+      const speakBtn = document.createElement("button");
+      speakBtn.type = "button";
+      speakBtn.className = "btn speak";
+      speakBtn.setAttribute("aria-label", "Ovoz bilan o‘qish");
+      speakBtn.textContent = "🔊";
+      speakBtn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        speakProduct(product);
+      });
+
       const addBtn = document.createElement("button");
       addBtn.type = "button";
       addBtn.className = "btn add";
@@ -1215,7 +1306,10 @@
             ? "Tanlash"
             : "Hajm tanlash";
       addBtn.addEventListener("click", () => openProductSheet(product));
-      body.appendChild(addBtn);
+
+      actions.appendChild(speakBtn);
+      actions.appendChild(addBtn);
+      body.appendChild(actions);
 
       card.appendChild(body);
       frag.appendChild(card);
