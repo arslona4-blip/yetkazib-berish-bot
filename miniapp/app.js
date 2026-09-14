@@ -80,6 +80,11 @@
     guideNext: document.getElementById("guideNext"),
     guideSkip: document.getElementById("guideSkip"),
     guideOpen: document.getElementById("guideOpen"),
+    aiMessages: document.getElementById("aiMessages"),
+    aiForm: document.getElementById("aiForm"),
+    aiInput: document.getElementById("aiInput"),
+    aiSend: document.getElementById("aiSend"),
+    aiChips: document.getElementById("aiChips"),
   };
 
   function formatMoney(amount) {
@@ -483,12 +488,20 @@
   function showView(name) {
     document.querySelectorAll(".view").forEach((el) => el.classList.remove("active"));
     document.querySelectorAll(".nav-btn").forEach((el) => el.classList.remove("active"));
-    const view = name === "cart" ? "viewCart" : "viewCatalog";
-    document.getElementById(view).classList.add("active");
-    document
-      .querySelector(`.nav-btn[data-view="${name === "cart" ? "cart" : "catalog"}"]`)
-      .classList.add("active");
+    const map = { catalog: "viewCatalog", cart: "viewCart", ai: "viewAi" };
+    const viewId = map[name] || "viewCatalog";
+    const viewEl = document.getElementById(viewId);
+    if (viewEl) viewEl.classList.add("active");
+    const nav = document.querySelector(`.nav-btn[data-view="${name}"]`);
+    if (nav) nav.classList.add("active");
     if (name === "cart") renderCart();
+    if (name === "ai" && els.aiInput) {
+      setTimeout(() => {
+        try {
+          els.aiInput.focus();
+        } catch (_) {}
+      }, 120);
+    }
   }
 
   function clearSearchInput() {
@@ -1415,6 +1428,132 @@
     }
   }
 
+  function htmlToPlain(html) {
+    const tmp = document.createElement("div");
+    tmp.innerHTML = String(html || "")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/p>/gi, "\n")
+      .replace(/<\/div>/gi, "\n");
+    return (tmp.textContent || "").replace(/\n{3,}/g, "\n\n").trim();
+  }
+
+  function appendAiBubble(role, text) {
+    if (!els.aiMessages) return null;
+    const bubble = document.createElement("div");
+    bubble.className = `ai-bubble ${role}`;
+    bubble.textContent = text;
+    els.aiMessages.appendChild(bubble);
+    els.aiMessages.scrollTop = els.aiMessages.scrollHeight;
+    return bubble;
+  }
+
+  function findCatalogProduct(id) {
+    const pid = Number(id);
+    return (state.allProducts || []).find((p) => Number(p.id) === pid) || null;
+  }
+
+  function applyAiCartAdds(adds) {
+    let n = 0;
+    (adds || []).forEach((row) => {
+      const pid = Number(row.product_id);
+      if (!pid) return;
+      const qty = Math.max(1, Number(row.quantity) || 1);
+      upsertCartItem({
+        product_id: pid,
+        variant_id: Number(row.variant_id) || 0,
+        name: row.name || "Mahsulot",
+        price: Number(row.price) || 0,
+        quantity: qty,
+        pack_grams: Number(row.pack_grams) || 0,
+        pack_amount: Number(row.pack_amount) || 0,
+      });
+      n += qty;
+    });
+    return n;
+  }
+
+  function renderAiProductExtras(bubble, products, cartAdds) {
+    if (!bubble) return;
+    const list = Array.isArray(products) ? products.slice(0, 8) : [];
+    const adds = Array.isArray(cartAdds) ? cartAdds : [];
+    if (!list.length && !adds.length) return;
+
+    if (list.length) {
+      const wrap = document.createElement("div");
+      wrap.className = "ai-products";
+      list.forEach((p) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "ai-product-chip";
+        btn.textContent = p.card_name || p.name || `#${p.id}`;
+        btn.addEventListener("click", () => {
+          const local = findCatalogProduct(p.id) || p;
+          if (typeof openProductSheet === "function") {
+            openProductSheet(local);
+          }
+        });
+        wrap.appendChild(btn);
+      });
+      bubble.appendChild(wrap);
+    }
+
+    if (adds.length) {
+      const addBtn = document.createElement("button");
+      addBtn.type = "button";
+      addBtn.className = "btn add ai-add-all";
+      addBtn.textContent = `Savatga qo‘shish (${adds.length})`;
+      addBtn.addEventListener("click", () => {
+        const n = applyAiCartAdds(adds);
+        addBtn.disabled = true;
+        addBtn.textContent = n ? `Qo‘shildi (${n})` : "Qo‘shildi";
+        if (tg && tg.HapticFeedback) {
+          try {
+            tg.HapticFeedback.notificationOccurred("success");
+          } catch (_) {}
+        }
+      });
+      bubble.appendChild(addBtn);
+    }
+  }
+
+  async function sendAiMessage(rawText) {
+    const text = String(rawText || "").trim();
+    if (!text || !els.aiMessages) return;
+    if (els.aiSend) els.aiSend.disabled = true;
+    if (els.aiInput) els.aiInput.value = "";
+
+    appendAiBubble("user", text);
+    const pending = appendAiBubble("bot", "O‘ylayapman…");
+    if (pending) pending.classList.add("pending");
+
+    try {
+      const initData = (tg && tg.initData) || "";
+      const unsafe = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) || null;
+      const body = { text, initData };
+      if (unsafe && unsafe.id) body.telegram_user = unsafe;
+      const data = await api("/api/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const reply = htmlToPlain(data.reply || "Javob yo‘q");
+      if (pending) {
+        pending.classList.remove("pending");
+        pending.textContent = reply;
+        renderAiProductExtras(pending, data.products || [], data.cart_adds || []);
+      }
+    } catch (err) {
+      if (pending) {
+        pending.classList.remove("pending");
+        pending.textContent =
+          (err && err.message) || "AI javob bera olmadi. Qayta urinib ko‘ring.";
+      }
+    } finally {
+      if (els.aiSend) els.aiSend.disabled = false;
+      if (els.aiMessages) els.aiMessages.scrollTop = els.aiMessages.scrollHeight;
+    }
+  }
+
   function setQty(item, delta) {
     const key = cartKey(item);
     const found = state.cart.find((c) => cartKey(c) === key);
@@ -1737,6 +1876,22 @@
     document.querySelectorAll(".nav-btn").forEach((btn) => {
       btn.addEventListener("click", () => showView(btn.dataset.view));
     });
+
+    if (els.aiForm) {
+      els.aiForm.addEventListener("submit", (ev) => {
+        ev.preventDefault();
+        const text = (els.aiInput && els.aiInput.value) || "";
+        sendAiMessage(text).catch(() => {});
+      });
+    }
+    if (els.aiChips) {
+      els.aiChips.querySelectorAll("[data-ai-q]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const q = btn.getAttribute("data-ai-q") || "";
+          sendAiMessage(q).catch(() => {});
+        });
+      });
+    }
 
     els.form.addEventListener("submit", onCheckout);
     if (els.geoBtn) {

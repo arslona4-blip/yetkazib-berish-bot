@@ -2855,3 +2855,112 @@ def reply_to_user(user_id: int, user_text: str) -> tuple[str, list[Any]]:
         return ai, products
 
     return _local_reply(user_text)
+
+
+def reply_for_miniapp(user_id: int, user_text: str) -> dict[str, Any]:
+    """
+    Mini App AI: Telegram DB savatiga yozmaydi.
+    Qaytaradi: reply (HTML), products (sqlite rows), cart_adds (lokal savat uchun).
+    """
+    suggested: list[dict[str, Any]] = []
+    real_add = db.add_to_cart
+    real_money = db.add_money_to_cart
+    real_refill = db.refill_cart_from_order
+    real_totals = db.get_cart_totals
+
+    def fake_add(
+        uid: int, product_id: int, quantity: int = 1, variant_id: int = 0
+    ) -> None:
+        product = db.get_product(int(product_id))
+        if not product or not product["is_active"]:
+            return
+        qty = max(1, int(quantity or 1))
+        suggested.append(
+            {
+                "product_id": int(product_id),
+                "quantity": qty,
+                "name": str(product["name"]),
+                "price": int(product["price"] or 0),
+                "variant_id": int(variant_id or 0),
+                "kind": "unit",
+            }
+        )
+
+    def fake_money(
+        uid: int,
+        product_id: int,
+        *,
+        amount: int,
+        grams: int,
+        label: str,
+        quantity: int = 1,
+    ) -> None:
+        qty = max(1, int(quantity or 1))
+        for _ in range(qty):
+            suggested.append(
+                {
+                    "product_id": int(product_id),
+                    "quantity": 1,
+                    "name": str(label or "Mahsulot"),
+                    "price": int(amount or 0),
+                    "pack_grams": int(grams or 0),
+                    "pack_amount": int(amount or 0),
+                    "kind": "money",
+                }
+            )
+
+    def fake_refill(uid: int, order_id: int) -> int:
+        items = db.get_order_items(int(order_id))
+        n = 0
+        for it in items:
+            pid = int(it["product_id"] or 0)
+            if not pid:
+                continue
+            suggested.append(
+                {
+                    "product_id": pid,
+                    "quantity": max(1, int(it["quantity"] or 1)),
+                    "name": str(it["product_name"] or "Mahsulot"),
+                    "price": int(it["price"] or 0),
+                    "kind": "unit",
+                }
+            )
+            n += 1
+        return n
+
+    def fake_totals(uid: int):
+        total_qty = sum(int(x["quantity"]) for x in suggested)
+        total_sum = sum(
+            int(x["price"]) * int(x["quantity"]) for x in suggested
+        )
+        return total_qty, total_sum
+
+    db.add_to_cart = fake_add  # type: ignore[assignment]
+    db.add_money_to_cart = fake_money  # type: ignore[assignment]
+    db.refill_cart_from_order = fake_refill  # type: ignore[assignment]
+    db.get_cart_totals = fake_totals  # type: ignore[assignment]
+    try:
+        reply, products = reply_to_user(int(user_id), str(user_text or ""))
+    finally:
+        db.add_to_cart = real_add  # type: ignore[assignment]
+        db.add_money_to_cart = real_money  # type: ignore[assignment]
+        db.refill_cart_from_order = real_refill  # type: ignore[assignment]
+        db.get_cart_totals = real_totals  # type: ignore[assignment]
+
+    if suggested:
+        reply = re.sub(
+            r"(?m)^✅.*savatga.*$",
+            "✅ Tayyor — pastdagi «Savatga qo‘shish» tugmasini bosing.",
+            str(reply or ""),
+            flags=re.IGNORECASE,
+        )
+        if "Savatga qo‘shish" not in reply and "savatga" in reply.lower():
+            reply += (
+                "\n\n📱 Mini Appda «Savatga qo‘shish» tugmasini bosing."
+            )
+
+    return {
+        "reply": str(reply or ""),
+        "products": list(products or []),
+        "cart_adds": suggested,
+    }

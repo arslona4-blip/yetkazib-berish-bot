@@ -1208,6 +1208,75 @@ async def serve_slayd_index(_request: web.Request) -> web.FileResponse:
     return web.FileResponse(index)
 
 
+async def api_ai(request: web.Request) -> web.Response:
+    """Mini App AI chat — katalog / retsept / OpenAI (lokal savat uchun)."""
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise web.HTTPBadRequest(text="JSON noto'g'ri") from exc
+
+    text = str(body.get("text") or body.get("message") or "").strip()
+    if not text:
+        raise web.HTTPBadRequest(text="Matn kiriting")
+    if len(text) > 800:
+        text = text[:800]
+
+    user_id, _full_name, _username = extract_user_from_request(request, body)
+    if user_id is None:
+        unsafe = body.get("telegram_user") or {}
+        try:
+            user_id = int(unsafe.get("id"))
+        except (TypeError, ValueError):
+            user_id = None
+    if user_id is None:
+        dev_raw = body.get("dev_user_id")
+        try:
+            user_id = int(dev_raw) if dev_raw is not None else None
+        except (TypeError, ValueError):
+            user_id = None
+    if user_id is None:
+        raise web.HTTPUnauthorized(text="initData kerak")
+
+    from bot.shop_ai import reply_for_miniapp
+
+    try:
+        result = await asyncio.to_thread(reply_for_miniapp, int(user_id), text)
+    except Exception as exc:
+        logger.exception("Mini App AI xato: %s", exc)
+        raise web.HTTPBadGateway(text="AI hozir javob bera olmadi") from exc
+
+    products_out: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    for p in result.get("products") or []:
+        try:
+            pid = int(p["id"])
+        except (TypeError, ValueError, KeyError):
+            continue
+        if pid in seen:
+            continue
+        seen.add(pid)
+        try:
+            products_out.append(_product_api_payload(p))
+        except Exception:
+            products_out.append(
+                {
+                    "id": pid,
+                    "name": str(p["name"] if "name" in p.keys() else "Mahsulot"),
+                    "price": int(p["price"] or 0),
+                    "photo_url": "",
+                }
+            )
+
+    return web.json_response(
+        {
+            "ok": True,
+            "reply": result.get("reply") or "",
+            "products": products_out,
+            "cart_adds": result.get("cart_adds") or [],
+        }
+    )
+
+
 async def serve_receipt(request: web.Request) -> web.Response:
     """GET /chek/{token} | /chek/{token}.png | /chek/{token}.pdf"""
     from bot.receipt import (
@@ -1274,6 +1343,7 @@ def create_app() -> web.Application:
     app.router.add_get("/api/barcode/{code}", api_barcode)
     app.router.add_get("/api/photo/{product_id}", api_photo)
     app.router.add_post("/api/order", api_order)
+    app.router.add_post("/api/ai", api_ai)
     app.router.add_post("/api/shajara/share", api_shajara_share_create)
     app.router.add_get("/api/shajara/share/{code}", api_shajara_share_get)
     register_admin_routes(app)
