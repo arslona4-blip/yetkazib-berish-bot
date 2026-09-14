@@ -224,3 +224,49 @@ async def send_order_voice_confirm(
     except Exception as exc:
         logger.warning("Ovozli tasdiq yuborilmadi #%s: %s", order_id, exc)
         return False
+
+
+async def send_admin_new_order_voice(
+    bot: Any,
+    chat_id: int,
+    *,
+    order_id: int | None = None,
+) -> bool:
+    """Adminga qisqa ovozli signal — telefonda eshitiladi."""
+    if not VOICE_CONFIRM_ENABLED:
+        return False
+    if order_id:
+        text = f"Diqqat! Yangi buyurtma raqam {int(order_id)} keldi!"
+        caption = f"🔔 Yangi buyurtma #{int(order_id)}"
+        filename = f"admin_order_{int(order_id)}.mp3"
+    else:
+        text = "Diqqat! Yangi buyurtma keldi!"
+        caption = "🔔 Yangi buyurtma"
+        filename = "admin_new_order.mp3"
+    try:
+        mp3 = await synthesize_uzbek_mp3(text)
+    except Exception as exc:
+        logger.warning("Admin ovoz TTS xato: %s", exc)
+        return False
+    try:
+        await bot.send_voice(
+            chat_id=chat_id,
+            voice=InputFile(io.BytesIO(mp3), filename=filename),
+            caption=caption,
+            disable_notification=False,
+        )
+        return True
+    except Exception:
+        try:
+            await bot.send_audio(
+                chat_id=chat_id,
+                audio=InputFile(io.BytesIO(mp3), filename=filename),
+                title="Yangi buyurtma",
+                performer=SHOP_NAME,
+                caption=caption,
+                disable_notification=False,
+            )
+            return True
+        except Exception as exc:
+            logger.warning("Admin ovoz yuborilmadi chat=%s: %s", chat_id, exc)
+            return False

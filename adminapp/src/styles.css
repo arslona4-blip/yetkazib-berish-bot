@@ -883,6 +883,22 @@ textarea {
   padding: 10px 12px;
 }
 
+.order-alert {
+  margin: 10px 14px 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: linear-gradient(90deg, #14532d, #166534);
+  color: #ecfdf5;
+  font-weight: 700;
+  font-size: 0.95rem;
+  box-shadow: 0 8px 24px rgba(20, 83, 45, 0.35);
+  animation: orderPulse 0.6s ease;
+}
+@keyframes orderPulse {
+  from { transform: translateY(-6px); opacity: 0.4; }
+  to { transform: none; opacity: 1; }
+}
+
 .busy {
   opacity: 0.55;
   pointer-events: none;

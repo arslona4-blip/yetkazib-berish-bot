@@ -1038,22 +1038,17 @@ async def api_order(request: web.Request) -> web.Response:
 
     if _bot is not None:
         from bot.keyboards import admin_order_keyboard, payment_keyboard
+        from bot.notify_admins import notify_admins_text
 
-        for admin_id in ADMIN_IDS:
-            try:
-                await _bot.send_message(
-                    admin_id,
-                    f"🆕 Mini App\n{text}",
-                    reply_markup=admin_order_keyboard(order_id),
-                )
-                if lat is not None and lon is not None:
-                    await _bot.send_location(
-                        admin_id,
-                        latitude=lat,
-                        longitude=lon,
-                    )
-            except Exception as exc:
-                logger.warning("Admin xabar xatosi %s: %s", admin_id, exc)
+        await notify_admins_text(
+            _bot,
+            f"🆕 Mini App\n{text}",
+            reply_markup=admin_order_keyboard(order_id),
+            latitude=lat,
+            longitude=lon,
+            order_id=order_id,
+            voice_alert=True,
+        )
         try:
             await _bot.send_message(
                 user_id,

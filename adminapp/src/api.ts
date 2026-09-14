@@ -181,6 +181,12 @@ export const api = {
       auth,
       { method: 'POST', body: JSON.stringify({ name }) },
     ),
+  updateCategory: (auth: AuthState | null, id: number, name: string) =>
+    req<{ ok: boolean; id: number; name: string; emoji?: string }>(
+      `/api/admin/categories/${id}`,
+      auth,
+      { method: 'PATCH', body: JSON.stringify({ name }) },
+    ),
   products: (auth: AuthState | null) =>
     req<{ ok: boolean; products: import('./types').Product[] }>(
       '/api/admin/products',
@@ -266,5 +272,32 @@ export const api = {
       `/api/admin/contacts/${id}`,
       auth,
       { method: 'PATCH', body: JSON.stringify(body) },
+    ),
+  pushVapid: (auth: AuthState | null) =>
+    req<{ ok: boolean; publicKey: string }>('/api/admin/push/vapid', auth),
+  pushSubscribe: (
+    auth: AuthState | null,
+    body: { endpoint: string; keys: { p256dh: string; auth: string } },
+  ) =>
+    req<{ ok: boolean }>('/api/admin/push/subscribe', auth, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  pushUnsubscribe: (auth: AuthState | null, endpoint: string) =>
+    req<{ ok: boolean }>('/api/admin/push/unsubscribe', auth, {
+      method: 'POST',
+      body: JSON.stringify({ endpoint }),
+    }),
+  pushTest: (auth: AuthState | null) =>
+    req<{ ok: boolean; subscriptions?: number; error?: string }>(
+      '/api/admin/push/test',
+      auth,
+      { method: 'POST', body: '{}' },
+    ),
+  telegramNotifyTest: (auth: AuthState | null) =>
+    req<{ ok: boolean; sent?: number; targets?: number[]; error?: string }>(
+      '/api/admin/notify/test',
+      auth,
+      { method: 'POST', body: '{}' },
     ),
 }

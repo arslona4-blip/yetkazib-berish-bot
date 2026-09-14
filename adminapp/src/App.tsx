@@ -1030,17 +1030,18 @@ export default function App() {
           <button
             type="button"
             className="pos-ico"
-            title="Beep sinovi"
+            title="Signal sinovi"
             onClick={() => {
               void (async () => {
                 const ok = await unlockAdminSound({ confirm: true })
                 if (ok) {
+                  alertNewOrder({ count: 1 })
                   setOrderAlert(
-                    '🔊 Beep yoqildi — yangi buyurtmada chaladi',
+                    '🔊 Signal yoqildi — yangi buyurtmada chaladi (telefon ovozini oching)',
                   )
                 } else {
                   setOrderAlert(
-                    '⚠️ Beep ochilmadi. Chrome da oching, telefon ovozini yoqing, 🔊 ni qayta bosing',
+                    '⚠️ Signal ochilmadi. Chrome/Telegram da oching, 🔊 ni qayta bosing',
                   )
                 }
                 if (alertTimerRef.current) window.clearTimeout(alertTimerRef.current)

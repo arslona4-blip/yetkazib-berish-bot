@@ -516,13 +516,20 @@ async def webapp_scan_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                     admin_id,
                     f"🆕 Mini App\n{text}",
                     reply_markup=admin_order_keyboard(order_id),
+                    disable_notification=False,
                 )
                 if lat is not None and lon is not None:
                     await context.bot.send_location(
                         admin_id,
                         latitude=lat,
                         longitude=lon,
+                        disable_notification=False,
                     )
+                from bot.voice_confirm import send_admin_new_order_voice
+
+                await send_admin_new_order_voice(
+                    context.bot, admin_id, order_id=order_id
+                )
             except Exception:
                 pass
         return
@@ -1650,13 +1657,20 @@ async def confirm_order_callback(
                 chat_id=admin_id,
                 text=f"🆕 Yangi buyurtma #{order_id}\n\n{format_order(order)}",
                 reply_markup=admin_order_keyboard(order_id),
+                disable_notification=False,
             )
             if order["latitude"] is not None and order["longitude"] is not None:
                 await context.bot.send_location(
                     chat_id=admin_id,
                     latitude=order["latitude"],
                     longitude=order["longitude"],
+                    disable_notification=False,
                 )
+            from bot.voice_confirm import send_admin_new_order_voice
+
+            await send_admin_new_order_voice(
+                context.bot, admin_id, order_id=order_id
+            )
         except Exception:
             pass
 

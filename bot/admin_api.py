@@ -56,11 +56,14 @@ from bot.database import (
     set_product_stock,
     set_promo_active,
     update_contact,
+    update_category,
     update_payment_status,
     update_product_fields,
     update_product_price,
     update_order_status,
     upsert_promo,
+    upsert_push_subscription,
+    delete_push_subscription,
 )
 
 logger = logging.getLogger(__name__)
@@ -354,6 +357,15 @@ async def admin_order_status(request: web.Request) -> web.Response:
     await _notify_user(int(order["user_id"]), text, markup)
     if status == "delivered":
         try:
+            from bot.receipt import send_order_receipt
+            from bot.webapp import get_bot
+
+            bot = get_bot()
+            if bot is not None:
+                await send_order_receipt(bot, order_id)
+        except Exception as exc:
+            logger.warning("Chek yuborish xato: %s", exc)
+        try:
             from bot.i18n import get_user_lang, t
             from bot.keyboards import rating_keyboard
 
@@ -585,6 +597,38 @@ async def admin_categories_create(request: web.Request) -> web.Response:
             "id": cid,
             "name": cat["name"] if cat else name,
             "emoji": (cat["emoji"] if cat and "emoji" in cat.keys() else "") or "📦",
+        }
+    )
+
+
+async def admin_categories_patch(request: web.Request) -> web.Response:
+    admin_id = _require_admin(request)
+    try:
+        category_id = int(request.match_info["category_id"])
+    except (KeyError, ValueError) as exc:
+        raise web.HTTPBadRequest(text="category_id noto'g'ri") from exc
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise web.HTTPBadRequest(text="JSON noto'g'ri") from exc
+    name = str(body.get("name") or "").strip()
+    if not name:
+        raise web.HTTPBadRequest(text="Nom kerak")
+    emoji = str(body.get("emoji") or "").strip() or None
+    try:
+        update_category(category_id, name, emoji=emoji)
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text=str(exc)) from exc
+    cat = get_category(category_id)
+    if not cat:
+        raise web.HTTPNotFound(text="Toifa topilmadi")
+    logger.info("Admin %s updated category #%s", admin_id, category_id)
+    return web.json_response(
+        {
+            "ok": True,
+            "id": category_id,
+            "name": cat["name"],
+            "emoji": (cat["emoji"] if "emoji" in cat.keys() else "") or "📦",
         }
     )
 
@@ -926,6 +970,103 @@ async def admin_contacts_update(request: web.Request) -> web.Response:
     )
 
 
+async def admin_push_vapid(request: web.Request) -> web.Response:
+    _require_admin(request)
+    from bot.webpush_notify import get_vapid_keys
+
+    public, _private, _subject = get_vapid_keys()
+    return web.json_response({"ok": True, "publicKey": public})
+
+
+async def admin_push_subscribe(request: web.Request) -> web.Response:
+    admin_id = _require_admin(request)
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise web.HTTPBadRequest(text="JSON noto'g'ri") from exc
+    endpoint = str(body.get("endpoint") or "").strip()
+    keys = body.get("keys") or {}
+    if not isinstance(keys, dict):
+        keys = {}
+    p256dh = str(keys.get("p256dh") or "").strip()
+    auth = str(keys.get("auth") or "").strip()
+    if not endpoint or not p256dh or not auth:
+        raise web.HTTPBadRequest(text="endpoint va keys kerak")
+    upsert_push_subscription(admin_id, endpoint, p256dh, auth)
+    logger.info("Admin %s push subscribe", admin_id)
+    return web.json_response({"ok": True})
+
+
+async def admin_push_unsubscribe(request: web.Request) -> web.Response:
+    _require_admin(request)
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise web.HTTPBadRequest(text="JSON noto'g'ri") from exc
+    endpoint = str(body.get("endpoint") or "").strip()
+    if not endpoint:
+        raise web.HTTPBadRequest(text="endpoint kerak")
+    delete_push_subscription(endpoint)
+    return web.json_response({"ok": True})
+
+
+async def admin_push_test(request: web.Request) -> web.Response:
+    """Send a test Web Push to all stored admin subscriptions."""
+    _require_admin(request)
+    from bot.database import list_push_subscriptions
+    from bot.webpush_notify import send_admin_push
+
+    count = len(list_push_subscriptions())
+    if count == 0:
+        return web.json_response(
+            {
+                "ok": False,
+                "error": "Subscription yo'q — avval Push tugmasini bosing",
+                "subscriptions": 0,
+            },
+            status=400,
+        )
+    await send_admin_push(
+        "🔔 Push ishlayapti",
+        "Test bildirishnoma — Baraka Admin",
+        "/admin/",
+    )
+    return web.json_response({"ok": True, "subscriptions": count})
+
+
+async def admin_telegram_test(request: web.Request) -> web.Response:
+    """Telegram orqali test xabar — asosiy ishonchli bildirishnoma."""
+    admin_id = _require_admin(request)
+    from bot.notify_admins import admin_chat_ids, notify_admins_text
+    from bot.webapp import get_bot
+
+    bot = get_bot()
+    if bot is None:
+        raise web.HTTPServiceUnavailable(text="Bot hali ishga tushmagan")
+    targets = admin_chat_ids()
+    if not targets:
+        raise web.HTTPBadRequest(
+            text="ADMIN_IDS bo'sh — Railway Variables ga Telegram ID qo'ying"
+        )
+    sent = await notify_admins_text(
+        bot,
+        "🔔 Test bildirishnoma\n\n"
+        f"Admin ID: {admin_id}\n"
+        "Yangi buyurtmalar shu chatga keladi.\n"
+        "Agar ovoz kelmasa: chatni oching → ⋮ → Bildirishnomalar → Yoqilgan.",
+        order_id=None,
+        voice_alert=True,
+    )
+    if sent == 0:
+        raise web.HTTPBadRequest(
+            text=(
+                "Xabar yuborilmadi. Botga /start bosing va "
+                "ADMIN_IDS to‘g‘riligini tekshiring"
+            )
+        )
+    return web.json_response({"ok": True, "sent": sent, "targets": targets})
+
+
 def register_admin_routes(app: web.Application) -> None:
     app.router.add_post("/api/admin/login", admin_login)
     app.router.add_post("/api/admin/logout", admin_logout)
@@ -943,6 +1084,9 @@ def register_admin_routes(app: web.Application) -> None:
     app.router.add_get("/api/admin/reports", admin_reports)
     app.router.add_get("/api/admin/categories", admin_categories_list)
     app.router.add_post("/api/admin/categories", admin_categories_create)
+    app.router.add_patch(
+        "/api/admin/categories/{category_id}", admin_categories_patch
+    )
     app.router.add_get("/api/admin/products", admin_products)
     app.router.add_post("/api/admin/products", admin_product_create)
     app.router.add_get("/api/admin/products/export", admin_products_export)
@@ -953,3 +1097,8 @@ def register_admin_routes(app: web.Application) -> None:
     app.router.add_get("/api/admin/contacts", admin_contacts_list)
     app.router.add_post("/api/admin/contacts", admin_contacts_create)
     app.router.add_patch("/api/admin/contacts/{contact_id}", admin_contacts_update)
+    app.router.add_get("/api/admin/push/vapid", admin_push_vapid)
+    app.router.add_post("/api/admin/push/subscribe", admin_push_subscribe)
+    app.router.add_post("/api/admin/push/unsubscribe", admin_push_unsubscribe)
+    app.router.add_post("/api/admin/push/test", admin_push_test)
+    app.router.add_post("/api/admin/notify/test", admin_telegram_test)
