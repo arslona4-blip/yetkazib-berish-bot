@@ -3186,6 +3186,12 @@ async def admin_status_callback(
             reply_markup=markup,
         )
         if status == "delivered":
+            try:
+                from bot.receipt import send_order_receipt
+
+                await send_order_receipt(context.bot, order_id)
+            except Exception:
+                pass
             from bot.i18n import get_user_lang, t
 
             lang = get_user_lang(int(order["user_id"]))

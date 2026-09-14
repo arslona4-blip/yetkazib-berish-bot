@@ -1208,6 +1208,59 @@ async def serve_slayd_index(_request: web.Request) -> web.FileResponse:
     return web.FileResponse(index)
 
 
+async def serve_receipt(request: web.Request) -> web.Response:
+    """GET /chek/{token} | /chek/{token}.png | /chek/{token}.pdf"""
+    from bot.receipt import (
+        parse_receipt_token,
+        render_receipt_page_html,
+        render_receipt_pdf_bytes,
+        render_receipt_png_bytes,
+    )
+
+    raw = str(request.match_info.get("token") or "").strip()
+    kind = "html"
+    token = raw
+    low = raw.lower()
+    if low.endswith(".png"):
+        kind = "png"
+        token = raw[: -len(".png")]
+    elif low.endswith(".pdf"):
+        kind = "pdf"
+        token = raw[: -len(".pdf")]
+
+    order_id = parse_receipt_token(token)
+    if order_id is None:
+        raise web.HTTPNotFound(text="Chek topilmadi")
+
+    if kind == "png":
+        blob = render_receipt_png_bytes(order_id)
+        if not blob:
+            raise web.HTTPNotFound(text="Chek topilmadi")
+        return web.Response(
+            body=blob,
+            content_type="image/png",
+            headers={
+                "Content-Disposition": f'inline; filename="chek_{order_id}.png"'
+            },
+        )
+    if kind == "pdf":
+        blob = render_receipt_pdf_bytes(order_id)
+        if not blob:
+            raise web.HTTPNotFound(text="Chek topilmadi")
+        return web.Response(
+            body=blob,
+            content_type="application/pdf",
+            headers={
+                "Content-Disposition": f'inline; filename="chek_{order_id}.pdf"'
+            },
+        )
+
+    page = render_receipt_page_html(order_id)
+    if not page:
+        raise web.HTTPNotFound(text="Chek topilmadi")
+    return web.Response(text=page, content_type="text/html", charset="utf-8")
+
+
 def create_app() -> web.Application:
     from bot.admin_api import register_admin_routes
 
@@ -1225,6 +1278,7 @@ def create_app() -> web.Application:
     app.router.add_get("/api/shajara/share/{code}", api_shajara_share_get)
     register_admin_routes(app)
     app.router.add_route("OPTIONS", "/api/{tail:.*}", lambda r: web.Response(status=204))
+    app.router.add_get("/chek/{token}", serve_receipt)
 
     if SHAJARA_DIR.is_dir():
         app.router.add_get("/shajara", serve_shajara_index)
