@@ -551,29 +551,30 @@
     });
   }
 
+  // TTS uchun apostrofsiz / fonetik yozuv (ingliz/rus ovoz chalkashtirmasin)
   const UZ_ONES = [
     "",
     "bir",
     "ikki",
     "uch",
-    "to'rt",
+    "tort",
     "besh",
     "olti",
     "yetti",
     "sakkiz",
-    "to'qqiz",
+    "tokkiz",
   ];
   const UZ_TENS = [
     "",
-    "o'n",
+    "on",
     "yigirma",
-    "o'ttiz",
-    "qirq",
+    "ottiz",
+    "kirk",
     "ellik",
     "oltmish",
     "yetmish",
     "sakson",
-    "to'qson",
+    "tokson",
   ];
 
   function underThousandUz(n) {
@@ -589,7 +590,7 @@
       if (rest < 10) parts.push(UZ_ONES[rest]);
       else if (rest < 20) {
         const ones = rest % 10;
-        parts.push(ones === 0 ? "o'n" : `o'n ${UZ_ONES[ones]}`);
+        parts.push(ones === 0 ? "on" : `on ${UZ_ONES[ones]}`);
       } else {
         const tens = Math.floor(rest / 10);
         const ones = rest % 10;
@@ -600,7 +601,7 @@
   }
 
   function amountToUzbekWords(amount) {
-    let n = Math.max(0, Math.round(Number(amount) || 0));
+    const n = Math.max(0, Math.round(Number(amount) || 0));
     if (n === 0) return "nol";
     const parts = [];
     const milliards = Math.floor(n / 1_000_000_000);
@@ -615,7 +616,50 @@
   }
 
   function moneyForSpeech(amount) {
-    return `${amountToUzbekWords(amount)} so'm`;
+    return `${amountToUzbekWords(amount)} soom`;
+  }
+
+  /** Ingliz/rus TTS uchun o'zbekcha talaffuzga yaqinlashtirish */
+  function phoneticForTts(text) {
+    let s = String(text || "").toLowerCase();
+    // Tez-tez chalkashadigan so'zlar
+    const dict = [
+      [/\btuxum\b/g, "tuhum"],
+      [/\btuxumlari\b/g, "tuhumlari"],
+      [/\byog'?i?\b/g, "yog"],
+      [/\bgo'?sht\b/g, "gosht"],
+      [/\bguruch\b/g, "guruch"],
+      [/\bshakar\b/g, "shakar"],
+      [/\bkartoshka\b/g, "kartoshka"],
+      [/\bpiyoz\b/g, "piyoz"],
+      [/\bsabzi\b/g, "sabzi"],
+      [/\bnoxat\b/g, "nohat"],
+      [/\bnoxot\b/g, "nohot"],
+      [/\bnon\b/g, "non"],
+      [/\bsut\b/g, "sut"],
+      [/\bchoy\b/g, "choy"],
+      [/\bnarxi\b/g, "narhi"],
+      [/\bvariantlar\b/g, "variantlar"],
+      [/\bmahsulot\b/g, "mahsulot"],
+    ];
+    dict.forEach(([re, to]) => {
+      s = s.replace(re, to);
+    });
+    s = s
+      .replace(/to['ʻʼ']?rt/g, "tort")
+      .replace(/to['ʻʼ']?qqiz/g, "tokkiz")
+      .replace(/to['ʻʼ']?qson/g, "tokson")
+      .replace(/o['ʻʼ']?n\b/g, "on")
+      .replace(/o['ʻʼ']?ttiz/g, "ottiz")
+      .replace(/so['ʻʼ']?m/g, "soom")
+      .replace(/g['ʻʼ']+/g, "g")
+      .replace(/o['ʻʼ']+/g, "o")
+      .replace(/q/g, "k")
+      // x = o'zbekcha h (tuxum → tuhum); inglizcha "ks" bo'lmasin
+      .replace(/x/g, "h")
+      .replace(/\s+/g, " ")
+      .trim();
+    return s;
   }
 
   function speechFriendlyText(text) {
@@ -623,7 +667,7 @@
     s = s
       .replace(/ʻ|ʼ|’|‘|`/g, "'")
       .replace(/–|—/g, " dan ")
-      .replace(/\s*-\s*/g, " dan ")
+      .replace(/\s*[~–—]\s*/g, " dan ")
       .replace(/\b(\d+)[.,](\d+)\s*(l|litr|kg|g|gr|gramm|ml)?\b/gi, (_, a, b, u) => {
         const unit =
           u && /l/i.test(u)
@@ -655,13 +699,12 @@
       .replace(/\bdona\b/gi, "dona")
       .replace(/\s+/g, " ")
       .trim();
-    return s;
+    return phoneticForTts(s);
   }
 
   function pickSpeechVoice() {
     if (!window.speechSynthesis) return null;
     const voices = window.speechSynthesis.getVoices() || [];
-    // Ruscha ovoz raqamni ruscha aytadi — oldin o'zbek/turk/ingliz
     const prefer = ["uz-UZ", "uz", "tr-TR", "tr", "en-US", "en-GB", "en"];
     for (const code of prefer) {
       const hit = voices.find((v) =>
@@ -671,18 +714,16 @@
       );
       if (hit) return hit;
     }
-    // Ruschani oxiriga qoldiramiz
-    const ru = voices.find((v) =>
-      String(v.lang || "")
-        .toLowerCase()
-        .startsWith("ru")
-    );
-    if (ru) return ru;
-    return voices[0] || null;
+    return voices.find((v) => !String(v.lang || "").toLowerCase().startsWith("ru")) ||
+      voices[0] ||
+      null;
   }
 
   function speakText(text) {
-    const raw = speechFriendlyText(text);
+    // productSpeechText allaqachon speechFriendly qilgan bo‘lishi mumkin
+    const raw = /soom|tuhum|kilogramm|\b(bir|ikki|on|ming)\b/i.test(String(text || ""))
+      ? phoneticForTts(String(text || ""))
+      : speechFriendlyText(text);
     if (!raw) return;
     if (!window.speechSynthesis) {
       if (tg && tg.showAlert) {
@@ -695,18 +736,21 @@
     try {
       window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(raw);
-      u.rate = 0.88;
+      u.rate = 0.85;
       u.pitch = 1;
       u.volume = 1;
       const voice = pickSpeechVoice();
       if (voice) {
         u.voice = voice;
-        // Matn o'zbekcha lotin — tilni uz qilib qo'yamiz
-        u.lang = String(voice.lang || "").toLowerCase().startsWith("ru")
-          ? "uz-UZ"
-          : voice.lang || "uz-UZ";
+        const lang = String(voice.lang || "").toLowerCase();
+        // Ruscha ovozni majburan ishlatmaymiz; lotin matn uchun en yaxshiroq
+        u.lang = lang.startsWith("uz")
+          ? voice.lang
+          : lang.startsWith("tr")
+            ? voice.lang
+            : "en-US";
       } else {
-        u.lang = "uz-UZ";
+        u.lang = "en-US";
       }
       window.speechSynthesis.speak(u);
       if (tg && tg.HapticFeedback) {
@@ -718,7 +762,7 @@
   }
 
   function productSpeechText(product) {
-    const name = speechFriendlyText(product.card_name || product.name || "Mahsulot");
+    const name = product.card_name || product.name || "Mahsulot";
     const packs = []
       .concat(product.kg_packs || [])
       .concat(product.liter_packs || [])
@@ -726,20 +770,20 @@
     if (packs.length >= 2) {
       const labels = packs
         .slice(0, 4)
-        .map(
-          (p) =>
-            `${speechFriendlyText(p.label)} ${moneyForSpeech(p.price)}`
-        )
+        .map((p) => `${p.label || ""} ${moneyForSpeech(p.price)}`)
         .join(", ");
-      return `${name}. Variantlar: ${labels}`;
+      return speechFriendlyText(`${name}. Variantlar: ${labels}`);
     }
     if (product.ask_qty) {
-      return `${name}. Narxi: ${moneyForSpeech(product.price)} dona`;
+      return speechFriendlyText(
+        `${name}. Narxi: ${moneyForSpeech(product.price)} dona`
+      );
     }
+    // display_price ichidagi raqamlarni ham so'zga aylantiramiz
     if (product.display_price) {
-      return `${name}. Narxi: ${speechFriendlyText(product.display_price)}`;
+      return speechFriendlyText(`${name}. Narxi: ${product.display_price}`);
     }
-    return `${name}. Narxi: ${moneyForSpeech(product.price)}`;
+    return speechFriendlyText(`${name}. Narxi: ${moneyForSpeech(product.price)}`);
   }
 
   function speakProduct(product) {
