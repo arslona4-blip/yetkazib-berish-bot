@@ -551,15 +551,118 @@
     });
   }
 
+  const UZ_ONES = [
+    "",
+    "bir",
+    "ikki",
+    "uch",
+    "to'rt",
+    "besh",
+    "olti",
+    "yetti",
+    "sakkiz",
+    "to'qqiz",
+  ];
+  const UZ_TENS = [
+    "",
+    "o'n",
+    "yigirma",
+    "o'ttiz",
+    "qirq",
+    "ellik",
+    "oltmish",
+    "yetmish",
+    "sakson",
+    "to'qson",
+  ];
+
+  function underThousandUz(n) {
+    n = Math.floor(Math.abs(Number(n) || 0)) % 1000;
+    if (n <= 0) return "";
+    const parts = [];
+    const hundreds = Math.floor(n / 100);
+    const rest = n % 100;
+    if (hundreds) {
+      parts.push(hundreds === 1 ? "yuz" : `${UZ_ONES[hundreds]} yuz`);
+    }
+    if (rest) {
+      if (rest < 10) parts.push(UZ_ONES[rest]);
+      else if (rest < 20) {
+        const ones = rest % 10;
+        parts.push(ones === 0 ? "o'n" : `o'n ${UZ_ONES[ones]}`);
+      } else {
+        const tens = Math.floor(rest / 10);
+        const ones = rest % 10;
+        parts.push(ones === 0 ? UZ_TENS[tens] : `${UZ_TENS[tens]} ${UZ_ONES[ones]}`);
+      }
+    }
+    return parts.join(" ");
+  }
+
+  function amountToUzbekWords(amount) {
+    let n = Math.max(0, Math.round(Number(amount) || 0));
+    if (n === 0) return "nol";
+    const parts = [];
+    const milliards = Math.floor(n / 1_000_000_000);
+    const millions = Math.floor(n / 1_000_000) % 1000;
+    const thousands = Math.floor(n / 1000) % 1000;
+    const rest = n % 1000;
+    if (milliards) parts.push(`${underThousandUz(milliards)} milliard`);
+    if (millions) parts.push(`${underThousandUz(millions)} million`);
+    if (thousands) parts.push(`${underThousandUz(thousands)} ming`);
+    if (rest) parts.push(underThousandUz(rest));
+    return parts.filter(Boolean).join(" ").trim();
+  }
+
   function moneyForSpeech(amount) {
-    const n = Math.round(Number(amount) || 0);
-    return `${String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " ")} so'm`;
+    return `${amountToUzbekWords(amount)} so'm`;
+  }
+
+  function speechFriendlyText(text) {
+    let s = cyrillicToLatin(String(text || ""));
+    s = s
+      .replace(/ʻ|ʼ|’|‘|`/g, "'")
+      .replace(/–|—/g, " dan ")
+      .replace(/\s*-\s*/g, " dan ")
+      .replace(/\b(\d+)[.,](\d+)\s*(l|litr|kg|g|gr|gramm|ml)?\b/gi, (_, a, b, u) => {
+        const unit =
+          u && /l/i.test(u)
+            ? " litr"
+            : u && /kg/i.test(u)
+              ? " kilogramm"
+              : u && /ml/i.test(u)
+                ? " millilitr"
+                : u
+                  ? " gramm"
+                  : "";
+        return `${amountToUzbekWords(a)} butun ${amountToUzbekWords(b)}${unit}`;
+      })
+      .replace(/\b(\d[\d\s]*)\s*so'?m\b/gi, (_, num) => {
+        const n = Number(String(num).replace(/\s/g, ""));
+        return Number.isFinite(n) ? moneyForSpeech(n) : _;
+      })
+      .replace(/\b(\d[\d\s]*)\b/g, (m) => {
+        const compact = String(m).replace(/\s/g, "");
+        if (!/^\d+$/.test(compact)) return m;
+        const n = Number(compact);
+        return Number.isFinite(n) ? amountToUzbekWords(n) : m;
+      })
+      .replace(/\bkg\b/gi, "kilogramm")
+      .replace(/\bgr?\b/gi, "gramm")
+      .replace(/\bgramm?\b/gi, "gramm")
+      .replace(/\blitr?\b/gi, "litr")
+      .replace(/\bml\b/gi, "millilitr")
+      .replace(/\bdona\b/gi, "dona")
+      .replace(/\s+/g, " ")
+      .trim();
+    return s;
   }
 
   function pickSpeechVoice() {
     if (!window.speechSynthesis) return null;
     const voices = window.speechSynthesis.getVoices() || [];
-    const prefer = ["uz-UZ", "uz", "ru-RU", "ru", "en-US", "en"];
+    // Ruscha ovoz raqamni ruscha aytadi — oldin o'zbek/turk/ingliz
+    const prefer = ["uz-UZ", "uz", "tr-TR", "tr", "en-US", "en-GB", "en"];
     for (const code of prefer) {
       const hit = voices.find((v) =>
         String(v.lang || "")
@@ -568,11 +671,18 @@
       );
       if (hit) return hit;
     }
+    // Ruschani oxiriga qoldiramiz
+    const ru = voices.find((v) =>
+      String(v.lang || "")
+        .toLowerCase()
+        .startsWith("ru")
+    );
+    if (ru) return ru;
     return voices[0] || null;
   }
 
   function speakText(text) {
-    const raw = String(text || "").trim();
+    const raw = speechFriendlyText(text);
     if (!raw) return;
     if (!window.speechSynthesis) {
       if (tg && tg.showAlert) {
@@ -585,13 +695,16 @@
     try {
       window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(raw);
-      u.rate = 0.92;
+      u.rate = 0.88;
       u.pitch = 1;
       u.volume = 1;
       const voice = pickSpeechVoice();
       if (voice) {
         u.voice = voice;
-        u.lang = voice.lang || "uz-UZ";
+        // Matn o'zbekcha lotin — tilni uz qilib qo'yamiz
+        u.lang = String(voice.lang || "").toLowerCase().startsWith("ru")
+          ? "uz-UZ"
+          : voice.lang || "uz-UZ";
       } else {
         u.lang = "uz-UZ";
       }
@@ -605,8 +718,7 @@
   }
 
   function productSpeechText(product) {
-    const name = product.card_name || product.name || "Mahsulot";
-    const price = product.display_price || moneyForSpeech(product.price);
+    const name = speechFriendlyText(product.card_name || product.name || "Mahsulot");
     const packs = []
       .concat(product.kg_packs || [])
       .concat(product.liter_packs || [])
@@ -614,14 +726,20 @@
     if (packs.length >= 2) {
       const labels = packs
         .slice(0, 4)
-        .map((p) => `${p.label} ${moneyForSpeech(p.price)}`)
+        .map(
+          (p) =>
+            `${speechFriendlyText(p.label)} ${moneyForSpeech(p.price)}`
+        )
         .join(", ");
       return `${name}. Variantlar: ${labels}`;
     }
     if (product.ask_qty) {
-      return `${name}. Narxi: ${price} dona`;
+      return `${name}. Narxi: ${moneyForSpeech(product.price)} dona`;
     }
-    return `${name}. Narxi: ${price}`;
+    if (product.display_price) {
+      return `${name}. Narxi: ${speechFriendlyText(product.display_price)}`;
+    }
+    return `${name}. Narxi: ${moneyForSpeech(product.price)}`;
   }
 
   function speakProduct(product) {
