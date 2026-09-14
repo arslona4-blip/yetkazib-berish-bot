@@ -648,34 +648,6 @@ main {
   background: var(--lime-dark);
 }
 
-.card-actions {
-  margin-top: auto;
-  display: grid;
-  grid-template-columns: 44px 1fr;
-  gap: 8px;
-  align-items: stretch;
-}
-
-.card-actions .btn.add {
-  margin-top: 0;
-}
-
-.btn.speak {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--lime-soft);
-  color: var(--deep);
-  font-size: 1.05rem;
-  line-height: 1;
-  padding: 0;
-  min-height: 42px;
-  box-shadow: none;
-}
-
-.btn.speak:active {
-  transform: scale(0.96);
-}
-
 .cart-list {
   display: flex;
   flex-direction: column;
