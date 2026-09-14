@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=37" />
+  <link rel="stylesheet" href="styles.css?v=38" />
 </head>
 <body>
   <header class="topbar">
@@ -24,6 +24,7 @@
         <h1 id="shopName">Baraka Market</h1>
         <p id="shopMeta" class="muted"></p>
       </div>
+      <button type="button" id="guideOpen" class="guide-open" aria-label="Qo‘llanma" title="Qo‘llanma">?</button>
     </div>
     <label class="search-wrap">
       <span class="search-icon" aria-hidden="true">
@@ -164,6 +165,24 @@
     </div>
   </dialog>
 
-  <script src="app.js?v=37"></script>
+  <dialog id="guideDialog" class="guide-dialog">
+    <div class="guide-sheet">
+      <div class="guide-top">
+        <strong>20 soniyada buyurtma</strong>
+        <button type="button" id="guideSkip" class="guide-skip">O‘tkazib yuborish</button>
+      </div>
+      <div class="guide-frame">
+        <img id="guideImage" alt="Qo‘llanma" />
+      </div>
+      <p id="guideCaption" class="guide-caption"></p>
+      <div id="guideDots" class="guide-dots" aria-hidden="true"></div>
+      <div class="guide-actions">
+        <button type="button" id="guidePrev" class="btn ghost">Ortga</button>
+        <button type="button" id="guideNext" class="btn primary">Keyingi</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="app.js?v=38"></script>
 </body>
 </html>

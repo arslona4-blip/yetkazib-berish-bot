@@ -121,6 +121,122 @@ body.search-focused .search-wrap {
   gap: 13px;
 }
 
+.brand-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.guide-open {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(0, 104, 55, 0.25);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--deep);
+  font-family: inherit;
+  font-size: 1.05rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.guide-dialog {
+  border: none;
+  padding: 0;
+  max-width: min(420px, 94vw);
+  width: 100%;
+  border-radius: 22px;
+  background: transparent;
+}
+
+.guide-dialog::backdrop {
+  background: rgba(18, 32, 24, 0.55);
+  backdrop-filter: blur(3px);
+}
+
+.guide-sheet {
+  background: #fff;
+  border-radius: 22px;
+  overflow: hidden;
+  box-shadow: 0 18px 40px rgba(5, 74, 40, 0.22);
+  padding: 14px 14px 16px;
+}
+
+.guide-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.guide-top strong {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--deep);
+  letter-spacing: -0.02em;
+}
+
+.guide-skip {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 650;
+  padding: 4px 0;
+  cursor: pointer;
+}
+
+.guide-frame {
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--accent-soft);
+  aspect-ratio: 9 / 14;
+  max-height: min(52vh, 420px);
+}
+
+.guide-frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.guide-caption {
+  margin: 10px 2px 8px;
+  min-height: 2.4em;
+  font-size: 0.9rem;
+  font-weight: 650;
+  line-height: 1.35;
+  color: var(--text);
+}
+
+.guide-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.guide-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #c5dbc9;
+}
+
+.guide-dots span.active {
+  background: var(--forest);
+  transform: scale(1.15);
+}
+
+.guide-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 8px;
+}
+
 .brand-mark {
   flex: 0 0 auto;
   display: grid;
@@ -145,10 +261,6 @@ body.search-focused .search-wrap {
     opacity: 1;
     transform: scale(1);
   }
-}
-
-.brand-text {
-  min-width: 0;
 }
 
 .brand-eyebrow {

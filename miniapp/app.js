@@ -72,6 +72,14 @@
     variantHero: document.getElementById("variantHero"),
     variantTitle: document.getElementById("variantTitle"),
     variantOptions: document.getElementById("variantOptions"),
+    guideDialog: document.getElementById("guideDialog"),
+    guideImage: document.getElementById("guideImage"),
+    guideCaption: document.getElementById("guideCaption"),
+    guideDots: document.getElementById("guideDots"),
+    guidePrev: document.getElementById("guidePrev"),
+    guideNext: document.getElementById("guideNext"),
+    guideSkip: document.getElementById("guideSkip"),
+    guideOpen: document.getElementById("guideOpen"),
   };
 
   function formatMoney(amount) {
@@ -1596,6 +1604,135 @@
     }
   }
 
+  const GUIDE_KEY = "miniapp_guide_v1_seen";
+  const GUIDE_SLIDES = [
+    {
+      src: "guide/sodda-01-muqova.png",
+      caption: "Baraka Market — uyga yetkazib beramiz",
+    },
+    {
+      src: "guide/sodda-02-start.png",
+      caption: "1. START / Do‘konni oching",
+    },
+    {
+      src: "guide/sodda-03-dokon.png",
+      caption: "2. Mahsulot tanlang",
+    },
+    {
+      src: "guide/sodda-04-savat.png",
+      caption: "3. Savatchaga qo‘shing",
+    },
+    {
+      src: "guide/sodda-05-manzil.png",
+      caption: "4. Manzil yoki lokatsiya",
+    },
+    {
+      src: "guide/sodda-06-tayyor.png",
+      caption: "5. Buyurtmani yuboring",
+    },
+    {
+      src: "guide/sodda-07-5qadam.png",
+      caption: "Tayyor! 5 qadamda buyurtma",
+    },
+  ];
+  const GUIDE_AUTO_MS = 2800;
+  let guideIndex = 0;
+  let guideTimer = null;
+
+  function markGuideSeen() {
+    try {
+      localStorage.setItem(GUIDE_KEY, "1");
+    } catch (_) {}
+  }
+
+  function hasSeenGuide() {
+    try {
+      return localStorage.getItem(GUIDE_KEY) === "1";
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function stopGuideAuto() {
+    if (guideTimer != null) {
+      clearInterval(guideTimer);
+      guideTimer = null;
+    }
+  }
+
+  function renderGuideSlide() {
+    const slide = GUIDE_SLIDES[guideIndex];
+    if (!slide || !els.guideImage) return;
+    els.guideImage.src = slide.src;
+    els.guideImage.alt = slide.caption;
+    if (els.guideCaption) els.guideCaption.textContent = slide.caption;
+    if (els.guideDots) {
+      els.guideDots.querySelectorAll("span").forEach((dot, i) => {
+        dot.classList.toggle("active", i === guideIndex);
+      });
+    }
+    if (els.guidePrev) els.guidePrev.disabled = guideIndex <= 0;
+    if (els.guideNext) {
+      els.guideNext.textContent =
+        guideIndex >= GUIDE_SLIDES.length - 1 ? "Tushundim" : "Keyingi";
+    }
+  }
+
+  function closeGuide(saveSeen) {
+    stopGuideAuto();
+    if (saveSeen) markGuideSeen();
+    if (els.guideDialog && els.guideDialog.open) {
+      try {
+        els.guideDialog.close();
+      } catch (_) {}
+    }
+  }
+
+  function stepGuide(delta) {
+    const next = guideIndex + delta;
+    if (next < 0) return;
+    if (next >= GUIDE_SLIDES.length) {
+      closeGuide(true);
+      return;
+    }
+    guideIndex = next;
+    renderGuideSlide();
+  }
+
+  function startGuideAuto() {
+    stopGuideAuto();
+    guideTimer = setInterval(() => {
+      if (guideIndex >= GUIDE_SLIDES.length - 1) {
+        closeGuide(true);
+        return;
+      }
+      guideIndex += 1;
+      renderGuideSlide();
+    }, GUIDE_AUTO_MS);
+  }
+
+  function openGuide(opts) {
+    const force = !!(opts && opts.force);
+    if (!els.guideDialog || !GUIDE_SLIDES.length) return;
+    if (!force && hasSeenGuide()) return;
+    guideIndex = 0;
+    if (els.guideDots) {
+      els.guideDots.innerHTML = "";
+      GUIDE_SLIDES.forEach((_, i) => {
+        const dot = document.createElement("span");
+        if (i === 0) dot.className = "active";
+        els.guideDots.appendChild(dot);
+      });
+    }
+    renderGuideSlide();
+    try {
+      els.guideDialog.showModal();
+    } catch (_) {
+      els.guideDialog.setAttribute("open", "");
+    }
+    startGuideAuto();
+  }
+
   async function bootstrap() {
     document.querySelectorAll(".nav-btn").forEach((btn) => {
       btn.addEventListener("click", () => showView(btn.dataset.view));
@@ -1609,6 +1746,32 @@
     }
     if (els.geoClear) {
       els.geoClear.addEventListener("click", () => clearGeoPin());
+    }
+    if (els.guideOpen) {
+      els.guideOpen.addEventListener("click", () => openGuide({ force: true }));
+    }
+    if (els.guidePrev) {
+      els.guidePrev.addEventListener("click", () => {
+        stopGuideAuto();
+        stepGuide(-1);
+        startGuideAuto();
+      });
+    }
+    if (els.guideNext) {
+      els.guideNext.addEventListener("click", () => {
+        stopGuideAuto();
+        stepGuide(1);
+        if (els.guideDialog && els.guideDialog.open) startGuideAuto();
+      });
+    }
+    if (els.guideSkip) {
+      els.guideSkip.addEventListener("click", () => closeGuide(true));
+    }
+    if (els.guideDialog) {
+      els.guideDialog.addEventListener("close", () => stopGuideAuto());
+      els.guideDialog.addEventListener("click", (ev) => {
+        if (ev.target === els.guideDialog) closeGuide(true);
+      });
     }
 
     if (els.productSearch) {
@@ -1729,6 +1892,7 @@
     // Cache bo‘lsa allaqachon chizilgan; yangi javobni kutamiz
     if (state.allProducts.length) applyCatalogFilter();
     await Promise.all([productsPromise, bonusPromise]);
+    setTimeout(() => openGuide({ force: false }), 400);
   }
 
   function getInitData() {
