@@ -510,28 +510,17 @@ async def webapp_scan_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             )
         except Exception:
             pass
-        for admin_id in ADMIN_IDS:
-            try:
-                await context.bot.send_message(
-                    admin_id,
-                    f"🆕 Mini App\n{text}",
-                    reply_markup=admin_order_keyboard(order_id),
-                    disable_notification=False,
-                )
-                if lat is not None and lon is not None:
-                    await context.bot.send_location(
-                        admin_id,
-                        latitude=lat,
-                        longitude=lon,
-                        disable_notification=False,
-                    )
-                from bot.voice_confirm import send_admin_new_order_voice
+        from bot.notify_admins import notify_admins_text
 
-                await send_admin_new_order_voice(
-                    context.bot, admin_id, order_id=order_id
-                )
-            except Exception:
-                pass
+        await notify_admins_text(
+            context.bot,
+            f"🆕 Mini App\n{text}",
+            reply_markup=admin_order_keyboard(order_id),
+            latitude=lat,
+            longitude=lon,
+            order_id=order_id,
+            voice_alert=True,
+        )
         return
 
     await msg.reply_text(
@@ -1651,28 +1640,19 @@ async def confirm_order_callback(
         pass
 
     order = get_order(order_id)
-    for admin_id in ADMIN_IDS:
-        try:
-            await context.bot.send_message(
-                chat_id=admin_id,
-                text=f"🆕 Yangi buyurtma #{order_id}\n\n{format_order(order)}",
-                reply_markup=admin_order_keyboard(order_id),
-                disable_notification=False,
-            )
-            if order["latitude"] is not None and order["longitude"] is not None:
-                await context.bot.send_location(
-                    chat_id=admin_id,
-                    latitude=order["latitude"],
-                    longitude=order["longitude"],
-                    disable_notification=False,
-                )
-            from bot.voice_confirm import send_admin_new_order_voice
+    from bot.notify_admins import notify_admins_text
 
-            await send_admin_new_order_voice(
-                context.bot, admin_id, order_id=order_id
-            )
-        except Exception:
-            pass
+    lat = order["latitude"] if order else None
+    lon = order["longitude"] if order else None
+    await notify_admins_text(
+        context.bot,
+        f"🆕 Yangi buyurtma #{order_id}\n\n{format_order(order)}",
+        reply_markup=admin_order_keyboard(order_id),
+        latitude=lat,
+        longitude=lon,
+        order_id=order_id,
+        voice_alert=True,
+    )
 
     return ConversationHandler.END
 

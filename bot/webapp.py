@@ -1036,19 +1036,19 @@ async def api_order(request: web.Request) -> web.Response:
     except (KeyError, TypeError) as exc:
         raise web.HTTPBadRequest(text="items format noto'g'ri") from exc
 
-    if _bot is not None:
-        from bot.keyboards import admin_order_keyboard, payment_keyboard
-        from bot.notify_admins import notify_admins_text
+    from bot.keyboards import admin_order_keyboard, payment_keyboard
+    from bot.notify_admins import notify_admins_text
 
-        await notify_admins_text(
-            _bot,
-            f"🆕 Mini App\n{text}",
-            reply_markup=admin_order_keyboard(order_id),
-            latitude=lat,
-            longitude=lon,
-            order_id=order_id,
-            voice_alert=True,
-        )
+    await notify_admins_text(
+        _bot,
+        f"🆕 Mini App\n{text}",
+        reply_markup=admin_order_keyboard(order_id) if _bot is not None else None,
+        latitude=lat,
+        longitude=lon,
+        order_id=order_id,
+        voice_alert=True,
+    )
+    if _bot is not None:
         try:
             await _bot.send_message(
                 user_id,
