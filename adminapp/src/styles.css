@@ -630,6 +630,15 @@ textarea {
   color: #fff;
 }
 
+.btn-call {
+  background: #e8f0ff;
+  color: #1d4ed8;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* —— Bottom nav —— */
 .nav {
   position: fixed;

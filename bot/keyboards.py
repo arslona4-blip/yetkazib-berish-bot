@@ -9,6 +9,20 @@ from telegram import (
 from bot.config import MINIAPP_URL, ORDER_STATUS_LABELS
 
 
+def phone_tel_href(phone: str | None) -> str | None:
+    """Telefonni tel:+998... formatiga aylantiradi (Telegram URL tugma)."""
+    digits = "".join(ch for ch in str(phone or "") if ch.isdigit())
+    if len(digits) < 7:
+        return None
+    if len(digits) == 9 and digits[0] == "9":
+        digits = "998" + digits
+    elif digits.startswith("0") and len(digits) >= 10:
+        rest = digits.lstrip("0")
+        if len(rest) == 9:
+            digits = "998" + rest
+    return f"tel:+{digits}"
+
+
 def miniapp_shop_url() -> str:
     return (MINIAPP_URL or "").rstrip("/")
 
@@ -1187,7 +1201,9 @@ def admin_variant_item_keyboard(variant_id: int) -> InlineKeyboardMarkup:
     )
 
 
-def admin_order_keyboard(order_id: int) -> InlineKeyboardMarkup:
+def admin_order_keyboard(
+    order_id: int, phone: str | None = None
+) -> InlineKeyboardMarkup:
     buttons = []
     for status_key, label in ORDER_STATUS_LABELS.items():
         if status_key == "new":
@@ -1200,6 +1216,9 @@ def admin_order_keyboard(order_id: int) -> InlineKeyboardMarkup:
         )
 
     rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
+    tel = phone_tel_href(phone)
+    if tel:
+        rows.insert(0, [InlineKeyboardButton("📞 Qo'ng'iroq", url=tel)])
     rows.append(
         [
             InlineKeyboardButton(
@@ -1228,7 +1247,9 @@ def admin_delete_order_confirm_keyboard(order_id: int) -> InlineKeyboardMarkup:
     )
 
 
-def courier_order_keyboard(order_id: int) -> InlineKeyboardMarkup:
+def courier_order_keyboard(
+    order_id: int, phone: str | None = None
+) -> InlineKeyboardMarkup:
     """Kuryer uchun: faqat accepted / in_delivery / delivered."""
     allowed = ("accepted", "in_delivery", "delivered")
     buttons = [
@@ -1240,6 +1261,9 @@ def courier_order_keyboard(order_id: int) -> InlineKeyboardMarkup:
         if status in ORDER_STATUS_LABELS
     ]
     rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
+    tel = phone_tel_href(phone)
+    if tel:
+        rows.insert(0, [InlineKeyboardButton("📞 Qo'ng'iroq", url=tel)])
     return InlineKeyboardMarkup(rows)
 
 

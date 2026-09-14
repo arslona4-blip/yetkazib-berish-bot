@@ -312,7 +312,9 @@ async def courier_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     for i, order in enumerate(orders[:10], start=1):
         await update.message.reply_text(
             f"🔢 Navbat №{i}/{len(orders)}\n{format_order(order)}",
-            reply_markup=courier_order_keyboard(order["id"]),
+            reply_markup=courier_order_keyboard(
+                order["id"], str(order["phone"] or "")
+            ),
         )
 
 

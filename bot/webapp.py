@@ -1045,10 +1045,15 @@ async def api_order(request: web.Request) -> web.Response:
     from bot.keyboards import admin_order_keyboard, payment_keyboard
     from bot.notify_admins import notify_admins_text
 
+    phone_for_kb = str(body.get("phone") or "").strip()
     await notify_admins_text(
         _bot,
         f"🆕 Mini App\n{text}",
-        reply_markup=admin_order_keyboard(order_id) if _bot is not None else None,
+        reply_markup=(
+            admin_order_keyboard(order_id, phone_for_kb)
+            if _bot is not None
+            else None
+        ),
         latitude=lat,
         longitude=lon,
         order_id=order_id,

@@ -512,10 +512,12 @@ async def webapp_scan_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             pass
         from bot.notify_admins import notify_admins_text
 
+        order_row = get_order(order_id)
+        phone = str(order_row["phone"] or "") if order_row else ""
         await notify_admins_text(
             context.bot,
             f"🆕 Mini App\n{text}",
-            reply_markup=admin_order_keyboard(order_id),
+            reply_markup=admin_order_keyboard(order_id, phone),
             latitude=lat,
             longitude=lon,
             order_id=order_id,
@@ -1647,7 +1649,9 @@ async def confirm_order_callback(
     await notify_admins_text(
         context.bot,
         f"🆕 Yangi buyurtma #{order_id}\n\n{format_order(order)}",
-        reply_markup=admin_order_keyboard(order_id),
+        reply_markup=admin_order_keyboard(
+            order_id, str(order["phone"] or "") if order else None
+        ),
         latitude=lat,
         longitude=lon,
         order_id=order_id,
@@ -1892,7 +1896,9 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         prefix = f"🔢 Navbat №{i}/{len(orders)}\n" if queue_mode else ""
         await query.message.reply_text(
             f"{prefix}{format_order(order)}",
-            reply_markup=admin_order_keyboard(order["id"]),
+            reply_markup=admin_order_keyboard(
+                order["id"], str(order["phone"] or "")
+            ),
         )
 
 
@@ -3153,10 +3159,11 @@ async def admin_status_callback(
     update_order_status(order_id, status)
 
     order = get_order(order_id)
+    phone = str(order["phone"] or "") if order else None
     kb = (
-        admin_order_keyboard(order_id)
+        admin_order_keyboard(order_id, phone)
         if is_admin(uid)
-        else courier_order_keyboard(order_id)
+        else courier_order_keyboard(order_id, phone)
     )
     await query.edit_message_text(format_order(order), reply_markup=kb)
 
@@ -3166,7 +3173,7 @@ async def admin_status_callback(
                 await context.bot.send_message(
                     admin_id,
                     f"🚴 Kuryer #{order_id} holatini yangiladi:\n{format_order(order)}",
-                    reply_markup=admin_order_keyboard(order_id),
+                    reply_markup=admin_order_keyboard(order_id, phone),
                 )
             except Exception:
                 pass
@@ -3233,7 +3240,9 @@ async def admin_delete_order_callback(
             return
         await query.edit_message_text(
             format_order(order),
-            reply_markup=admin_order_keyboard(order_id),
+            reply_markup=admin_order_keyboard(
+                order_id, str(order["phone"] or "")
+            ),
         )
         return
 

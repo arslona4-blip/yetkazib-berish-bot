@@ -754,8 +754,22 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth, tab])
 
+  function phoneTelHref(phone?: string | null): string | null {
+    const digits = String(phone || '').replace(/\D/g, '')
+    if (digits.length < 7) return null
+    let full = digits
+    if (digits.length === 9 && digits.startsWith('9')) {
+      full = `998${digits}`
+    } else if (digits.startsWith('0') && digits.length >= 10) {
+      const rest = digits.replace(/^0+/, '')
+      if (rest.length === 9) full = `998${rest}`
+    }
+    return `tel:+${full}`
+  }
+
   function renderOrderCard(o: Order, showPay = false) {
     const open = openOrderId === o.id
+    const callHref = phoneTelHref(o.phone)
     return (
       <article key={o.id} className="tx">
         <button
@@ -807,6 +821,11 @@ export default function App() {
 
         {showPay ? (
           <div className="actions">
+            {callHref ? (
+              <a className="btn btn-call" href={callHref}>
+                Qo‘ng‘iroq
+              </a>
+            ) : null}
             <button
               type="button"
               className="btn btn-ok"
@@ -824,6 +843,11 @@ export default function App() {
           </div>
         ) : (
           <div className="actions">
+            {callHref ? (
+              <a className="btn btn-call" href={callHref}>
+                Qo‘ng‘iroq
+              </a>
+            ) : null}
             {['accepted', 'in_delivery', 'delivered', 'cancelled'].map((st) => (
               <button
                 key={st}
@@ -1789,15 +1813,25 @@ export default function App() {
                 {contacts.length === 0 ? (
                   <div className="empty">Kontakt yo‘q</div>
                 ) : (
-                  contacts.map((c) => (
-                    <div key={c.id} className="item">
-                      <h3>{c.name}</h3>
-                      <p>
-                        {c.phone || 'Telefon yo‘q'}
-                        {c.note ? ` · ${c.note}` : ''}
-                      </p>
-                    </div>
-                  ))
+                  contacts.map((c) => {
+                    const href = phoneTelHref(c.phone)
+                    return (
+                      <div key={c.id} className="item">
+                        <h3>{c.name}</h3>
+                        <p>
+                          {c.phone || 'Telefon yo‘q'}
+                          {c.note ? ` · ${c.note}` : ''}
+                        </p>
+                        {href ? (
+                          <div className="actions" style={{ marginTop: 8 }}>
+                            <a className="btn btn-call" href={href}>
+                              Qo‘ng‘iroq
+                            </a>
+                          </div>
+                        ) : null}
+                      </div>
+                    )
+                  })
                 )}
               </div>
             </>
