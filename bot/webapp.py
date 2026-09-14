@@ -712,12 +712,18 @@ def extract_user_from_request(
         return user_id, full_name, username
 
     unsafe = body.get("telegram_user") or {}
-    if isinstance(unsafe, dict) and str(unsafe.get("id", "")).isdigit():
-        full_name = (
-            f"{unsafe.get('first_name') or ''} {unsafe.get('last_name') or ''}".strip()
-            or full_name
-        )
-        return int(unsafe["id"]), full_name, unsafe.get("username")
+    if isinstance(unsafe, dict):
+        try:
+            uid = int(unsafe.get("id"))
+        except (TypeError, ValueError):
+            uid = None
+        if uid is not None and uid > 0:
+            full_name = (
+                f"{unsafe.get('first_name') or ''} "
+                f"{unsafe.get('last_name') or ''}".strip()
+                or full_name
+            )
+            return uid, full_name, unsafe.get("username")
     return None, full_name, username
 
 
@@ -1224,18 +1230,25 @@ async def api_ai(request: web.Request) -> web.Response:
     user_id, _full_name, _username = extract_user_from_request(request, body)
     if user_id is None:
         unsafe = body.get("telegram_user") or {}
-        try:
-            user_id = int(unsafe.get("id"))
-        except (TypeError, ValueError):
-            user_id = None
+        if isinstance(unsafe, dict):
+            try:
+                user_id = int(unsafe.get("id"))
+            except (TypeError, ValueError):
+                user_id = None
     if user_id is None:
         dev_raw = body.get("dev_user_id")
         try:
-            user_id = int(dev_raw) if dev_raw is not None else None
+            user_id = int(dev_raw) if dev_raw not in (None, "") else None
         except (TypeError, ValueError):
             user_id = None
     if user_id is None:
-        raise web.HTTPUnauthorized(text="initData kerak")
+        # Auth bo‘lmasa ham katalog/retsept ishlasin (mehmon)
+        logger.warning(
+            "AI guest: initData_len=%s has_unsafe=%s",
+            len(str(body.get("initData") or body.get("init_data") or "")),
+            bool(body.get("telegram_user")),
+        )
+        user_id = 0
 
     from bot.shop_ai import reply_for_miniapp
 
@@ -1258,11 +1271,19 @@ async def api_ai(request: web.Request) -> web.Response:
         try:
             products_out.append(_product_api_payload(p))
         except Exception:
+            try:
+                name = str(p["name"])
+            except Exception:
+                name = "Mahsulot"
+            try:
+                price = int(p["price"] or 0)
+            except Exception:
+                price = 0
             products_out.append(
                 {
                     "id": pid,
-                    "name": str(p["name"] if "name" in p.keys() else "Mahsulot"),
-                    "price": int(p["price"] or 0),
+                    "name": name,
+                    "price": price,
                     "photo_url": "",
                 }
             )
@@ -1273,6 +1294,7 @@ async def api_ai(request: web.Request) -> web.Response:
             "reply": result.get("reply") or "",
             "products": products_out,
             "cart_adds": result.get("cart_adds") or [],
+            "guest": int(user_id) == 0,
         }
     )
 

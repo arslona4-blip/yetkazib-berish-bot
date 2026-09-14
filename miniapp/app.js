@@ -1527,13 +1527,24 @@
     if (pending) pending.classList.add("pending");
 
     try {
-      const initData = (tg && tg.initData) || "";
-      const unsafe = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) || null;
-      const body = { text, initData };
-      if (unsafe && unsafe.id) body.telegram_user = unsafe;
+      const initData = getInitData();
+      const telegramUser = getTelegramUser();
+      const params = new URLSearchParams(window.location.search);
+      const devUser = params.get("dev_user_id");
+      const headers = { "Content-Type": "application/json" };
+      if (initData) headers["X-Telegram-Init-Data"] = initData;
+      const body = {
+        text,
+        initData: initData || "",
+        init_data: initData || "",
+        telegram_user: telegramUser,
+      };
+      if (devUser && !initData && !telegramUser) {
+        body.dev_user_id = Number(devUser);
+      }
       const data = await api("/api/ai", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(body),
       });
       const reply = htmlToPlain(data.reply || "Javob yo‘q");
