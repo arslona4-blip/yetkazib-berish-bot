@@ -71,6 +71,14 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ admin_id: adminId, code }),
     }),
+  loginInfo: () =>
+    req<{
+      ok: boolean
+      shop_name: string
+      bot_username: string
+      pin_login_enabled: boolean
+      hint: string
+    }>('/api/admin/login-info', null),
   logout: (auth: AuthState | null) =>
     req<{ ok: boolean }>('/api/admin/logout', auth, { method: 'POST' }),
   me: (auth: AuthState | null) =>

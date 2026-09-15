@@ -52,6 +52,25 @@ function readTgInitData(): string {
   return (window.Telegram?.WebApp?.initData || '').trim()
 }
 
+const ADMIN_ID_KEY = 'baraka-admin-last-id'
+
+function loadRememberedAdminId(): string {
+  try {
+    return (localStorage.getItem(ADMIN_ID_KEY) || '').trim()
+  } catch {
+    return ''
+  }
+}
+
+function rememberAdminId(id: string | number) {
+  try {
+    const s = String(id || '').trim()
+    if (s) localStorage.setItem(ADMIN_ID_KEY, s)
+  } catch {
+    /* ignore */
+  }
+}
+
 const ORDER_FILTERS: [string, string][] = [
   ['new', 'Yangi'],
   ['active', 'Faol'],
@@ -78,7 +97,15 @@ export default function App() {
   const [openOrderId, setOpenOrderId] = useState<number | null>(null)
   const [orderItems, setOrderItems] = useState<OrderItem[]>([])
   const [catalog, setCatalog] = useState<Product[]>([])
-  const [pinForm, setPinForm] = useState({ adminId: '', pin: '', code: '' })
+  const [pinForm, setPinForm] = useState({
+    adminId: loadRememberedAdminId(),
+    pin: '',
+    code: '',
+  })
+  const [loginInfo, setLoginInfo] = useState<{
+    bot_username: string
+    pin_login_enabled: boolean
+  } | null>(null)
   const [priceEdit, setPriceEdit] = useState<Record<number, string>>({})
   const [morePanel, setMorePanel] = useState<MorePanel>('broadcast')
   const [broadcastText, setBroadcastText] = useState('')
@@ -165,6 +192,7 @@ export default function App() {
       setShop(me.shop_name || 'Admin')
       saveAuth(a)
       setAuth(a)
+      if (a.adminId) rememberAdminId(a.adminId)
       void unlockAdminSound({ confirm: false })
       void enableAdminPush(a).catch(() => {
         /* ruxsat/SW — tugma orqali qayta */
@@ -193,6 +221,7 @@ export default function App() {
       setShop(res.shop_name || 'Admin')
       saveAuth(next)
       setAuth(next)
+      rememberAdminId(res.admin_id)
       void unlockAdminSound({ confirm: false })
       void enableAdminPush(next).catch(() => {
         /* ruxsat/SW — tugma orqali qayta */
@@ -212,11 +241,26 @@ export default function App() {
       window.Telegram?.WebApp?.ready?.()
       window.Telegram?.WebApp?.expand?.()
 
+      void api.loginInfo().then((info) => {
+        if (!cancelled) {
+          setLoginInfo({
+            bot_username: info.bot_username || '',
+            pin_login_enabled: !!info.pin_login_enabled,
+          })
+          if (info.shop_name) setShop(info.shop_name)
+        }
+      }).catch(() => {})
+
       let data = ''
-      for (let i = 0; i < 25; i++) {
+      for (let i = 0; i < 40; i++) {
+        try {
+          window.Telegram?.WebApp?.ready?.()
+        } catch {
+          /* ignore */
+        }
         data = readTgInitData()
         if (data) break
-        await new Promise((r) => setTimeout(r, 80))
+        await new Promise((r) => setTimeout(r, 100))
       }
       if (cancelled) return
 
@@ -234,6 +278,7 @@ export default function App() {
         return
       }
       if (saved?.mode === 'pin' && saved.pin && saved.adminId) {
+        rememberAdminId(saved.adminId)
         await bootstrap(saved)
         return
       }
@@ -892,6 +937,8 @@ export default function App() {
   }
 
   if (!auth) {
+    const botUser = loginInfo?.bot_username || 'yetkazib_berish_xizmat_bot'
+    const botLink = `https://t.me/${botUser.replace(/^@/, '')}`
     return (
       <div className="login">
         <div className="login-box">
@@ -901,7 +948,7 @@ export default function App() {
           </h1>
           {tgInit ? (
             <>
-              <p>Telegram ichidasiz — bir bosishda kiring.</p>
+              <p>Telegram ichidasiz — bir bosishda kiring (kod kerak emas).</p>
               <button
                 type="button"
                 className="btn btn-primary"
@@ -917,7 +964,8 @@ export default function App() {
           ) : (
             <>
               <p>
-                Brauzerdan kirish: Telegram Admin ID va PIN yozing.
+                <b>Bir martalik kod shart emas.</b> O‘zingizning Telegram ID +
+                PIN yozing.
               </p>
               <div className="field">
                 <label>Telegram Admin ID</label>
@@ -926,8 +974,9 @@ export default function App() {
                   onChange={(e) =>
                     setPinForm((s) => ({ ...s, adminId: e.target.value }))
                   }
-                  placeholder="123456789"
+                  placeholder="Masalan: 5123456789"
                   inputMode="numeric"
+                  autoComplete="username"
                 />
               </div>
               <div className="field">
@@ -947,22 +996,28 @@ export default function App() {
                 type="button"
                 className="btn btn-primary"
                 style={{ width: '100%' }}
-                disabled={busy}
-                onClick={() =>
+                disabled={busy || !pinForm.adminId.trim() || !pinForm.pin.trim()}
+                onClick={() => {
+                  rememberAdminId(pinForm.adminId)
                   void bootstrap({
                     mode: 'pin',
                     pin: pinForm.pin,
                     adminId: Number(pinForm.adminId),
                   })
-                }
+                }}
               >
                 PIN bilan kirish
               </button>
               <p className="muted-sm" style={{ marginTop: 12 }}>
-                {tgReady
-                  ? 'Yoki botdagi 🖥 Admin ilova tugmasini Telegram ichida bosing.'
-                  : 'Telegram kutilyapti…'}
+                Kodsiz: botda{' '}
+                <a href={botLink} target="_blank" rel="noreferrer">
+                  @{botUser.replace(/^@/, '')}
+                </a>{' '}
+                → <b>🖥 Admin ilova</b> tugmasini bosing.
               </p>
+              {!tgReady ? (
+                <p className="muted-sm">Telegram kutilyapti…</p>
+              ) : null}
             </>
           )}
           <button
@@ -971,12 +1026,12 @@ export default function App() {
             style={{ width: '100%', marginTop: 10 }}
             onClick={() => setShowCode((v) => !v)}
           >
-            {showCode ? 'Kodni yopish' : 'Botdagi bir martalik kod'}
+            {showCode ? 'Kodni yopish' : 'Zaxira: bir martalik kod'}
           </button>
           {showCode ? (
             <>
               <p className="muted-sm" style={{ marginTop: 12 }}>
-                Botda <b>🔑 Kirish kodi</b> oling, keyin shu yerga yozing.
+                Faqat PIN ishlamasa: botda <b>🔑 Kirish kodi</b> oling.
               </p>
               <div className="field">
                 <label>Telegram Admin ID</label>
@@ -985,7 +1040,7 @@ export default function App() {
                   onChange={(e) =>
                     setPinForm((s) => ({ ...s, adminId: e.target.value }))
                   }
-                  placeholder="123456789"
+                  placeholder="O‘zingizning ID"
                   inputMode="numeric"
                 />
               </div>
@@ -996,7 +1051,7 @@ export default function App() {
                   onChange={(e) =>
                     setPinForm((s) => ({ ...s, code: e.target.value }))
                   }
-                  placeholder="123456"
+                  placeholder="6 xonali kod"
                   inputMode="numeric"
                   autoComplete="one-time-code"
                 />

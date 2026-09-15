@@ -11,6 +11,7 @@ from bot.config import (
     ADMIN_APP_PIN,
     ADMIN_IDS,
     BONUS_PERCENT,
+    BOT_USERNAME,
     ORDER_STATUS_LABELS,
     PAYMENT_STATUS_LABELS,
     SHOP_NAME,
@@ -120,6 +121,19 @@ def _require_admin(request: web.Request) -> int:
 
     raise web.HTTPUnauthorized(
         text="Botdan «🔑 Kirish kodi» oling yoki «🖥 Admin ilova»ni Telegram ichida oching."
+    )
+
+
+async def admin_login_info(_request: web.Request) -> web.Response:
+    """Login sahifasi uchun ochiq ma'lumot (auth shart emas)."""
+    return web.json_response(
+        {
+            "ok": True,
+            "shop_name": SHOP_NAME,
+            "bot_username": BOT_USERNAME,
+            "pin_login_enabled": bool(ADMIN_APP_PIN),
+            "hint": "Bir martalik kod shart emas — Admin ID + PIN yetarli.",
+        }
     )
 
 
@@ -1068,6 +1082,7 @@ async def admin_telegram_test(request: web.Request) -> web.Response:
 
 
 def register_admin_routes(app: web.Application) -> None:
+    app.router.add_get("/api/admin/login-info", admin_login_info)
     app.router.add_post("/api/admin/login", admin_login)
     app.router.add_post("/api/admin/logout", admin_logout)
     app.router.add_get("/api/admin/me", admin_me)

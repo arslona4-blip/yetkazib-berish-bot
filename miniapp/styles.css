@@ -62,6 +62,43 @@ body {
   animation: topbarIn 0.5s var(--ease) both;
 }
 
+.pwa-install {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #e8f5ec, #fff);
+  border: 1px solid var(--border);
+  color: var(--deep);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.pwa-install[hidden] {
+  display: none !important;
+}
+
+.pwa-install .btn.add {
+  margin: 0;
+  margin-left: auto;
+  min-height: 36px;
+  padding: 6px 12px;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.pwa-install-x {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 4px;
+  cursor: pointer;
+}
+
 /* Qidiruvda: brand ixcham, banner/nav yashirin — natijalar ko‘rinsin */
 body.search-focused .brand-eyebrow,
 body.search-focused #shopMeta {

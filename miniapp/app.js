@@ -85,6 +85,9 @@
     aiInput: document.getElementById("aiInput"),
     aiSend: document.getElementById("aiSend"),
     aiChips: document.getElementById("aiChips"),
+    pwaInstall: document.getElementById("pwaInstall"),
+    pwaInstallBtn: document.getElementById("pwaInstallBtn"),
+    pwaInstallClose: document.getElementById("pwaInstallClose"),
   };
 
   function formatMoney(amount) {
@@ -1883,7 +1886,53 @@
     startGuideAuto();
   }
 
+  function setupPwa() {
+    const dismissedKey = "miniapp_pwa_install_dismissed_v1";
+    let deferredPrompt = null;
+
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js").catch(() => {});
+      });
+    }
+
+    // Telegram Mini App ichida odatda install kerak emas
+    const inTelegram = !!(tg && tg.initData);
+    if (inTelegram) return;
+
+    window.addEventListener("beforeinstallprompt", (ev) => {
+      ev.preventDefault();
+      deferredPrompt = ev;
+      try {
+        if (localStorage.getItem(dismissedKey) === "1") return;
+      } catch (_) {}
+      if (els.pwaInstall) els.pwaInstall.hidden = false;
+    });
+
+    if (els.pwaInstallBtn) {
+      els.pwaInstallBtn.addEventListener("click", async () => {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        try {
+          await deferredPrompt.userChoice;
+        } catch (_) {}
+        deferredPrompt = null;
+        if (els.pwaInstall) els.pwaInstall.hidden = true;
+      });
+    }
+    if (els.pwaInstallClose) {
+      els.pwaInstallClose.addEventListener("click", () => {
+        if (els.pwaInstall) els.pwaInstall.hidden = true;
+        try {
+          localStorage.setItem(dismissedKey, "1");
+        } catch (_) {}
+      });
+    }
+  }
+
   async function bootstrap() {
+    setupPwa();
+
     document.querySelectorAll(".nav-btn").forEach((btn) => {
       btn.addEventListener("click", () => showView(btn.dataset.view));
     });

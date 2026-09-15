@@ -3,12 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
+  <meta name="theme-color" content="#054a28" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Baraka" />
+  <meta name="description" content="Baraka Market — yetkazib berish" />
   <title>Baraka Market</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="apple-touch-icon" href="/pwa-192.png" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=45" />
+  <link rel="stylesheet" href="styles.css?v=46" />
 </head>
 <body>
   <header class="topbar">
@@ -25,6 +33,11 @@
         <p id="shopMeta" class="muted"></p>
       </div>
       <button type="button" id="guideOpen" class="guide-open" aria-label="Qo‘llanma" title="Qo‘llanma">?</button>
+    </div>
+    <div id="pwaInstall" class="pwa-install" hidden>
+      <span>Ilovani asosiy ekranga qo‘shing</span>
+      <button type="button" id="pwaInstallBtn" class="btn add">Qo‘shish</button>
+      <button type="button" id="pwaInstallClose" class="pwa-install-x" aria-label="Yopish">×</button>
     </div>
     <label class="search-wrap">
       <span class="search-icon" aria-hidden="true">
@@ -218,6 +231,6 @@
     </div>
   </dialog>
 
-  <script src="app.js?v=45"></script>
+  <script src="app.js?v=46"></script>
 </body>
 </html>
