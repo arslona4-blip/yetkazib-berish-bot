@@ -1,4 +1,4 @@
-/** Yangi buyurtma — telefon signal (Web Audio + vibration). */
+/** Yangi buyurtma — kuchli signal + kuchli vibratsiya. */
 
 let unlocked = false
 let ctx: AudioContext | null = null
@@ -18,7 +18,10 @@ function getCtx(): AudioContext | null {
   }
 }
 
-function vibratePhone(pattern: number | number[] = [280, 120, 280, 120, 450]): void {
+/** Uzoq, qaytariluvchi vibratsiya (telefon qo‘lda bo‘lmasa ham seziladi). */
+function vibratePhone(
+  pattern: number | number[] = [450, 150, 450, 150, 450, 200, 700],
+): void {
   try {
     if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
       navigator.vibrate(pattern)
@@ -28,14 +31,16 @@ function vibratePhone(pattern: number | number[] = [280, 120, 280, 120, 450]): v
   }
 }
 
-/** Bitta kuchli signal (3 ton). */
-function playBeepInternal(c: AudioContext, volume = 0.55): void {
+/** Kuchli signal: baland square + ikkinchi ohang. */
+function playBeepInternal(c: AudioContext, volume = 0.85): void {
   const now = c.currentTime
   const tones = [
-    { f: 980, t: 0, d: 0.16 },
-    { f: 1310, t: 0.18, d: 0.2 },
-    { f: 980, t: 0.42, d: 0.22 },
-    { f: 1480, t: 0.68, d: 0.28 },
+    { f: 880, t: 0, d: 0.18 },
+    { f: 1320, t: 0.2, d: 0.22 },
+    { f: 880, t: 0.46, d: 0.18 },
+    { f: 1480, t: 0.7, d: 0.28 },
+    { f: 990, t: 1.05, d: 0.35 },
+    { f: 1600, t: 1.45, d: 0.4 },
   ]
   for (const tone of tones) {
     const osc = c.createOscillator()
@@ -43,12 +48,28 @@ function playBeepInternal(c: AudioContext, volume = 0.55): void {
     osc.type = 'square'
     osc.frequency.value = tone.f
     gain.gain.setValueAtTime(0.0001, now + tone.t)
-    gain.gain.exponentialRampToValueAtTime(volume, now + tone.t + 0.015)
+    gain.gain.exponentialRampToValueAtTime(volume, now + tone.t + 0.012)
     gain.gain.exponentialRampToValueAtTime(0.0001, now + tone.t + tone.d)
     osc.connect(gain)
     gain.connect(c.destination)
     osc.start(now + tone.t)
-    osc.stop(now + tone.t + tone.d + 0.04)
+    osc.stop(now + tone.t + tone.d + 0.05)
+
+    // Parallel sawtooth — yanada «qattiq» eshitiladi
+    const osc2 = c.createOscillator()
+    const gain2 = c.createGain()
+    osc2.type = 'sawtooth'
+    osc2.frequency.value = tone.f * 0.5
+    gain2.gain.setValueAtTime(0.0001, now + tone.t)
+    gain2.gain.exponentialRampToValueAtTime(
+      volume * 0.35,
+      now + tone.t + 0.012,
+    )
+    gain2.gain.exponentialRampToValueAtTime(0.0001, now + tone.t + tone.d)
+    osc2.connect(gain2)
+    gain2.connect(c.destination)
+    osc2.start(now + tone.t)
+    osc2.stop(now + tone.t + tone.d + 0.05)
   }
 }
 
@@ -70,8 +91,8 @@ export async function unlockAdminSound(opts?: {
       await c.resume()
     }
     if (opts?.confirm !== false) {
-      playBeepInternal(c, 0.45)
-      vibratePhone([200, 80, 200])
+      playBeepInternal(c, 0.8)
+      vibratePhone([400, 120, 400, 120, 600])
     }
     unlocked = true
     return true
@@ -79,8 +100,8 @@ export async function unlockAdminSound(opts?: {
     console.warn('unlockAdminSound', e)
     try {
       unlocked = true
-      playBeepInternal(c, 0.45)
-      vibratePhone([200, 80, 200])
+      playBeepInternal(c, 0.8)
+      vibratePhone([400, 120, 400, 120, 600])
       return true
     } catch {
       return false
@@ -95,28 +116,32 @@ function stopAlarmLoop(): void {
   }
 }
 
-/** Yangi buyurtma: 4 marta qaytariladigan signal (~8 soniya). */
+/** Yangi buyurtma: ~12 soniya kuchli signal + vibratsiya. */
 export function alertNewOrder(_opts?: {
   count?: number
   orderId?: number
 }): void {
   const c = getCtx()
-  if (!c) return
+  if (!c) {
+    vibratePhone([500, 150, 500, 150, 500, 200, 800, 200, 500])
+    return
+  }
 
   const ring = () => {
     try {
-      playBeepInternal(c, 0.6)
-      vibratePhone([300, 100, 300, 100, 500])
+      playBeepInternal(c, 0.9)
+      vibratePhone([500, 120, 500, 120, 500, 160, 800])
       unlocked = true
     } catch (e) {
       console.warn('alertNewOrder', e)
+      vibratePhone([500, 120, 500, 120, 800])
     }
   }
 
   const start = () => {
     stopAlarmLoop()
     ring()
-    let left = 3
+    let left = 5
     alarmTimer = window.setInterval(() => {
       if (left <= 0) {
         stopAlarmLoop()
@@ -124,7 +149,7 @@ export function alertNewOrder(_opts?: {
       }
       ring()
       left -= 1
-    }, 2000)
+    }, 2200)
   }
 
   if (c.state === 'suspended') {
