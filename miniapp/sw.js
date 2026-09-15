@@ -3,8 +3,8 @@ const CACHE = "baraka-mini-v1";
 const PRECACHE = [
   "/",
   "/index.html",
-  "/styles.css?v=46",
-  "/app.js?v=46",
+  "/styles.css?v=47",
+  "/app.js?v=47",
   "/manifest.webmanifest",
   "/pwa-192.png",
   "/pwa-512.png",
