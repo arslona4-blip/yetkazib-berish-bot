@@ -44,6 +44,7 @@ from bot.gift_value import get_gift_value_limit
 from bot.database import (
     calc_promo_discount,
     create_order,
+    create_taxi_request,
     effective_product_price,
     format_order,
     get_bonus,
@@ -81,6 +82,7 @@ JADVAL_DIR = BASE_DIR / "jadval"
 JADVAL_PATH = (os.getenv("JADVAL_PATH") or "jadval-fedd3d").strip().strip("/")
 KICHKINTOY_DIR = BASE_DIR / "kichkintoy"
 SLAYD_DIR = BASE_DIR / "slayd"
+VOSITA_DIR = BASE_DIR / "vosita"
 PHOTOS_DIR = Path(DATABASE_PATH).resolve().parent / "photos"
 
 
@@ -1219,6 +1221,102 @@ async def serve_slayd_index(_request: web.Request) -> web.FileResponse:
     return web.FileResponse(index)
 
 
+async def serve_vosita_index(_request: web.Request) -> web.FileResponse:
+    index = VOSITA_DIR / "index.html"
+    if not index.is_file():
+        raise web.HTTPNotFound(text="Vositachi Mini App topilmadi")
+    return web.FileResponse(
+        index,
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Pragma": "no-cache",
+        },
+    )
+
+
+def _digits_phone(raw: str) -> str:
+    return "".join(ch for ch in str(raw or "") if ch.isdigit())
+
+
+async def api_vosita(request: web.Request) -> web.Response:
+    """Alohida vositachilik Mini App — Baraka Market savatiga tegmaydi."""
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise web.HTTPBadRequest(text="JSON noto'g'ri") from exc
+
+    need = str(body.get("need") or body.get("need_what") or "").strip()
+    from_place = str(body.get("from_place") or "").strip()
+    to_place = str(body.get("to_place") or "").strip()
+    phone = str(body.get("phone") or "").strip()
+    note = str(body.get("note") or "").strip()
+    if len(need) > 400:
+        need = need[:400]
+    if len(from_place) > 120:
+        from_place = from_place[:120]
+    if len(to_place) > 120:
+        to_place = to_place[:120]
+    if len(note) > 240:
+        note = note[:240]
+    if not need or not to_place:
+        raise web.HTTPBadRequest(text="Nima kerak va manzilni yozing")
+    if len(_digits_phone(phone)) < 7:
+        raise web.HTTPBadRequest(text="Telefon noto'g'ri")
+
+    user_id, full_name, username = extract_user_from_request(request, body)
+    if user_id is None:
+        unsafe = body.get("telegram_user") or {}
+        if isinstance(unsafe, dict):
+            try:
+                user_id = int(unsafe.get("id"))
+            except (TypeError, ValueError):
+                user_id = None
+            if user_id:
+                full_name = (
+                    f"{unsafe.get('first_name') or ''} "
+                    f"{unsafe.get('last_name') or ''}".strip()
+                    or full_name
+                )
+                username = unsafe.get("username")
+    if user_id is not None:
+        upsert_user(user_id, full_name, username)
+        set_user_phone(user_id, phone)
+
+    request_id = create_taxi_request(
+        user_id=user_id,
+        full_name=full_name or "",
+        phone=phone,
+        need_what=need,
+        from_place=from_place,
+        to_place=to_place,
+        note=note,
+    )
+
+    from bot.keyboards import taxi_request_keyboard
+    from bot.notify_admins import notify_admins_text
+
+    uname = f"@{username}" if username else "—"
+    text = (
+        f"🚕 Vositachi so‘rov #{request_id}\n"
+        f"(Baraka Market emas)\n\n"
+        f"Kerak: {need}\n"
+        f"Qayerdan: {from_place or '—'}\n"
+        f"Qayerga: {to_place}\n"
+        f"📞 {phone}\n"
+        f"Mijoz: {full_name or '—'} ({uname})\n"
+        f"Izoh: {note or '—'}"
+    )
+    await notify_admins_text(
+        _bot,
+        text,
+        reply_markup=taxi_request_keyboard(phone),
+        order_id=None,
+        voice_alert=True,
+        push=True,
+    )
+    return web.json_response({"ok": True, "request_id": request_id})
+
+
 async def api_ai(request: web.Request) -> web.Response:
     """Mini App AI chat — katalog / retsept / OpenAI (lokal savat uchun)."""
     try:
@@ -1371,6 +1469,7 @@ def create_app() -> web.Application:
     app.router.add_get("/api/photo/{product_id}", api_photo)
     app.router.add_post("/api/order", api_order)
     app.router.add_post("/api/ai", api_ai)
+    app.router.add_post("/api/vosita", api_vosita)
     app.router.add_post("/api/shajara/share", api_shajara_share_create)
     app.router.add_get("/api/shajara/share/{code}", api_shajara_share_get)
     register_admin_routes(app)
@@ -1424,6 +1523,13 @@ def create_app() -> web.Application:
         app.router.add_static("/slayd/", SLAYD_DIR, show_index=False)
     else:
         logger.warning("slayd papkasi topilmadi: %s", SLAYD_DIR)
+
+    if VOSITA_DIR.is_dir() and (VOSITA_DIR / "index.html").is_file():
+        app.router.add_get("/vosita", serve_vosita_index)
+        app.router.add_get("/vosita/", serve_vosita_index)
+        app.router.add_static("/vosita/", VOSITA_DIR, show_index=False)
+    else:
+        logger.warning("vosita papkasi topilmadi: %s", VOSITA_DIR)
 
     if MINIAPP_DIR.is_dir():
         app.router.add_get("/", serve_index)
