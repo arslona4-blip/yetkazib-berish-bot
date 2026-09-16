@@ -1234,6 +1234,29 @@ async def serve_vosita_index(_request: web.Request) -> web.FileResponse:
     )
 
 
+async def serve_vosita_asset(request: web.Request) -> web.StreamResponse:
+    """GET /vosita va /vosita/styles.css — Mini App static '/' yutib yubormasin."""
+    tail = str(request.match_info.get("tail") or "").lstrip("/")
+    if not tail or tail.endswith("/"):
+        return await serve_vosita_index(request)
+    name = Path(tail).name
+    if name not in {"index.html", "styles.css", "app.js"}:
+        raise web.HTTPNotFound()
+    path = (VOSITA_DIR / name).resolve()
+    root = VOSITA_DIR.resolve()
+    if not str(path).startswith(str(root)) or not path.is_file():
+        raise web.HTTPNotFound()
+    return web.FileResponse(path, headers={"Cache-Control": "no-store"})
+
+
+def _register_vosita_routes(app: web.Application) -> None:
+    app.router.add_get("/vosita", serve_vosita_index)
+    app.router.add_get("/vosita/", serve_vosita_index)
+    app.router.add_get("/vosita/{tail:.*}", serve_vosita_asset)
+    if not (VOSITA_DIR / "index.html").is_file():
+        logger.warning("vosita papkasi topilmadi: %s", VOSITA_DIR)
+
+
 def _digits_phone(raw: str) -> str:
     return "".join(ch for ch in str(raw or "") if ch.isdigit())
 
@@ -1460,6 +1483,8 @@ def create_app() -> web.Application:
 
     app = web.Application(middlewares=[cors_middleware])
     app.router.add_get("/health", api_health)
+    _register_vosita_routes(app)
+    app.router.add_post("/api/vosita", api_vosita)
     app.router.add_get("/api/config", api_config)
     app.router.add_get("/api/user", api_user)
     app.router.add_post("/api/promo", api_promo)
@@ -1469,7 +1494,6 @@ def create_app() -> web.Application:
     app.router.add_get("/api/photo/{product_id}", api_photo)
     app.router.add_post("/api/order", api_order)
     app.router.add_post("/api/ai", api_ai)
-    app.router.add_post("/api/vosita", api_vosita)
     app.router.add_post("/api/shajara/share", api_shajara_share_create)
     app.router.add_get("/api/shajara/share/{code}", api_shajara_share_get)
     register_admin_routes(app)
@@ -1523,13 +1547,6 @@ def create_app() -> web.Application:
         app.router.add_static("/slayd/", SLAYD_DIR, show_index=False)
     else:
         logger.warning("slayd papkasi topilmadi: %s", SLAYD_DIR)
-
-    if VOSITA_DIR.is_dir() and (VOSITA_DIR / "index.html").is_file():
-        app.router.add_get("/vosita", serve_vosita_index)
-        app.router.add_get("/vosita/", serve_vosita_index)
-        app.router.add_static("/vosita/", VOSITA_DIR, show_index=False)
-    else:
-        logger.warning("vosita papkasi topilmadi: %s", VOSITA_DIR)
 
     if MINIAPP_DIR.is_dir():
         app.router.add_get("/", serve_index)
