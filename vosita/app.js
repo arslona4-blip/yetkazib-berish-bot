@@ -4,57 +4,131 @@
     tg.ready();
     tg.expand();
     try {
-      tg.setHeaderColor("#1e3a5f");
-      tg.setBackgroundColor("#eef3f8");
+      tg.setHeaderColor("#0c1018");
+      tg.setBackgroundColor("#0c1018");
     } catch (_) {}
   }
 
-  const els = {
-    form: document.getElementById("form"),
-    need: document.getElementById("need"),
-    fromPlace: document.getElementById("fromPlace"),
-    toPlace: document.getElementById("toPlace"),
-    phone: document.getElementById("phone"),
-    note: document.getElementById("note"),
-    submit: document.getElementById("submit"),
-    status: document.getElementById("status"),
-  };
+  const DEFAULT_PLACES = [
+    { title: "Ish", subtitle: "Amir Temur ko'chasi, 15" },
+    { title: "Uy", subtitle: "Yunusobod tumani, 24-uy" },
+    { title: "Tashkent Siti", subtitle: "Mirzo Ulug'bek tumani" },
+  ];
+
+  const home = document.getElementById("home");
+  const request = document.getElementById("request");
+  const placesEl = document.getElementById("places");
+  const hello = document.getElementById("hello");
+  const form = document.getElementById("form");
+  const fromPlace = document.getElementById("fromPlace");
+  const toPlace = document.getElementById("toPlace");
+  const needExtra = document.getElementById("needExtra");
+  const needWrap = document.getElementById("needWrap");
+  const phone = document.getElementById("phone");
+  const note = document.getElementById("note");
+  const submit = document.getElementById("submit");
+  const status = document.getElementById("status");
+  const requestTitle = document.getElementById("requestTitle");
+  const requestLead = document.getElementById("requestLead");
+
+  let kind = "passenger";
+
+  const user = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+  if (user && user.first_name) {
+    hello.textContent = `Xush kelibsiz, ${user.first_name}`;
+  }
+
+  function pinSvg() {
+    return `<span class="place-pin" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none">
+        <path d="M12 21s7-6.2 7-11.2A7 7 0 1 0 5 9.8C5 14.8 12 21 12 21Z" stroke="#9aa8bd" stroke-width="1.8"/>
+        <circle cx="12" cy="9.6" r="2.2" fill="#9aa8bd"/>
+      </svg>
+    </span>`;
+  }
+
+  placesEl.innerHTML = DEFAULT_PLACES.map(
+    (p) => `<button type="button" class="place" data-title="${p.title}" data-sub="${p.subtitle}">
+      ${pinSvg()}
+      <span><b>${p.title}</b><small>${p.subtitle}</small></span>
+      <span class="chev">›</span>
+    </button>`
+  ).join("");
+
+  function showStatus(text, ok) {
+    status.hidden = false;
+    status.className = `status ${ok ? "ok" : "err"}`;
+    status.textContent = text;
+  }
+
+  function openRequest(nextKind, presetTo) {
+    kind = nextKind;
+    const cargo = kind === "cargo";
+    requestTitle.textContent = cargo ? "Yuk / buyum" : "Yo'lovchi";
+    requestLead.textContent = cargo
+      ? "Sement, oziq-ovqat va boshqalar — haydovchi bilan ulashamiz."
+      : "Shaharga yoki shahar ichida safar.";
+    needWrap.hidden = !cargo;
+    toPlace.value = presetTo || "";
+    fromPlace.value = "";
+    needExtra.value = "";
+    note.value = "";
+    status.hidden = true;
+    home.hidden = true;
+    request.hidden = false;
+  }
+
+  document.querySelectorAll(".kind").forEach((btn) => {
+    btn.addEventListener("click", () => openRequest(btn.dataset.kind, ""));
+  });
+
+  placesEl.addEventListener("click", (ev) => {
+    const btn = ev.target.closest(".place");
+    if (!btn) return;
+    openRequest(kind || "passenger", `${btn.dataset.title}, ${btn.dataset.sub}`);
+  });
+
+  document.getElementById("back").addEventListener("click", () => {
+    request.hidden = true;
+    home.hidden = false;
+  });
 
   function getInitData() {
     return (tg && tg.initData) || "";
   }
 
   function getTelegramUser() {
-    const u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
-    if (!u || !u.id) return null;
+    if (!user || !user.id) return null;
     return {
-      id: u.id,
-      first_name: u.first_name || "",
-      last_name: u.last_name || "",
-      username: u.username || "",
+      id: user.id,
+      first_name: user.first_name || "",
+      last_name: user.last_name || "",
+      username: user.username || "",
     };
   }
 
-  function showStatus(text, ok) {
-    els.status.hidden = false;
-    els.status.className = `status ${ok ? "ok" : "err"}`;
-    els.status.textContent = text;
-  }
-
-  els.form.addEventListener("submit", async (ev) => {
+  form.addEventListener("submit", async (ev) => {
     ev.preventDefault();
-    const need = (els.need.value || "").trim();
-    const toPlace = (els.toPlace.value || "").trim();
-    const phone = (els.phone.value || "").trim();
-    if (!need || !toPlace || !phone) {
-      showStatus("Nima kerak, manzil va telefonni to‘ldiring", false);
+    const to = (toPlace.value || "").trim();
+    const tel = (phone.value || "").trim();
+    const extra = (needExtra.value || "").trim();
+    if (!to || !tel) {
+      showStatus("Manzil va telefonni to‘ldiring", false);
       return;
     }
-    els.submit.disabled = true;
-    els.submit.textContent = "Yuborilmoqda…";
+    const need =
+      kind === "cargo"
+        ? extra
+          ? `Yuk / buyum: ${extra}`
+          : "Yuk / buyum"
+        : extra
+          ? `Yo'lovchi: ${extra}`
+          : "Yo'lovchi: shaharga yoki shahar ichida safar";
+
+    submit.disabled = true;
+    submit.textContent = "Yuborilmoqda…";
     try {
       const initData = getInitData();
-      const telegramUser = getTelegramUser();
       const headers = { "Content-Type": "application/json" };
       if (initData) headers["X-Telegram-Init-Data"] = initData;
       const res = await fetch("/api/vosita", {
@@ -62,12 +136,12 @@
         headers,
         body: JSON.stringify({
           need,
-          from_place: (els.fromPlace.value || "").trim(),
-          to_place: toPlace,
-          phone,
-          note: (els.note.value || "").trim(),
+          from_place: (fromPlace.value || "").trim(),
+          to_place: to,
+          phone: tel,
+          note: (note.value || "").trim(),
           initData,
-          telegram_user: telegramUser,
+          telegram_user: getTelegramUser(),
         }),
       });
       const raw = await res.text();
@@ -88,7 +162,6 @@
         `So‘rov #${data.request_id} qabul qilindi. Tez orada qo‘ng‘iroq qilamiz.`,
         true
       );
-      els.form.reset();
       if (tg && tg.HapticFeedback) {
         try {
           tg.HapticFeedback.notificationOccurred("success");
@@ -97,8 +170,8 @@
     } catch (err) {
       showStatus((err && err.message) || "Yuborilmadi. Qayta urinib ko‘ring.", false);
     } finally {
-      els.submit.disabled = false;
-      els.submit.textContent = "So‘rov yuborish";
+      submit.disabled = false;
+      submit.textContent = "So‘rov yuborish";
     }
   });
 })();

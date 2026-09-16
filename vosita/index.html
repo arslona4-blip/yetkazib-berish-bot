@@ -3,45 +3,93 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#1e3a5f" />
-  <title>Vositachi — shahar va mahalla</title>
+  <meta name="theme-color" content="#0c1018" />
+  <title>Vositachi</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <link rel="stylesheet" href="styles.css?v=1" />
+  <link rel="stylesheet" href="styles.css?v=2" />
 </head>
 <body>
-  <header class="hero">
-    <p class="eyebrow">Alohida xizmat</p>
-    <h1>Vositachi</h1>
-    <p class="lead">Mahalladan shaharga narsa kerak — taksi va mijoz o‘rtasida ulashamiz. Bu Baraka Market emas.</p>
-  </header>
+  <div id="home" class="screen">
+    <header class="top">
+      <p class="hello" id="hello">Xush kelibsiz</p>
+      <h1>Bugun nima kerak?</h1>
+    </header>
 
-  <main>
-    <form id="form" class="card">
+    <div class="kind-grid">
+      <button type="button" class="kind" data-kind="passenger">
+        <span class="kind-icon passenger" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="8" r="3.2" fill="#f3a45c"/>
+            <path d="M6.2 19.2c.6-3.4 3-5.2 5.8-5.2s5.2 1.8 5.8 5.2" stroke="#f3a45c" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </span>
+        <strong>Yo'lovchi</strong>
+        <span>Shaharga yoki shahar ichida safar</span>
+      </button>
+      <button type="button" class="kind" data-kind="cargo">
+        <span class="kind-icon cargo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M7 8.5 12 6l5 2.5v7L12 18l-5-2.5v-7Z" stroke="#3dcfb3" stroke-width="1.8" stroke-linejoin="round"/>
+            <path d="M12 6v12M7 8.5l5 2.6 5-2.6" stroke="#3dcfb3" stroke-width="1.8"/>
+          </svg>
+        </span>
+        <strong>Yuk / buyum</strong>
+        <span>Sement, oziq-ovqat va boshqalar</span>
+      </button>
+    </div>
+
+    <div class="map-card" aria-hidden="true">
+      <svg class="map" viewBox="0 0 220 150" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <pattern id="grid" width="22" height="22" patternUnits="userSpaceOnUse">
+            <path d="M22 0H0V22" fill="none" stroke="#243044" stroke-width="1"/>
+          </pattern>
+        </defs>
+        <rect width="220" height="150" fill="#141b28"/>
+        <rect width="220" height="150" fill="url(#grid)"/>
+        <path class="route" d="M28 122 C 48 118, 52 88, 78 78 S 118 82, 132 62 S 168 28, 188 22" fill="none" stroke="#e8a23a" stroke-width="2.4" stroke-dasharray="6 7" stroke-linecap="round"/>
+        <circle cx="28" cy="122" r="6" fill="#3dcfb3"/>
+        <circle cx="28" cy="122" r="10" fill="none" stroke="#3dcfb3" stroke-opacity=".35" stroke-width="2"/>
+        <circle cx="188" cy="22" r="6" fill="#e07070"/>
+        <circle cx="188" cy="22" r="10" fill="none" stroke="#e07070" stroke-opacity=".35" stroke-width="2"/>
+      </svg>
+    </div>
+
+    <section class="places">
+      <p class="section-label">Tez-tez boradigan joylar</p>
+      <div id="places"></div>
+    </section>
+  </div>
+
+  <div id="request" class="screen" hidden>
+    <button type="button" class="back" id="back">← Ortga</button>
+    <h2 id="requestTitle">Safar</h2>
+    <p class="lead" id="requestLead"></p>
+    <form id="form" class="form">
       <label>
-        Shahardan nima kerak?
-        <textarea id="need" rows="3" required maxlength="400" placeholder="Masalan: dori, hujjat, ehtiyot qism…"></textarea>
+        Qayerdan
+        <input id="fromPlace" type="text" maxlength="120" placeholder="Manzil yoki mo‘ljal" />
       </label>
       <label>
-        Qayerdan olinadi (shahar)
-        <input id="fromPlace" type="text" maxlength="120" placeholder="Masalan: Namangan markaz, apteka" />
+        Qayerga
+        <input id="toPlace" type="text" maxlength="120" required placeholder="Manzil yoki mo‘ljal" />
       </label>
-      <label>
-        Qayerga yetkazilsin (mahalla)
-        <input id="toPlace" type="text" maxlength="120" required placeholder="Mahalla, ko‘cha, mo‘ljal" />
+      <label id="needWrap" hidden>
+        Nima olib kelinsin?
+        <textarea id="needExtra" rows="2" maxlength="280" placeholder="Masalan: 2 qop sement, dori…"></textarea>
       </label>
       <label>
         Telefon
         <input id="phone" type="tel" inputmode="tel" required placeholder="+998 90 123 45 67" />
       </label>
       <label>
-        Izoh (ixtiyoriy)
-        <textarea id="note" rows="2" maxlength="240" placeholder="Vaqt, byudjet, qo‘ng‘iroq qiling…"></textarea>
+        Izoh
+        <textarea id="note" rows="2" maxlength="240" placeholder="Vaqt, byudjet…"></textarea>
       </label>
-      <p class="hint">Narx haydovchi bilan kelishiladi. Biz faqat vositachimiz.</p>
       <button type="submit" id="submit" class="btn">So‘rov yuborish</button>
       <p id="status" class="status" hidden></p>
     </form>
-  </main>
-  <script src="app.js?v=1"></script>
+  </div>
+  <script src="app.js?v=2"></script>
 </body>
 </html>
