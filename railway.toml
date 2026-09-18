@@ -1,8 +1,8 @@
+# Vositachi — Railway worker (long polling). Bir xizmat: python -m vositachi
 [build]
-builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile"
+builder = "NIXPACKS"
 
 [deploy]
+startCommand = "python -m vositachi"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
-startCommand = "python -m bot.main"
