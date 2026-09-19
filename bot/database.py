@@ -496,26 +496,6 @@ def _migrate_features(conn: sqlite3.Connection) -> None:
         )
         """
     )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS taxi_requests (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            full_name TEXT,
-            phone TEXT NOT NULL,
-            need_what TEXT NOT NULL,
-            from_place TEXT,
-            to_place TEXT,
-            note TEXT,
-            status TEXT NOT NULL DEFAULT 'new',
-            created_at TEXT NOT NULL
-        )
-        """
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_taxi_requests_created "
-        "ON taxi_requests(created_at)"
-    )
 
 
 @contextmanager
@@ -1218,40 +1198,6 @@ def create_order(
                 bonus_spent,
                 subtotal,
                 (gift_choice or "").strip(),
-            ),
-        )
-        return int(cursor.lastrowid)
-
-
-def create_taxi_request(
-    *,
-    user_id: int | None,
-    full_name: str,
-    phone: str,
-    need_what: str,
-    from_place: str = "",
-    to_place: str = "",
-    note: str = "",
-) -> int:
-    now = _now_iso()
-    with get_connection() as conn:
-        cursor = conn.execute(
-            """
-            INSERT INTO taxi_requests (
-                user_id, full_name, phone, need_what, from_place, to_place,
-                note, status, created_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'new', ?)
-            """,
-            (
-                user_id,
-                (full_name or "").strip(),
-                phone.strip(),
-                need_what.strip(),
-                (from_place or "").strip(),
-                (to_place or "").strip(),
-                (note or "").strip(),
-                now,
             ),
         )
         return int(cursor.lastrowid)

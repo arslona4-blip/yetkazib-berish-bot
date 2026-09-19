@@ -1,1 +1,1 @@
-worker: python -m vositachi
+worker: python -m run_bots

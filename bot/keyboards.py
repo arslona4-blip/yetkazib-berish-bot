@@ -23,29 +23,8 @@ def phone_tel_href(phone: str | None) -> str | None:
     return f"tel:+{digits}"
 
 
-def taxi_request_keyboard(phone: str | None = None) -> InlineKeyboardMarkup:
-    rows: list[list[InlineKeyboardButton]] = []
-    tel = phone_tel_href(phone)
-    if tel:
-        rows.append([InlineKeyboardButton("📞 Mijozga qo'ng'iroq", url=tel)])
-    return InlineKeyboardMarkup(rows) if rows else InlineKeyboardMarkup([])
-
-
 def miniapp_shop_url() -> str:
     return (MINIAPP_URL or "").rstrip("/")
-
-
-def vosita_app_url() -> str:
-    """Alohida vositachilik Mini App: /vosita/ (Baraka Market emas)."""
-    url = miniapp_shop_url()
-    if not url:
-        return ""
-    from urllib.parse import urlsplit, urlunsplit
-
-    parts = urlsplit(url)
-    if not parts.scheme or not parts.netloc:
-        return f"{url.rstrip('/')}/vosita/"
-    return urlunsplit((parts.scheme, parts.netloc, "/vosita/", "", ""))
 
 
 def admin_app_url() -> str:
