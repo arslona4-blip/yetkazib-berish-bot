@@ -1,6 +1,6 @@
-# Vositachi — taksi vositachilik boti
+# Saryuz Vositachi — mahalla taksi vositachisi
 
-Mijoz va haydovchini bog‘laydigan Telegram bot (O‘zbekiston). UX — o‘zbekcha.
+**Bekobod tumani, Saryuz mahallasi** uchun Telegram bot. Mijoz va haydovchini bog‘laydi. UX — o‘zbekcha.
 
 ## MVP
 
@@ -8,6 +8,8 @@ Mijoz va haydovchini bog‘laydigan Telegram bot (O‘zbekiston). UX — o‘zbe
 2. **Narx** — baza + km tarif, haydovchi qo‘lda narx, komissiya %
 3. **Admin** — ochiq/faol/tugagan, bekor, statistika, haydovchi blok/oflayn
 4. **Baho** (1–5) va haydovchi onlayn/oflayn
+
+Hudud konteksti buyurtmada ko‘rinadi (`Bekobod / Saryuz`); GPS geo-fence yo‘q.
 
 ## 1) Token
 
@@ -39,10 +41,12 @@ Root `.env` ga ham yozish mumkin (bir xil kalitlar).
 | `/stats` | Statistika |
 | `/open` | Ochiq so‘rovlar |
 | `/tariff` | Joriy tarif |
-| `/set_base 8000` | Baza narx |
-| `/set_km 2000` | 1 km narxi |
+| `/set_base 7000` | Baza narx |
+| `/set_km 1500` | 1 km narxi |
 | `/set_commission 10` | Komissiya % |
-| `/set_default_km 5` | Lokatsiyasiz taxminiy km |
+| `/set_default_km 3` | Lokatsiyasiz taxminiy km |
+
+Mahalla defaultlari: baza **7000**, km **1500**, taxminiy **3** km, komissiya **10%**.
 
 ## 4) Oqim (qisqa)
 
@@ -56,7 +60,8 @@ Root `.env` ga ham yozish mumkin (bir xil kalitlar).
 |-----|----------|------|
 | `VOSITACHI_BOT_TOKEN` | ha | BotFather token |
 | `VOSITACHI_ADMIN_IDS` | ha | vergul bilan ID lar |
-| `VOSITACHI_BOT_NAME` | yo‘q | default: Vositachi |
+| `VOSITACHI_BOT_NAME` | yo‘q | default: Saryuz Vositachi |
+| `VOSITACHI_AREA_LABEL` | yo‘q | default: Bekobod / Saryuz |
 | `VOSITACHI_DB` | yo‘q | default: `data/vositachi.db` |
 
 Sirlar inventar qilinmaydi — faqat `.env.example` namunasi.

@@ -14,11 +14,12 @@ STATUS_IN_PROGRESS = "in_progress"
 STATUS_DONE = "done"
 STATUS_CANCELLED = "cancelled"
 
+# Mahalla / kichik shahar placeholderlari (admin /set_* bilan o‘zgartiriladi)
 DEFAULT_SETTINGS = {
-    "base_fare": "8000",
-    "per_km": "2000",
+    "base_fare": "7000",
+    "per_km": "1500",
     "commission_pct": "10",
-    "default_estimate_km": "5",
+    "default_estimate_km": "3",
 }
 
 
@@ -124,10 +125,10 @@ def set_setting(key: str, value: str) -> None:
 
 def get_tariff() -> dict[str, float]:
     return {
-        "base_fare": float(get_setting("base_fare", "8000")),
-        "per_km": float(get_setting("per_km", "2000")),
+        "base_fare": float(get_setting("base_fare", "7000")),
+        "per_km": float(get_setting("per_km", "1500")),
         "commission_pct": float(get_setting("commission_pct", "10")),
-        "default_estimate_km": float(get_setting("default_estimate_km", "5")),
+        "default_estimate_km": float(get_setting("default_estimate_km", "3")),
     }
 
 

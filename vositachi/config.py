@@ -24,4 +24,8 @@ DATABASE_PATH = os.getenv(
     "VOSITACHI_DB", str(DATA_DIR / "vositachi.db")
 )
 
-BOT_NAME = os.getenv("VOSITACHI_BOT_NAME", "Vositachi")
+BOT_NAME = os.getenv("VOSITACHI_BOT_NAME", "Saryuz Vositachi")
+# Hudud (buyurtma / UX konteksti — GPS geo-fence yo‘q)
+AREA_LABEL = os.getenv(
+    "VOSITACHI_AREA_LABEL", "Bekobod / Saryuz"
+).strip() or "Bekobod / Saryuz"
