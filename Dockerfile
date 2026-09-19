@@ -17,8 +17,6 @@ COPY arduino ./arduino
 COPY jadval ./jadval
 COPY kichkintoy ./kichkintoy
 COPY slayd ./slayd
-COPY vosita ./vosita
-COPY vositachi ./vositachi
 COPY ingliz ./ingliz
 
 RUN mkdir -p /data
@@ -26,9 +24,7 @@ RUN mkdir -p /data
 ENV PYTHONUNBUFFERED=1
 ENV DATABASE_PATH=/data/bot.db
 ENV AI_SOTUVCHI_DB=/data/ai_sotuvchi.db
-ENV DATA_DIR=/data
-ENV VOSITACHI_DB=/data/vositachi.db
 ENV WEBAPP_PORT=8088
 
-# Vositachi (Railway: railway.toml startCommand). Baraka+Vositachi: python -m run_bots
-CMD ["python", "-m", "vositachi"]
+# Yetkazib berish boti
+CMD ["python", "-m", "run_bots"]

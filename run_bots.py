@@ -1,22 +1,16 @@
-"""Baraka Market (yetkazib berish) boti + ixtiyoriy Vositachi.
+"""Baraka Market (yetkazib berish) boti.
 
 Railway/Docker: CMD python -m run_bots
 AI Sotuvchi (Annur) o‘chirilgan — ishga tushmaydi.
-Vositachi: VOSITACHI_BOT_TOKEN bo‘lsa parallel ishga tushadi.
 """
 
 from __future__ import annotations
 
 import logging
-import os
 import signal
 import subprocess
 import sys
 import time
-
-from dotenv import load_dotenv
-
-load_dotenv()
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -57,23 +51,12 @@ def main() -> None:
     baraka = _start([py, "-m", "bot.main"], "Baraka Market")
     logger.info("AI Sotuvchi (@ai_sotuvchi_annur_bot) o‘chirilgan.")
 
-    vositachi_token = os.getenv("VOSITACHI_BOT_TOKEN", "").strip()
-    if vositachi_token:
-        _start([py, "-m", "vositachi"], "Vositachi")
-    else:
-        logger.info("Vositachi o‘chirilgan (VOSITACHI_BOT_TOKEN yo‘q).")
-
     # Asosiy jarayon yiqilsa — hammasi to‘xtaydi
     while True:
         code = baraka.poll()
         if code is not None:
             logger.error("Baraka Market chiqdi: code=%s", code)
             _shutdown()
-        for proc in _children[1:]:
-            child_code = proc.poll()
-            if child_code is not None:
-                logger.error("Qo‘shimcha bot chiqdi: code=%s", child_code)
-                _shutdown()
         time.sleep(2)
 
 
