@@ -1,36 +1,41 @@
-"""O‘zbekcha matnlar — Vositachi bot."""
+"""O‘zbekcha matnlar — Saryuz Vositachi (Bekobod / Saryuz)."""
 
 from __future__ import annotations
 
 WELCOME = (
-    "🚕 <b>{bot_name}</b>\n\n"
-    "Mijoz va haydovchini bog‘laymiz.\n"
+    "🚕 <b>{bot_name}</b>\n"
+    "🏘 {area}\n\n"
+    "Mahalla ichida mijoz va haydovchini bog‘laymiz.\n"
     "Rolingizni tanlang:"
 )
 
 ROLE_CHOSEN_CUSTOMER = (
     "✅ Siz <b>mijoz</b> sifatida kirdingiz.\n"
+    "Hudud: <b>{area}</b>.\n"
     "«🚕 Safar so‘rash» tugmasini bosing."
 )
 
 ROLE_CHOSEN_DRIVER = (
     "✅ Siz <b>haydovchi</b> sifatida kirdingiz.\n"
+    "Hudud: <b>{area}</b>.\n"
     "Ishlash uchun «🟢 Onlayn» ni bosing."
 )
 
 ROLE_CHOSEN_ADMIN = (
-    "✅ Admin panel.\n"
+    "✅ Admin — <b>{bot_name}</b> ({area}).\n"
     "Safarlar, tarif, haydovchilar va statistika."
 )
 
 ASK_PICKUP = (
-    "📍 <b>Qayerdan</b> olasiz?\n\n"
-    "Manzilni yozing yoki lokatsiya yuboring."
+    "📍 <b>Qayerdan</b> olasiz? ({area})\n\n"
+    "Masalan: Saryuz markaz, maktab, bozor…\n"
+    "Yoki lokatsiya yuboring."
 )
 
 ASK_DESTINATION = (
-    "🏁 <b>Qayerga</b> borasiz?\n\n"
-    "Manzilni yozing yoki lokatsiya yuboring."
+    "🏁 <b>Qayerga</b> borasiz? ({area})\n\n"
+    "Masalan: avtostansiya, bozor, uy…\n"
+    "Yoki lokatsiya yuboring."
 )
 
 ASK_PHONE = (
@@ -39,7 +44,8 @@ ASK_PHONE = (
 )
 
 REQUEST_CREATED = (
-    "✅ So‘rov <b>#{ride_id}</b> yaratildi.\n\n"
+    "✅ So‘rov <b>#{ride_id}</b> yaratildi.\n"
+    "🏘 {area}\n\n"
     "📍 {pickup}\n"
     "🏁 {destination}\n"
     "📞 {phone}\n"
@@ -55,7 +61,8 @@ NO_ONLINE_DRIVERS = (
 )
 
 NEW_RIDE_FOR_DRIVER = (
-    "🆕 Yangi so‘rov <b>#{ride_id}</b>\n\n"
+    "🆕 Yangi so‘rov <b>#{ride_id}</b>\n"
+    "🏘 {area}\n\n"
     "📍 {pickup}\n"
     "🏁 {destination}\n"
     "📞 {phone}\n"
@@ -74,7 +81,8 @@ RIDE_ACCEPTED_CUSTOMER = (
 )
 
 RIDE_ACCEPTED_DRIVER = (
-    "✅ Qabul qildingiz — #{ride_id}\n\n"
+    "✅ Qabul qildingiz — #{ride_id}\n"
+    "🏘 {area}\n\n"
     "📍 {pickup}\n"
     "🏁 {destination}\n"
     "💰 Narx: <b>{price}</b> (komissiya {commission})\n"
@@ -102,7 +110,10 @@ STATUS_DONE = (
 
 STATUS_CANCELLED = "🚫 Safar #{ride_id} bekor qilindi."
 
-DRIVER_ONLINE = "🟢 Siz onlaynsiz. Yangi so‘rovlar keladi."
+DRIVER_ONLINE = (
+    "🟢 Siz onlaynsiz ({area}).\n"
+    "Mahalla so‘rovlari keladi."
+)
 
 DRIVER_OFFLINE = "🔴 Siz oflaynsiz."
 
@@ -119,7 +130,7 @@ DONE_RIDES_HEADER = "✅ So‘nggi tugaganlar ({count}):"
 MY_ACTIVE_EMPTY = "Faol safaringiz yo‘q."
 
 STATS = (
-    "📊 <b>Statistika</b>\n\n"
+    "📊 <b>Statistika</b> — {area}\n\n"
     "Foydalanuvchilar: {users}\n"
     "Haydovchilar (onlayn): {drivers_online}/{drivers}\n"
     "Ochiq: {open}\n"
@@ -131,19 +142,20 @@ STATS = (
 )
 
 TARIFF_INFO = (
-    "⚙️ <b>Tarif</b>\n\n"
+    "⚙️ <b>Tarif</b> — {area}\n\n"
     "Baza: {base}\n"
     "1 km: {per_km}\n"
     "Taxminiy km (lokatsiyasiz): {default_km}\n"
     "Komissiya: {commission_pct}%\n\n"
-    "O‘zgartirish: /set_base 8000 · /set_km 2000\n"
-    "/set_commission 10 · /set_default_km 5"
+    "Mahalla uchun default: baza 7000 · km 1500 · ~3 km · 10%\n"
+    "O‘zgartirish: /set_base 7000 · /set_km 1500\n"
+    "/set_commission 10 · /set_default_km 3"
 )
 
 DRIVERS_HEADER = "🚗 Haydovchilar ({count}):"
 
 ASK_OFFER_PRICE = (
-    "💵 Yangi narxni so‘mda yozing (masalan: 25000).\n"
+    "💵 Yangi narxni so‘mda yozing (masalan: 15000).\n"
     "Bekor: /cancel"
 )
 
@@ -162,8 +174,9 @@ ONLY_CUSTOMER = "Bu faqat mijozlar uchun."
 ONLY_ADMIN = "Bu faqat admin uchun."
 
 HELP = (
-    "🚕 <b>Vositachi</b>\n\n"
-    "• Mijoz: safar so‘raydi, narxni ko‘radi, baholaydi\n"
+    "🚕 <b>{bot_name}</b>\n"
+    "🏘 {area}\n\n"
+    "• Mijoz: mahalla safari so‘raydi, narxni ko‘radi, baholaydi\n"
     "• Haydovchi: onlayn/oflayn, qabul, narx, holat\n"
     "• Admin: tarif, safarlar, statistika\n\n"
     "/start — boshlash"

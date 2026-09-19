@@ -8,7 +8,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 
 from vositachi import database as db
 from vositachi import texts
-from vositachi.config import ADMIN_IDS, BOT_NAME
+from vositachi.config import ADMIN_IDS, AREA_LABEL, BOT_NAME
 from vositachi.keyboards import (
     accept_keyboard,
     admin_driver_keyboard,
@@ -61,6 +61,26 @@ def _is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
 
 
+def _label_place(text: str) -> str:
+    """Matn manziliga mahalla kontekstini qo‘shadi (GPS geo-fence yo‘q)."""
+    raw = (text or "").strip()
+    if not raw:
+        return raw
+    low = raw.casefold()
+    markers = ("saryuz", "bekobod", AREA_LABEL.casefold())
+    if any(m and m in low for m in markers):
+        return raw
+    return f"{AREA_LABEL}: {raw}"
+
+
+def _ask_pickup() -> str:
+    return texts.ASK_PICKUP.format(area=AREA_LABEL)
+
+
+def _ask_dest() -> str:
+    return texts.ASK_DESTINATION.format(area=AREA_LABEL)
+
+
 def _menu_for(user: dict[str, Any] | None, user_id: int):
     role = (user or {}).get("role")
     if role == "customer":
@@ -78,7 +98,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         return ConversationHandler.END
     context.user_data.clear()
     await update.message.reply_html(
-        texts.WELCOME.format(bot_name=BOT_NAME),
+        texts.WELCOME.format(bot_name=BOT_NAME, area=AREA_LABEL),
         reply_markup=role_keyboard(uid),
     )
     return ConversationHandler.END
@@ -86,7 +106,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message:
-        await update.message.reply_html(texts.HELP)
+        await update.message.reply_html(
+            texts.HELP.format(bot_name=BOT_NAME, area=AREA_LABEL)
+        )
 
 
 async def cancel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -110,7 +132,7 @@ async def choose_role(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if text == "👤 Mijoz":
         db.set_role(uid, "customer")
         await update.message.reply_html(
-            texts.ROLE_CHOSEN_CUSTOMER,
+            texts.ROLE_CHOSEN_CUSTOMER.format(area=AREA_LABEL),
             reply_markup=customer_menu(),
         )
         return
@@ -118,7 +140,7 @@ async def choose_role(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         db.set_role(uid, "driver")
         user = db.get_user(uid)
         await update.message.reply_html(
-            texts.ROLE_CHOSEN_DRIVER,
+            texts.ROLE_CHOSEN_DRIVER.format(area=AREA_LABEL),
             reply_markup=driver_menu(online=bool((user or {}).get("driver_online"))),
         )
         return
@@ -128,7 +150,7 @@ async def choose_role(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             return
         db.set_role(uid, "admin")
         await update.message.reply_html(
-            texts.ROLE_CHOSEN_ADMIN,
+            texts.ROLE_CHOSEN_ADMIN.format(bot_name=BOT_NAME, area=AREA_LABEL),
             reply_markup=admin_menu(),
         )
 
@@ -138,7 +160,7 @@ async def switch_role(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if uid is None or not update.message:
         return
     await update.message.reply_html(
-        texts.WELCOME.format(bot_name=BOT_NAME),
+        texts.WELCOME.format(bot_name=BOT_NAME, area=AREA_LABEL),
         reply_markup=role_keyboard(uid),
     )
 
@@ -157,7 +179,7 @@ async def start_ride_request(
         await update.message.reply_text(texts.ONLY_CUSTOMER)
         return ConversationHandler.END
     context.user_data["ride"] = {}
-    await update.message.reply_html(texts.ASK_PICKUP, reply_markup=location_kb())
+    await update.message.reply_html(_ask_pickup(), reply_markup=location_kb())
     return WAIT_PICKUP
 
 
@@ -171,19 +193,21 @@ async def receive_pickup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     ride_draft: dict[str, Any] = context.user_data.setdefault("ride", {})
     if update.message.location:
         loc = update.message.location
-        ride_draft["pickup"] = f"Lokatsiya ({loc.latitude:.5f}, {loc.longitude:.5f})"
+        ride_draft["pickup"] = (
+            f"{AREA_LABEL} · Lokatsiya ({loc.latitude:.5f}, {loc.longitude:.5f})"
+        )
         ride_draft["pickup_lat"] = loc.latitude
         ride_draft["pickup_lon"] = loc.longitude
     else:
         text = (update.message.text or "").strip()
         if not text or text.startswith("/"):
-            await update.message.reply_html(texts.ASK_PICKUP, reply_markup=location_kb())
+            await update.message.reply_html(_ask_pickup(), reply_markup=location_kb())
             return WAIT_PICKUP
-        ride_draft["pickup"] = text[:200]
+        ride_draft["pickup"] = _label_place(text[:200])
         ride_draft.pop("pickup_lat", None)
         ride_draft.pop("pickup_lon", None)
 
-    await update.message.reply_html(texts.ASK_DESTINATION, reply_markup=location_kb())
+    await update.message.reply_html(_ask_dest(), reply_markup=location_kb())
     return WAIT_DEST
 
 
@@ -198,18 +222,16 @@ async def receive_dest(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     if update.message.location:
         loc = update.message.location
         ride_draft["destination"] = (
-            f"Lokatsiya ({loc.latitude:.5f}, {loc.longitude:.5f})"
+            f"{AREA_LABEL} · Lokatsiya ({loc.latitude:.5f}, {loc.longitude:.5f})"
         )
         ride_draft["dest_lat"] = loc.latitude
         ride_draft["dest_lon"] = loc.longitude
     else:
         text = (update.message.text or "").strip()
         if not text or text.startswith("/"):
-            await update.message.reply_html(
-                texts.ASK_DESTINATION, reply_markup=location_kb()
-            )
+            await update.message.reply_html(_ask_dest(), reply_markup=location_kb())
             return WAIT_DEST
-        ride_draft["destination"] = text[:200]
+        ride_draft["destination"] = _label_place(text[:200])
         ride_draft.pop("dest_lat", None)
         ride_draft.pop("dest_lon", None)
 
@@ -256,6 +278,7 @@ async def receive_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
     msg = texts.REQUEST_CREATED.format(
         ride_id=ride["id"],
+        area=AREA_LABEL,
         pickup=ride["pickup"],
         destination=ride["destination"],
         phone=ride.get("phone") or "—",
@@ -273,6 +296,7 @@ async def receive_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         customer = db.get_user(uid)
         notify = texts.NEW_RIDE_FOR_DRIVER.format(
             ride_id=ride["id"],
+            area=AREA_LABEL,
             pickup=ride["pickup"],
             destination=ride["destination"],
             phone=ride.get("phone") or "—",
@@ -296,7 +320,10 @@ async def receive_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         try:
             await context.bot.send_message(
                 chat_id=admin_id,
-                text=f"🆕 Yangi so‘rov #{ride['id']} — {db.money(ride.get('estimated_price'))}",
+                text=(
+                    f"🆕 {AREA_LABEL} · so‘rov #{ride['id']} — "
+                    f"{db.money(ride.get('estimated_price'))}"
+                ),
                 reply_markup=admin_ride_keyboard(ride["id"]),
             )
         except Exception:
@@ -321,7 +348,7 @@ async def driver_go_online(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
     db.set_driver_online(uid, True)
     await update.message.reply_text(
-        texts.DRIVER_ONLINE,
+        texts.DRIVER_ONLINE.format(area=AREA_LABEL),
         reply_markup=driver_menu(online=True),
     )
 
@@ -354,7 +381,7 @@ async def show_open_rides(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     for ride in rides:
         price = db.money(ride.get("estimated_price"))
         body = (
-            f"#{ride['id']}\n"
+            f"#{ride['id']} · {AREA_LABEL}\n"
             f"📍 {ride['pickup']}\n"
             f"🏁 {ride['destination']}\n"
             f"💰 {price}"
@@ -379,6 +406,7 @@ async def show_active_ride(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     price = ride.get("agreed_price") or ride.get("estimated_price")
     body = (
         f"🚕 #{ride['id']} — {STATUS_LABEL.get(ride['status'], ride['status'])}\n"
+        f"🏘 {AREA_LABEL}\n"
         f"📍 {ride['pickup']}\n"
         f"🏁 {ride['destination']}\n"
         f"💰 {db.money(price)}\n"
@@ -459,6 +487,7 @@ async def _ride_callback(
         await query.edit_message_text(
             texts.RIDE_ACCEPTED_DRIVER.format(
                 ride_id=ride_id,
+                area=AREA_LABEL,
                 pickup=ride["pickup"],
                 destination=ride["destination"],
                 price=db.money(price),
@@ -699,6 +728,7 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     s = db.get_stats()
     await update.message.reply_html(
         texts.STATS.format(
+            area=AREA_LABEL,
             users=s["users"],
             drivers=s["drivers"],
             drivers_online=s["drivers_online"],
@@ -724,6 +754,7 @@ async def admin_tariff(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     t = db.get_tariff()
     await update.message.reply_html(
         texts.TARIFF_INFO.format(
+            area=AREA_LABEL,
             base=db.money(t["base_fare"]),
             per_km=db.money(t["per_km"]),
             default_km=t["default_estimate_km"],
@@ -910,7 +941,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     if not user or not user.get("role"):
         await update.message.reply_html(
-            texts.WELCOME.format(bot_name=BOT_NAME),
+            texts.WELCOME.format(bot_name=BOT_NAME, area=AREA_LABEL),
             reply_markup=role_keyboard(uid),
         )
         return
