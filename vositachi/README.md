@@ -63,5 +63,19 @@ Mahalla defaultlari: baza **7000**, km **1500**, taxminiy **3** km, komissiya **
 | `VOSITACHI_BOT_NAME` | yo‘q | default: Saryuz Vositachi |
 | `VOSITACHI_AREA_LABEL` | yo‘q | default: Bekobod / Saryuz |
 | `VOSITACHI_DB` | yo‘q | default: `data/vositachi.db` |
+| `VOSITACHI_ADMIN_PASSWORD` | panel uchun | veb admin kirish |
+| `VOSITACHI_ADMIN_SESSION_SECRET` | yo‘q | sessiya cookie |
 
 Sirlar inventar qilinmaydi — faqat `.env.example` namunasi.
+
+## Veb admin panel
+
+Telegram pollingini buzmasdan — **alohida jarayon** (bot bilan bir xil `DATA_DIR` / `VOSITACHI_DB`):
+
+```bash
+# vositachi/.env: VOSITACHI_ADMIN_PASSWORD=... (ixtiyoriy SESSION_SECRET)
+python -m vositachi.admin_web
+# yoki: uvicorn vositachi.admin_web.app:app --host 0.0.0.0 --port 8080
+```
+
+`python -m vositachi` o‘zgarmagan — faqat Telegram bot.
