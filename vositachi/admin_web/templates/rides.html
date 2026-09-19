@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Safarlar{% endblock %}
+{% block content %}
+<h1>Safarlar</h1>
+<p class="lead">Holat bo‘yicha ro‘yxat. Bekor qilish ochiq / faol safarlar uchun.</p>
+
+<div class="tabs">
+  {% for key, label in tabs %}
+  <a class="tab {% if current_status == key %}active{% endif %}" href="/rides?status={{ key }}">{{ label }}</a>
+  {% endfor %}
+</div>
+
+<div class="panel">
+  {% if not rides %}
+  <p class="empty">Safarlar yo‘q.</p>
+  {% else %}
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Holat</th>
+        <th>Qayerdan → Qayerga</th>
+        <th>Mijoz</th>
+        <th>Haydovchi</th>
+        <th>Narx</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rides %}
+      <tr>
+        <td>{{ r.id }}</td>
+        <td><span class="badge">{{ status_labels.get(r.status, r.status) }}</span></td>
+        <td>{{ r.pickup }} → {{ r.destination }}</td>
+        <td>{{ r.customer_name }}</td>
+        <td>{{ r.driver_name }}</td>
+        <td>{{ r.price_label }}</td>
+        <td>
+          {% if r.cancellable %}
+          <form method="post" action="/rides/{{ r.id }}/cancel" onsubmit="return confirm('Safar #{{ r.id }} bekor qilinsinmi?');">
+            <button type="submit" class="btn danger small">Bekor qilish</button>
+          </form>
+          {% else %}
+          —
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Bosh sahifa{% endblock %}
+{% block content %}
+<h1>Bosh sahifa</h1>
+<p class="lead">Ochiq / faol / tugagan safarlar va onlayn haydovchilar.</p>
+
+<div class="stats">
+  <div class="stat">
+    <div class="label">Ochiq safarlar</div>
+    <div class="value">{{ stats.open }}</div>
+  </div>
+  <div class="stat">
+    <div class="label">Faol safarlar</div>
+    <div class="value">{{ stats.active }}</div>
+  </div>
+  <div class="stat">
+    <div class="label">Tugagan</div>
+    <div class="value">{{ stats.done }}</div>
+  </div>
+  <div class="stat">
+    <div class="label">Onlayn haydovchilar</div>
+    <div class="value">{{ stats.drivers_online }}</div>
+  </div>
+  <div class="stat">
+    <div class="label">Bekor</div>
+    <div class="value">{{ stats.cancelled }}</div>
+  </div>
+  <div class="stat">
+    <div class="label">Komissiya (tugagan)</div>
+    <div class="value" style="font-size:1.1rem">{{ money(stats.commission_sum) }}</div>
+  </div>
+</div>
+
+<div class="panel">
+  <p style="margin:0 0 0.75rem"><strong>Tezkor havolalar</strong></p>
+  <div class="tabs">
+    <a class="tab" href="/rides?status=open">Ochiq safarlar</a>
+    <a class="tab" href="/rides?status=active">Faol safarlar</a>
+    <a class="tab" href="/drivers">Haydovchilar</a>
+    <a class="tab" href="/tariff">Tarif sozlamalari</a>
+  </div>
+  <p class="meta">DB: {{ db_path }}</p>
+</div>
+{% endblock %}
