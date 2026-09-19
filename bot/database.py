@@ -496,6 +496,8 @@ def _migrate_features(conn: sqlite3.Connection) -> None:
         )
         """
     )
+
+
 @contextmanager
 def get_connection():
     conn = sqlite3.connect(DATABASE_PATH)
