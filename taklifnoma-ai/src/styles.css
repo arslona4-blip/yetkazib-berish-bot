@@ -1,0 +1,364 @@
+:root {
+  --bg: #071a15;
+  --bg-2: #0f3d32;
+  --ink: #f3ede0;
+  --muted: rgba(243, 237, 224, 0.68);
+  --accent: #d4af6a;
+  --accent-soft: rgba(212, 175, 106, 0.18);
+  --line: rgba(243, 237, 224, 0.14);
+  --font: 'Figtree', system-ui, sans-serif;
+  --display: 'Cormorant', Georgia, serif;
+  --safe: env(safe-area-inset-bottom, 0px);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  color: var(--ink);
+  background:
+    radial-gradient(90% 70% at 15% -5%, rgba(212, 175, 106, 0.18), transparent 55%),
+    radial-gradient(80% 60% at 100% 10%, rgba(36, 120, 96, 0.45), transparent 50%),
+    linear-gradient(165deg, #05201a 0%, var(--bg) 40%, #0a2c24 100%);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.shell {
+  width: min(980px, 100%);
+  margin: 0 auto;
+  padding: 20px 16px calc(28px + var(--safe));
+  position: relative;
+}
+
+.atmosphere {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Ccircle cx='2' cy='2' r='1.2' fill='%23d4af6a' opacity='0.18'/%3E%3C/svg%3E");
+  opacity: 0.55;
+  animation: drift 18s linear infinite;
+}
+
+@keyframes drift {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 120px 80px;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes soft-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0 transparent);
+  }
+  50% {
+    filter: drop-shadow(0 0 18px rgba(212, 175, 106, 0.35));
+  }
+}
+
+.home {
+  min-height: calc(100dvh - 40px);
+  display: grid;
+  align-content: start;
+  gap: 36px;
+}
+
+.hero {
+  padding: clamp(48px, 14vh, 120px) 4px 8px;
+  animation: rise 0.55s ease both;
+}
+
+.brand,
+.brand-mini {
+  font-family: var(--display);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  animation: soft-glow 4.5s ease-in-out infinite;
+}
+
+.brand {
+  margin: 0;
+  font-size: clamp(2.8rem, 9vw, 4.6rem);
+  line-height: 0.95;
+}
+
+.hero h1 {
+  margin: 18px 0 12px;
+  font-family: var(--display);
+  font-size: clamp(1.55rem, 4.8vw, 2.35rem);
+  font-weight: 600;
+  line-height: 1.15;
+  max-width: 14ch;
+}
+
+.lead {
+  margin: 0 0 28px;
+  color: var(--muted);
+  font-weight: 600;
+  line-height: 1.45;
+  max-width: 34ch;
+}
+
+.hero-cta {
+  display: flex;
+  gap: 10px;
+}
+
+.primary,
+.secondary,
+.ghost,
+.event-btn {
+  border: 0;
+  border-radius: 12px;
+}
+
+.primary {
+  background: linear-gradient(135deg, #e2c27a, #b88a3d);
+  color: #1a1208;
+  font-weight: 800;
+  padding: 14px 22px;
+  box-shadow: 0 12px 30px rgba(184, 138, 61, 0.28);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.primary:hover {
+  transform: translateY(-1px);
+}
+
+.secondary {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-weight: 700;
+  padding: 13px 18px;
+}
+
+.ghost {
+  background: transparent;
+  color: var(--muted);
+  font-weight: 700;
+  padding: 8px 4px;
+}
+
+.events {
+  animation: rise 0.65s ease 0.08s both;
+}
+
+.events h2 {
+  margin: 0 0 14px;
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.event-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.event-btn {
+  text-align: left;
+  padding: 16px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  display: grid;
+  gap: 4px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.event-btn:hover {
+  border-color: rgba(212, 175, 106, 0.45);
+  background: var(--accent-soft);
+}
+
+.event-btn strong {
+  font-size: 1.05rem;
+}
+
+.event-btn span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.studio-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.brand-mini {
+  font-size: 1.45rem;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.studio-layout {
+  display: grid;
+  gap: 18px;
+}
+
+.preview-wrap {
+  display: grid;
+  place-items: center;
+  padding: 8px;
+  animation: rise 0.45s ease both;
+}
+
+.preview {
+  width: min(100%, 360px);
+  height: auto;
+  border-radius: 8px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+
+.form {
+  display: grid;
+  gap: 12px;
+  animation: rise 0.5s ease 0.05s both;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.field span,
+.themes legend {
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
+  padding: 12px 12px;
+  outline: none;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  border-color: rgba(212, 175, 106, 0.55);
+}
+
+.field textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.row2 {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 10px;
+}
+
+.themes {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.theme-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.theme-swatch {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  padding: 0;
+}
+
+.theme-swatch.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.status {
+  margin: 4px 0 0;
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+@media (min-width: 860px) {
+  .studio-layout {
+    grid-template-columns: minmax(280px, 380px) 1fr;
+    align-items: start;
+  }
+
+  .preview {
+    width: 100%;
+    position: sticky;
+    top: 16px;
+  }
+
+  .event-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 420px) {
+  .event-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
