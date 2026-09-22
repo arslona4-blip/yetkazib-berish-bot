@@ -81,6 +81,7 @@ JADVAL_DIR = BASE_DIR / "jadval"
 JADVAL_PATH = (os.getenv("JADVAL_PATH") or "jadval-fedd3d").strip().strip("/")
 KICHKINTOY_DIR = BASE_DIR / "kichkintoy"
 SLAYD_DIR = BASE_DIR / "slayd"
+TAKLIFNOMA_DIR = BASE_DIR / "taklifnoma"
 PHOTOS_DIR = Path(DATABASE_PATH).resolve().parent / "photos"
 
 
@@ -1219,6 +1220,13 @@ async def serve_slayd_index(_request: web.Request) -> web.FileResponse:
     return web.FileResponse(index)
 
 
+async def serve_taklifnoma_index(_request: web.Request) -> web.FileResponse:
+    index = TAKLIFNOMA_DIR / "index.html"
+    if not index.is_file():
+        raise web.HTTPNotFound(text="Taklifnoma topilmadi")
+    return web.FileResponse(index)
+
+
 async def api_ai(request: web.Request) -> web.Response:
     """Mini App AI chat — katalog / retsept / OpenAI (lokal savat uchun)."""
     try:
@@ -1424,6 +1432,13 @@ def create_app() -> web.Application:
         app.router.add_static("/slayd/", SLAYD_DIR, show_index=False)
     else:
         logger.warning("slayd papkasi topilmadi: %s", SLAYD_DIR)
+
+    if TAKLIFNOMA_DIR.is_dir() and (TAKLIFNOMA_DIR / "index.html").is_file():
+        app.router.add_get("/taklifnoma", serve_taklifnoma_index)
+        app.router.add_get("/taklifnoma/", serve_taklifnoma_index)
+        app.router.add_static("/taklifnoma/", TAKLIFNOMA_DIR, show_index=False)
+    else:
+        logger.warning("taklifnoma papkasi topilmadi: %s", TAKLIFNOMA_DIR)
 
     if MINIAPP_DIR.is_dir():
         app.router.add_get("/", serve_index)
