@@ -99,7 +99,11 @@ button {
 }
 
 .hero {
-  padding: clamp(48px, 14vh, 120px) 4px 8px;
+  min-height: calc(100dvh - 56px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(32px, 8vh, 80px) 4px 28px;
   animation: rise 0.55s ease both;
 }
 
