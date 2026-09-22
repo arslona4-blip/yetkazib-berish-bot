@@ -322,13 +322,16 @@ button {
   width: 42px;
   height: 42px;
   border-radius: 999px;
-  border: 2px solid transparent;
+  border: 2px solid rgba(44, 24, 16, 0.18);
   padding: 0;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
 }
 
 .theme-swatch.on {
   border-color: var(--gold);
-  box-shadow: 0 0 0 3px var(--gold-soft);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.35),
+    0 0 0 3px var(--gold-soft);
 }
 
 .actions {
