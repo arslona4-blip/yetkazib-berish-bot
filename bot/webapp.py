@@ -81,6 +81,7 @@ JADVAL_DIR = BASE_DIR / "jadval"
 JADVAL_PATH = (os.getenv("JADVAL_PATH") or "jadval-fedd3d").strip().strip("/")
 KICHKINTOY_DIR = BASE_DIR / "kichkintoy"
 SLAYD_DIR = BASE_DIR / "slayd"
+BAXTNOMA_DIR = BASE_DIR / "baxtnoma"
 PHOTOS_DIR = Path(DATABASE_PATH).resolve().parent / "photos"
 
 
@@ -1219,6 +1220,13 @@ async def serve_slayd_index(_request: web.Request) -> web.FileResponse:
     return web.FileResponse(index)
 
 
+async def serve_baxtnoma_index(_request: web.Request) -> web.FileResponse:
+    index = BAXTNOMA_DIR / "index.html"
+    if not index.is_file():
+        raise web.HTTPNotFound(text="Baxtnoma topilmadi")
+    return web.FileResponse(index)
+
+
 async def api_ai(request: web.Request) -> web.Response:
     """Mini App AI chat — katalog / retsept / OpenAI (lokal savat uchun)."""
     try:
@@ -1424,6 +1432,13 @@ def create_app() -> web.Application:
         app.router.add_static("/slayd/", SLAYD_DIR, show_index=False)
     else:
         logger.warning("slayd papkasi topilmadi: %s", SLAYD_DIR)
+
+    if BAXTNOMA_DIR.is_dir() and (BAXTNOMA_DIR / "index.html").is_file():
+        app.router.add_get("/baxtnoma", serve_baxtnoma_index)
+        app.router.add_get("/baxtnoma/", serve_baxtnoma_index)
+        app.router.add_static("/baxtnoma/", BAXTNOMA_DIR, show_index=False)
+    else:
+        logger.warning("baxtnoma papkasi topilmadi: %s", BAXTNOMA_DIR)
 
     if MINIAPP_DIR.is_dir():
         app.router.add_get("/", serve_index)
