@@ -59,12 +59,26 @@ async def notify_admins_text(
     else:
         for chat_id in targets:
             try:
-                await bot.send_message(
-                    chat_id=chat_id,
-                    text=text,
-                    reply_markup=reply_markup,
-                    disable_notification=False,
-                )
+                try:
+                    await bot.send_message(
+                        chat_id=chat_id,
+                        text=text,
+                        reply_markup=reply_markup,
+                        disable_notification=False,
+                    )
+                except Exception as markup_exc:
+                    if reply_markup is None:
+                        raise
+                    logger.warning(
+                        "Admin xabar klaviaturasiz qayta yuborildi chat=%s: %s",
+                        chat_id,
+                        markup_exc,
+                    )
+                    await bot.send_message(
+                        chat_id=chat_id,
+                        text=text,
+                        disable_notification=False,
+                    )
                 if latitude is not None and longitude is not None:
                     try:
                         await bot.send_location(

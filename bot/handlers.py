@@ -342,6 +342,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             parse_mode="HTML",
         )
     start_rows: list[list[InlineKeyboardButton]] = []
+    if is_admin(user.id):
+        app_btn = admin_app_inline_button("🖥 Admin ilova")
+        if app_btn:
+            start_rows.append([app_btn])
     shop_btn = shop_inline_button("🛒 Do'konni ochish")
     if shop_btn:
         start_rows.append([shop_btn])

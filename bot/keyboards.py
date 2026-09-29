@@ -1216,9 +1216,9 @@ def admin_order_keyboard(
         )
 
     rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
-    tel = phone_tel_href(phone)
-    if tel:
-        rows.insert(0, [InlineKeyboardButton("📞 Qo'ng'iroq", url=tel)])
+    # tel:+998… inline tugma URLsi Telegramda yaroqsiz va butun xabarni yubormaydi.
+    # Telefon buyurtma matnida qoladi.
+    _ = phone
     rows.append(
         [
             InlineKeyboardButton(
@@ -1261,9 +1261,7 @@ def courier_order_keyboard(
         if status in ORDER_STATUS_LABELS
     ]
     rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
-    tel = phone_tel_href(phone)
-    if tel:
-        rows.insert(0, [InlineKeyboardButton("📞 Qo'ng'iroq", url=tel)])
+    _ = phone
     return InlineKeyboardMarkup(rows)
 
 
