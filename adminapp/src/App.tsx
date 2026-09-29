@@ -49,7 +49,10 @@ function categoryChipLabel(
 }
 
 function readTgInitData(): string {
-  return (window.Telegram?.WebApp?.initData || '').trim()
+  const fromSdk = (window.Telegram?.WebApp?.initData || '').trim()
+  if (fromSdk) return fromSdk
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+  return (hash.get('tgWebAppData') || '').trim()
 }
 
 const ADMIN_ID_KEY = 'baraka-admin-last-id'
@@ -963,10 +966,7 @@ export default function App() {
             </>
           ) : (
             <>
-              <p>
-                <b>Bir martalik kod shart emas.</b> O‘zingizning Telegram ID +
-                PIN yozing.
-              </p>
+              <p>PIN kerak emas. Telegram ID ni yozing va kiring.</p>
               <div className="field">
                 <label>Telegram Admin ID</label>
                 <input
@@ -974,21 +974,9 @@ export default function App() {
                   onChange={(e) =>
                     setPinForm((s) => ({ ...s, adminId: e.target.value }))
                   }
-                  placeholder="Masalan: 5123456789"
+                  placeholder="1465597688"
                   inputMode="numeric"
                   autoComplete="username"
-                />
-              </div>
-              <div className="field">
-                <label>PIN</label>
-                <input
-                  type="password"
-                  value={pinForm.pin}
-                  onChange={(e) =>
-                    setPinForm((s) => ({ ...s, pin: e.target.value }))
-                  }
-                  placeholder="••••"
-                  autoComplete="current-password"
                 />
               </div>
               {error ? <div className="error">{error}</div> : null}
@@ -996,24 +984,20 @@ export default function App() {
                 type="button"
                 className="btn btn-primary"
                 style={{ width: '100%' }}
-                disabled={busy || !pinForm.adminId.trim() || !pinForm.pin.trim()}
+                disabled={busy || !pinForm.adminId.trim()}
                 onClick={() => {
                   rememberAdminId(pinForm.adminId)
-                  void bootstrap({
-                    mode: 'pin',
-                    pin: pinForm.pin,
-                    adminId: Number(pinForm.adminId),
-                  })
+                  void loginWithCode()
                 }}
               >
-                PIN bilan kirish
+                Kirish
               </button>
               <p className="muted-sm" style={{ marginTop: 12 }}>
-                Kodsiz: botda{' '}
+                Bot ichida{' '}
                 <a href={botLink} target="_blank" rel="noreferrer">
                   @{botUser.replace(/^@/, '')}
                 </a>{' '}
-                → <b>🖥 Admin ilova</b> tugmasini bosing.
+                → <b>Admin ilova</b> PIN siz ochiladi.
               </p>
               {!tgReady ? (
                 <p className="muted-sm">Telegram kutilyapti…</p>

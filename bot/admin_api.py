@@ -131,14 +131,14 @@ async def admin_login_info(_request: web.Request) -> web.Response:
             "ok": True,
             "shop_name": SHOP_NAME,
             "bot_username": BOT_USERNAME,
-            "pin_login_enabled": bool(ADMIN_APP_PIN),
-            "hint": "Bir martalik kod shart emas — Admin ID + PIN yetarli.",
+            "pin_login_enabled": False,
+            "hint": "PIN kerak emas. Telegramdagi Admin ilova to‘g‘ridan-to‘g‘ri ochiladi.",
         }
     )
 
 
 async def admin_login(request: web.Request) -> web.Response:
-    """Brauzer: Admin ID + botdan kod → session token."""
+    """Brauzer: admin ID yetarli. PIN so‘ralmaydi."""
     try:
         body = await request.json()
     except Exception as exc:
@@ -150,10 +150,10 @@ async def admin_login(request: web.Request) -> web.Response:
     admin_id = int(admin_raw)
     if admin_id not in ADMIN_IDS:
         raise web.HTTPForbidden(text="Bu ID admin ro'yxatida yo'q")
-    if not consume_admin_login_code(admin_id, code):
+    if code and not consume_admin_login_code(admin_id, code):
         raise web.HTTPUnauthorized(text="Kod noto'g'ri yoki eskirgan")
     token = create_admin_session(admin_id)
-    logger.info("Admin %s login via OTP session", admin_id)
+    logger.info("Admin %s login", admin_id)
     return web.json_response(
         {
             "ok": True,
