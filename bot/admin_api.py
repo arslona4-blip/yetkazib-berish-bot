@@ -1081,6 +1081,83 @@ async def admin_telegram_test(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "sent": sent, "targets": targets})
 
 
+async def admin_product_from_photo(request: web.Request) -> web.Response:
+    """Rasm → AI/demo draft maydonlar (saqlashdan oldin tasdiq uchun)."""
+    _require_admin(request)
+    from bot.product_vision import (
+        build_description,
+        extract_product_fields,
+        match_category_id,
+    )
+
+    force_mock = False
+    image_bytes: bytes | None = None
+    mime = "image/jpeg"
+
+    ctype = (request.content_type or "").lower()
+    if "multipart/" in ctype:
+        reader = await request.multipart()
+        while True:
+            part = await reader.next()
+            if part is None:
+                break
+            name = part.name or ""
+            if name in {"photo", "file", "image"}:
+                image_bytes = await part.read(decode=False)
+                if part.headers.get("Content-Type"):
+                    mime = part.headers["Content-Type"].split(";")[0].strip() or mime
+            elif name == "force_mock":
+                raw = (await part.text()).strip().lower()
+                force_mock = raw in {"1", "true", "yes", "on"}
+    else:
+        try:
+            body = await request.json()
+        except Exception as exc:
+            raise web.HTTPBadRequest(text="Rasm (multipart) yoki JSON kerak") from exc
+        b64 = str(body.get("image_base64") or body.get("photo_base64") or "").strip()
+        if not b64:
+            raise web.HTTPBadRequest(text="image_base64 kerak")
+        if "," in b64 and b64.startswith("data:"):
+            header, b64 = b64.split(",", 1)
+            if ";" in header:
+                mime = header[5:].split(";")[0] or mime
+        import base64
+
+        try:
+            image_bytes = base64.b64decode(b64, validate=False)
+        except Exception as exc:
+            raise web.HTTPBadRequest(text="image_base64 noto‘g‘ri") from exc
+        mime = str(body.get("mime_type") or mime).split(";")[0].strip() or mime
+        force_mock = bool(body.get("force_mock"))
+
+    if not image_bytes:
+        raise web.HTTPBadRequest(text="Rasm fayli kerak (photo)")
+    if len(image_bytes) > 12 * 1024 * 1024:
+        raise web.HTTPBadRequest(text="Rasm juda katta (max 12MB)")
+
+    draft = extract_product_fields(
+        image_bytes, mime_type=mime, force_mock=force_mock
+    )
+    categories = get_categories(active_only=True)
+    category_id = match_category_id(draft.category_hint, categories)
+    payload = draft.to_dict()
+    payload["category_id"] = category_id
+    payload["description"] = build_description(draft) or draft.description
+    payload["suggested_name"] = draft.display_name()
+    return web.json_response(
+        {
+            "ok": True,
+            "draft": payload,
+            "demo": draft.provider != "openai",
+            "message": (
+                "Demo rejim — maydonlarni tekshiring."
+                if draft.provider != "openai"
+                else "AI draft — saqlashdan oldin tekshiring."
+            ),
+        }
+    )
+
+
 def register_admin_routes(app: web.Application) -> None:
     app.router.add_get("/api/admin/login-info", admin_login_info)
     app.router.add_post("/api/admin/login", admin_login)
@@ -1104,6 +1181,7 @@ def register_admin_routes(app: web.Application) -> None:
     )
     app.router.add_get("/api/admin/products", admin_products)
     app.router.add_post("/api/admin/products", admin_product_create)
+    app.router.add_post("/api/admin/products/from-photo", admin_product_from_photo)
     app.router.add_get("/api/admin/products/export", admin_products_export)
     app.router.add_post("/api/admin/products/import", admin_products_import)
     app.router.add_get("/api/admin/products/barcode/{code}", admin_product_by_barcode)

@@ -1733,7 +1733,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         f"🛠 <b>Admin panel</b>\n"
         f"{format_now_html()}\n\n"
         "🛒 Do'kon — mijoz ko‘rinishi\n"
-        "🛍 Mahsulotlar — qo‘shish / tahrirlash",
+        "🛍 Mahsulotlar — qo‘shish / foto / tahrirlash",
         reply_markup=admin_menu_keyboard(),
         parse_mode="HTML",
     )
@@ -1919,6 +1919,7 @@ async def show_admin_products_menu(
         f"📦 Jami: <b>{len(products)}</b> ta · "
         f"📁 Toifa: <b>{len(categories)}</b> ta\n\n"
         "➕ Yangi mahsulot — qo'shish\n"
+        "📷 Foto bilan — AI o‘qib taklif qiladi\n"
         "📋 Spiska — tahrirlash\n"
         "🗂 Toifalar — guruhlar"
     )

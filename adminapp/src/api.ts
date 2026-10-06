@@ -30,8 +30,9 @@ export function clearAuth() {
   }
 }
 
-function headers(auth: AuthState | null): HeadersInit {
-  const h: Record<string, string> = { 'Content-Type': 'application/json' }
+function headers(auth: AuthState | null, json = true): HeadersInit {
+  const h: Record<string, string> = {}
+  if (json) h['Content-Type'] = 'application/json'
   if (!auth) return h
   if (auth.mode === 'tg' && auth.initData) {
     h['X-Telegram-Init-Data'] = auth.initData
@@ -216,6 +217,35 @@ export const api = {
       auth,
       { method: 'POST', body: JSON.stringify(body) },
     ),
+  productFromPhoto: async (auth: AuthState | null, file: File) => {
+    const form = new FormData()
+    form.append('photo', file)
+    const res = await fetch('/api/admin/products/from-photo', {
+      method: 'POST',
+      headers: headers(auth, false),
+      body: form,
+    })
+    if (!res.ok) {
+      throw new Error((await res.text()) || `HTTP ${res.status}`)
+    }
+    return res.json() as Promise<{
+      ok: boolean
+      demo: boolean
+      message: string
+      draft: {
+        name: string
+        brand: string
+        price: number | null
+        category_hint: string
+        category_id: number | null
+        unit: string
+        description: string
+        suggested_name: string
+        confidence: number
+        provider: string
+      }
+    }>
+  },
   productByBarcode: (auth: AuthState | null, code: string) =>
     req<{ ok: boolean; product: import('./types').Product }>(
       `/api/admin/products/barcode/${encodeURIComponent(code)}`,
