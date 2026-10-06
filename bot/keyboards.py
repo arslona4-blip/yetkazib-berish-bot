@@ -911,6 +911,11 @@ def admin_products_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
+                    "📷 Foto bilan qo‘shish", callback_data="admin_prod:camera"
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     "🗂 Toifalar", callback_data="admin_prod:cats"
                 )
             ],

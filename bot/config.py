@@ -227,6 +227,8 @@ OPENAI_BASE_URL = os.getenv(
     "OPENAI_BASE_URL", "https://api.openai.com/v1"
 ).rstrip("/")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+# Kamera mahsulot OCR (bo‘sh bo‘lsa OPENAI_MODEL)
+OPENAI_VISION_MODEL = os.getenv("OPENAI_VISION_MODEL", "").strip() or OPENAI_MODEL
 
 # Admin PWA brauzer kirishi (kodsiz). Railway’da o‘zgartirish mumkin.
 ADMIN_APP_PIN = os.getenv("ADMIN_APP_PIN", "7788").strip()
