@@ -1918,7 +1918,8 @@ async def show_admin_products_menu(
         "🛍 <b>Mahsulotlar</b>\n"
         f"📦 Jami: <b>{len(products)}</b> ta · "
         f"📁 Toifa: <b>{len(categories)}</b> ta\n\n"
-        "➕ Yangi mahsulot — qo'shish\n"
+        "➕ Yangi mahsulot — qo‘lda qo‘shish\n"
+        "📷 Foto bilan qo‘shish — AI draft\n"
         "📋 Spiska — tahrirlash\n"
         "🗂 Toifalar — guruhlar"
     )

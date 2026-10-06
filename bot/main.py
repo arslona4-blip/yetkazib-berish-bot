@@ -43,6 +43,7 @@ from bot.features_handlers import (
     show_recurring_list,
     stop_recur_command,
 )
+from bot.camera_product import build_camera_product_conversation
 from bot.handlers import (
     admin_awaiting_text,
     admin_callback,
@@ -186,6 +187,7 @@ def main() -> None:
     app.add_handler(CommandHandler("stop_recur", stop_recur_command))
     app.add_handler(build_order_conversation())
     app.add_handler(build_product_admin_conversation())
+    app.add_handler(build_camera_product_conversation())
     for conv in build_extra_conversations():
         app.add_handler(conv)
     for conv in build_contact_conversations():

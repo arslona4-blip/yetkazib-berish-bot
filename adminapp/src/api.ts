@@ -216,6 +216,34 @@ export const api = {
       auth,
       { method: 'POST', body: JSON.stringify(body) },
     ),
+  productFromPhoto: async (
+    auth: AuthState | null,
+    file: File,
+  ): Promise<{
+    ok: boolean
+    draft: {
+      name: string
+      brand?: string
+      description: string
+      price: number | null
+      category_hint: string
+      category_id: number | null
+      unit?: string
+    }
+  }> => {
+    const buf = await file.arrayBuffer()
+    const bytes = new Uint8Array(buf)
+    let binary = ''
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!)
+    const b64 = btoa(binary)
+    return req('/api/admin/products/from-photo', auth, {
+      method: 'POST',
+      body: JSON.stringify({
+        image_base64: b64,
+        mime_type: file.type || 'image/jpeg',
+      }),
+    })
+  },
   productByBarcode: (auth: AuthState | null, code: string) =>
     req<{ ok: boolean; product: import('./types').Product }>(
       `/api/admin/products/barcode/${encodeURIComponent(code)}`,

@@ -511,7 +511,9 @@ def shop_ai_results_keyboard(products) -> InlineKeyboardMarkup | None:
     return InlineKeyboardMarkup(buttons) if buttons else None
 
 
-def category_pick_keyboard(categories) -> InlineKeyboardMarkup:
+def category_pick_keyboard(
+    categories, *, prefix: str = "admin_prod:setcat"
+) -> InlineKeyboardMarkup:
     from bot.category_emoji import category_label
 
     rows = []
@@ -523,7 +525,7 @@ def category_pick_keyboard(categories) -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(
                     label,
-                    callback_data=f"admin_prod:setcat:{category['id']}",
+                    callback_data=f"{prefix}:{category['id']}",
                 )
             ]
         )
@@ -907,6 +909,11 @@ def admin_products_keyboard() -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(
                     "➕ Yangi mahsulot", callback_data="admin_prod:add"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "📷 Foto bilan qo‘shish", callback_data="admin_prod:camera"
                 )
             ],
             [

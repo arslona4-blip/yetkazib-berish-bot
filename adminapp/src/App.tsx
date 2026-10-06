@@ -150,6 +150,9 @@ export default function App() {
     category_id: '',
     description: '',
   })
+  const [photoAiBusy, setPhotoAiBusy] = useState(false)
+  const [photoAiHint, setPhotoAiHint] = useState('')
+  const photoInputRef = useRef<HTMLInputElement | null>(null)
   const [newCatName, setNewCatName] = useState('')
   const [showProductForm, setShowProductForm] = useState(false)
   const [tgInit, setTgInit] = useState('')
@@ -734,6 +737,7 @@ export default function App() {
         category_id: '',
         description: '',
       })
+      setPhotoAiHint('')
       setShowProductForm(false)
       const cat = await api.products(auth)
       setCatalog(cat.products)
@@ -742,6 +746,38 @@ export default function App() {
       setError(e instanceof Error ? e.message : 'Mahsulot yaratish xato')
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function fillFromPhoto(file: File | null) {
+    if (!auth || !file) return
+    setPhotoAiBusy(true)
+    setPhotoAiHint('')
+    setError('')
+    try {
+      const res = await api.productFromPhoto(auth, file)
+      const d = res.draft
+      setShowProductForm(true)
+      setProductForm((s) => ({
+        ...s,
+        name: d.name || s.name,
+        price: d.price != null ? String(d.price) : s.price,
+        description: d.description || s.description,
+        category_id:
+          d.category_id != null ? String(d.category_id) : s.category_id,
+      }))
+      setPhotoAiHint(
+        d.price == null
+          ? 'AI draft tayyor — narxni tekshiring (yorliqda topilmadi).'
+          : 'AI draft tayyor — tekshirib Saqlash bosing.',
+      )
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Foto AI xato'
+      setError(msg)
+      setPhotoAiHint(msg.includes('AI kalit') ? msg : '')
+    } finally {
+      setPhotoAiBusy(false)
+      if (photoInputRef.current) photoInputRef.current.value = ''
     }
   }
 
@@ -1933,16 +1969,42 @@ export default function App() {
           <div className="page-h">
             <div>
               <h1>Mahsulotlar</h1>
-              <p>Yaratish, narx va faollik</p>
+              <p>Yaratish, narx va faollik · foto → AI</p>
             </div>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => setShowProductForm((v) => !v)}
-            >
-              {showProductForm ? 'Yopish' : '+ Yangi'}
-            </button>
+            <div className="actions" style={{ margin: 0 }}>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                hidden
+                onChange={(e) =>
+                  void fillFromPhoto(e.target.files?.[0] || null)
+                }
+              />
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={photoAiBusy || busy}
+                onClick={() => photoInputRef.current?.click()}
+              >
+                {photoAiBusy ? 'AI…' : '📷 Foto / kamera'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setShowProductForm((v) => !v)}
+              >
+                {showProductForm ? 'Yopish' : '+ Yangi'}
+              </button>
+            </div>
           </div>
+
+          {photoAiHint ? (
+            <p className="muted-sm" style={{ marginBottom: 8 }}>
+              {photoAiHint}
+            </p>
+          ) : null}
 
           {showProductForm ? (
             <div className="card" style={{ marginBottom: 12 }}>
