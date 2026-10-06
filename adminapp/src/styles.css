@@ -976,6 +976,26 @@ textarea {
   font-size: 0.78rem;
 }
 
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.photo-intake-preview {
+  display: block;
+  width: 100%;
+  max-height: 180px;
+  object-fit: cover;
+  border-radius: 12px;
+  margin-top: 10px;
+  border: 1px solid var(--line);
+}
+
+.photo-intake-hint {
+  margin: 8px 0 0;
+}
+
 .price-input {
   width: 110px;
   border-radius: 12px;

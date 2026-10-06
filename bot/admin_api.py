@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import base64
 import logging
+import re
 from typing import Any
 
 from aiohttp import web
@@ -507,6 +509,96 @@ async def admin_product_patch(request: web.Request) -> web.Response:
     product = get_product_by_id(product_id)
     logger.info("Admin %s patched product #%s", admin_id, product_id)
     return web.json_response({"ok": True, "product": _product_dict(product)})
+
+
+async def admin_product_from_photo(request: web.Request) -> web.Response:
+    """Rasm → AI draft maydonlar (saqlamaydi — tasdiq UI da)."""
+    admin_id = _require_admin(request)
+    from bot.product_vision import (
+        VisionError,
+        VisionNotConfigured,
+        extract_product_from_image,
+        vision_configured,
+    )
+
+    if not vision_configured():
+        raise web.HTTPServiceUnavailable(
+            text=(
+                "OPENAI_API_KEY sozlanmagan. "
+                "Foto orqali qo‘shish uchun Railway/env ga kalit qo‘ying."
+            )
+        )
+
+    image_bytes: bytes | None = None
+    mime: str | None = None
+    ctype = (request.headers.get("Content-Type") or "").lower()
+    try:
+        if "multipart/form-data" in ctype:
+            reader = await request.multipart()
+            while True:
+                field = await reader.next()
+                if field is None:
+                    break
+                name = (field.name or "").lower()
+                if name in {"image", "photo", "file", "rasm"}:
+                    mime = field.headers.get("Content-Type")
+                    image_bytes = await field.read(decode=False)
+                    break
+            if image_bytes is None:
+                raise web.HTTPBadRequest(text="Rasm fayli kerak (image)")
+        else:
+            try:
+                body = await request.json()
+            except Exception as exc:
+                raise web.HTTPBadRequest(
+                    text="JSON yoki multipart rasm yuboring"
+                ) from exc
+            b64 = str(
+                body.get("image_base64")
+                or body.get("image")
+                or body.get("photo")
+                or ""
+            ).strip()
+            if not b64:
+                raise web.HTTPBadRequest(text="image_base64 kerak")
+            mime = str(body.get("mime") or body.get("content_type") or "").strip() or None
+            if b64.startswith("data:"):
+                m = re.match(
+                    r"^data:(image/[^;]+);base64,(.+)$",
+                    b64,
+                    flags=re.I | re.S,
+                )
+                if not m:
+                    raise web.HTTPBadRequest(text="data URL noto‘g‘ri")
+                mime = mime or m.group(1)
+                b64 = m.group(2)
+            try:
+                image_bytes = base64.b64decode(b64, validate=False)
+            except Exception as exc:
+                raise web.HTTPBadRequest(text="Base64 noto‘g‘ri") from exc
+    except web.HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("from-photo parse: %s", exc)
+        raise web.HTTPBadRequest(text="Rasm o‘qilmadi") from exc
+
+    if not image_bytes:
+        raise web.HTTPBadRequest(text="Rasm bo‘sh")
+
+    try:
+        draft = extract_product_from_image(image_bytes, mime=mime)
+    except VisionNotConfigured as exc:
+        raise web.HTTPServiceUnavailable(text=str(exc)) from exc
+    except VisionError as exc:
+        raise web.HTTPBadGateway(text=str(exc)) from exc
+
+    logger.info(
+        "Admin %s from-photo draft name=%r price=%s",
+        admin_id,
+        draft.get("name"),
+        draft.get("price"),
+    )
+    return web.json_response({"ok": True, "draft": draft})
 
 
 async def admin_product_create(request: web.Request) -> web.Response:
@@ -1104,6 +1196,9 @@ def register_admin_routes(app: web.Application) -> None:
     )
     app.router.add_get("/api/admin/products", admin_products)
     app.router.add_post("/api/admin/products", admin_product_create)
+    app.router.add_post(
+        "/api/admin/products/from-photo", admin_product_from_photo
+    )
     app.router.add_get("/api/admin/products/export", admin_products_export)
     app.router.add_post("/api/admin/products/import", admin_products_import)
     app.router.add_get("/api/admin/products/barcode/{code}", admin_product_by_barcode)

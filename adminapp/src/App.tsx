@@ -150,6 +150,10 @@ export default function App() {
     category_id: '',
     description: '',
   })
+  const [photoBusy, setPhotoBusy] = useState(false)
+  const [photoHint, setPhotoHint] = useState('')
+  const [photoPreview, setPhotoPreview] = useState('')
+  const photoInputRef = useRef<HTMLInputElement | null>(null)
   const [newCatName, setNewCatName] = useState('')
   const [showProductForm, setShowProductForm] = useState(false)
   const [tgInit, setTgInit] = useState('')
@@ -734,6 +738,8 @@ export default function App() {
         category_id: '',
         description: '',
       })
+      setPhotoHint('')
+      setPhotoPreview('')
       setShowProductForm(false)
       const cat = await api.products(auth)
       setCatalog(cat.products)
@@ -742,6 +748,64 @@ export default function App() {
       setError(e instanceof Error ? e.message : 'Mahsulot yaratish xato')
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function onProductPhoto(file: File | null) {
+    if (!auth || !file) return
+    if (!file.type.startsWith('image/')) {
+      setError('Faqat rasm fayli (JPG/PNG/WEBP)')
+      return
+    }
+    setShowProductForm(true)
+    setPhotoBusy(true)
+    setPhotoHint('AI o‘qiyapti…')
+    setError('')
+    try {
+      const url = URL.createObjectURL(file)
+      setPhotoPreview((prev) => {
+        if (prev) URL.revokeObjectURL(prev)
+        return url
+      })
+      const res = await api.productFromPhoto(auth, file)
+      const d = res.draft
+      const nameParts = [d.brand, d.name].filter(Boolean)
+      const name =
+        d.brand && d.name && !d.name.toLowerCase().includes(d.brand.toLowerCase())
+          ? nameParts.join(' ')
+          : d.name || d.brand || ''
+      setProductForm((s) => ({
+        ...s,
+        name: name || s.name,
+        price:
+          d.price != null && Number.isFinite(Number(d.price))
+            ? String(d.price)
+            : s.price,
+        barcode: d.barcode || s.barcode,
+        category_id:
+          d.category_id != null ? String(d.category_id) : s.category_id,
+        description: d.description || s.description,
+      }))
+      const bits = [
+        d.category_hint ? `Toifa: ${d.category_hint}` : '',
+        d.unit ? `Birlik: ${d.unit}` : '',
+        d.source ? `Manba: ${d.source}` : '',
+      ].filter(Boolean)
+      setPhotoHint(
+        bits.length
+          ? `AI draft tayyor. ${bits.join(' · ')}. Tekshirib saqlang.`
+          : 'AI draft tayyor. Tekshirib saqlang.',
+      )
+    } catch (e) {
+      setPhotoHint('')
+      setError(
+        e instanceof Error
+          ? e.message
+          : 'Rasmni o‘qib bo‘lmadi (OPENAI_API_KEY?)',
+      )
+    } finally {
+      setPhotoBusy(false)
+      if (photoInputRef.current) photoInputRef.current.value = ''
     }
   }
 
@@ -1944,6 +2008,46 @@ export default function App() {
             </button>
           </div>
 
+          <div className="card photo-intake" style={{ marginBottom: 12 }}>
+            <div className="page-h" style={{ marginBottom: 8 }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 16 }}>📷 Foto / kamera</h2>
+                <p style={{ margin: '4px 0 0', fontSize: 13 }}>
+                  Rasmni AI o‘qiydi — siz tasdiqlaysiz
+                </p>
+              </div>
+            </div>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const f = e.target.files?.[0] || null
+                void onProductPhoto(f)
+              }}
+            />
+            <div className="actions" style={{ marginTop: 0 }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={photoBusy || !auth}
+                onClick={() => photoInputRef.current?.click()}
+              >
+                {photoBusy ? 'O‘qilmoqda…' : 'Kamera / galereya'}
+              </button>
+            </div>
+            {photoPreview ? (
+              <img
+                className="photo-intake-preview"
+                src={photoPreview}
+                alt="Mahsulot rasmi"
+              />
+            ) : null}
+            {photoHint ? <p className="muted photo-intake-hint">{photoHint}</p> : null}
+          </div>
+
           {showProductForm ? (
             <div className="card" style={{ marginBottom: 12 }}>
               <div className="field">
@@ -1964,6 +2068,7 @@ export default function App() {
                     setProductForm((s) => ({ ...s, price: e.target.value }))
                   }
                   inputMode="numeric"
+                  placeholder="So‘m"
                 />
               </div>
               <div className="field">
@@ -2032,6 +2137,7 @@ export default function App() {
               <button
                 type="button"
                 className="btn btn-primary"
+                disabled={busy || !productForm.name.trim()}
                 onClick={() => void createProduct()}
               >
                 Saqlash

@@ -227,6 +227,8 @@ OPENAI_BASE_URL = os.getenv(
     "OPENAI_BASE_URL", "https://api.openai.com/v1"
 ).rstrip("/")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+# Vision (foto → mahsulot); bo‘sh bo‘lsa OPENAI_MODEL ishlatiladi
+OPENAI_VISION_MODEL = os.getenv("OPENAI_VISION_MODEL", "").strip()
 
 # Admin PWA brauzer kirishi (kodsiz). Railway’da o‘zgartirish mumkin.
 ADMIN_APP_PIN = os.getenv("ADMIN_APP_PIN", "7788").strip()
