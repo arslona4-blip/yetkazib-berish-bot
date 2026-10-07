@@ -21,6 +21,7 @@ type ProcessState = 'idle' | 'loading-model' | 'removing' | 'ready' | 'error'
 
 export default function App() {
   const [originalUrl, setOriginalUrl] = useState<string | null>(null)
+  const [stickerUrl, setStickerUrl] = useState<string | null>(null)
   const [sticker, setSticker] = useState<HTMLImageElement | null>(null)
   const [settings, setSettings] = useState<AnimationSettings>(DEFAULT_SETTINGS)
   const [processState, setProcessState] = useState<ProcessState>('idle')
@@ -32,14 +33,15 @@ export default function App() {
   useEffect(() => {
     // Preload ONNX assets in the background
     preloadBackgroundRemoval((msg, ratio) => {
-      if (processState === 'idle') {
-        setStatusMsg(msg)
-        setStatusRatio(ratio)
-      }
+      setStatusMsg((current) =>
+        current === 'Upload a PNG or JPG to begin.' || current.startsWith('Loading model')
+          ? msg
+          : current,
+      )
+      setStatusRatio(ratio)
     }).catch(() => {
       /* non-fatal — will retry on first removal */
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -48,6 +50,12 @@ export default function App() {
     }
   }, [originalUrl])
 
+  useEffect(() => {
+    return () => {
+      if (stickerUrl) URL.revokeObjectURL(stickerUrl)
+    }
+  }, [stickerUrl])
+
   const onFileSelected = useCallback(async (file: File) => {
     const url = URL.createObjectURL(file)
     setOriginalUrl((prev) => {
@@ -55,6 +63,10 @@ export default function App() {
       return url
     })
     setSticker(null)
+    setStickerUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return null
+    })
     setProcessState('removing')
     setStatusMsg('Removing background — original face preserved…')
     setStatusRatio(0.1)
@@ -64,7 +76,12 @@ export default function App() {
         setStatusMsg(msg)
         setStatusRatio(ratio)
       })
+      const cutoutUrl = URL.createObjectURL(cutout)
       const img = await blobToImage(cutout)
+      setStickerUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev)
+        return cutoutUrl
+      })
       setSticker(img)
       setProcessState('ready')
       setStatusMsg('Ready — adjust the walk and export your sticker.')
@@ -168,7 +185,7 @@ export default function App() {
         </div>
 
         <div className="col col-preview">
-          <PreviewCanvas sticker={sticker} settings={settings} />
+          <PreviewCanvas stickerUrl={stickerUrl} settings={settings} />
 
           <div className={`status-banner state-${processState}`} role="status">
             {typeof statusRatio === 'number' && busyProcessing && (

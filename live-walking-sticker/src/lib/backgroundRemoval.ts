@@ -57,13 +57,14 @@ export async function removeBackground(
   return result
 }
 
-/** Load a Blob into an HTMLImageElement (decoded). */
+/** Load a Blob into an HTMLImageElement (decoded). Keeps the object URL alive on the image. */
 export function blobToImage(blob: Blob): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(blob)
     const img = new Image()
     img.onload = () => {
-      URL.revokeObjectURL(url)
+      // Retain URL for the lifetime of the image so canvas drawImage stays valid
+      ;(img as HTMLImageElement & { __objectUrl?: string }).__objectUrl = url
       resolve(img)
     }
     img.onerror = () => {
