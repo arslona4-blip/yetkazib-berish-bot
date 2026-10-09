@@ -395,13 +395,29 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             parse_mode="HTML",
         )
 
-    # Mijozga xush kelibsiz ovozi (adminlarga emas)
+    # Jonli odamcha: yo‘l + ovoz (xush kelibsiz ovozi shu yerda)
     try:
-        from bot.voice_confirm import send_welcome_voice
+        from bot.coach_guide import send_coach_guide
 
-        await send_welcome_voice(context.bot, user.id)
+        if user.id not in ADMIN_IDS:
+            await send_coach_guide(context.bot, user.id)
     except Exception:
-        pass
+        try:
+            from bot.voice_confirm import send_welcome_voice
+
+            await send_welcome_voice(context.bot, user.id)
+        except Exception:
+            pass
+
+
+async def yol_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Botdagi jonli odamcha yo‘l ko‘rsatma."""
+    chat = update.effective_chat
+    if not chat:
+        return
+    from bot.coach_guide import send_coach_guide
+
+    await send_coach_guide(context.bot, chat.id)
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -413,6 +429,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.message.reply_text(
         "🧭 <b>Qanday buyurtma beriladi?</b>\n\n"
         f"{shop_line}"
+        "🧭 <b>Yo‘l ko‘rsatma</b> — odamcha ovoz bilan tushuntiradi\n"
+        "    («⋯ Ko'proq» → «🧭 Yo'l ko'rsatma» yoki /yol)\n"
         "1️⃣ <b>Katalog</b> — yoqqan mahsulotni bosing\n"
         "    (avtomatik savatchaga tushadi ✅)\n"
         "2️⃣ <b>Savatcha</b> — miqdorni sozlang\n"
@@ -2623,6 +2641,9 @@ async def dispatch_main_menu(
         return True
     if text == "ℹ️ Yordam":
         await help_command(update, context)
+        return True
+    if text == "🧭 Yo'l ko'rsatma":
+        await yol_command(update, context)
         return True
     if text == "🤖 AI sotuvchi":
         await update.message.reply_text(

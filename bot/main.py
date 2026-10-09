@@ -58,6 +58,7 @@ from bot.handlers import (
     cart_callback,
     contact_info,
     help_command,
+    yol_command,
     my_orders,
     payment_callback,
     precheckout_callback,
@@ -182,6 +183,7 @@ def main() -> None:
         group=-1,
     )
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("yol", yol_command))
     app.add_handler(CommandHandler("id", show_my_id))
     app.add_handler(CommandHandler("stop_recur", stop_recur_command))
     app.add_handler(build_order_conversation())
