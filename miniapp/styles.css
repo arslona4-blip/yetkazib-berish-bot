@@ -1446,7 +1446,6 @@ main {
   align-items: flex-end;
   gap: 8px;
   pointer-events: auto;
-  animation: coachPop 0.45s var(--ease) both;
 }
 
 .coach-mascot {
@@ -1466,47 +1465,17 @@ main {
   width: 72px;
   height: 98px;
   overflow: visible;
-  transform-origin: 50% 100%;
-  animation: coachBounce 0.9s ease-in-out infinite;
 }
 
-.coach-head {
-  transform-origin: 45px 46px;
-  animation: coachNod 1.8s ease-in-out infinite;
-}
-
-.coach-eye {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: coachBlink 3.2s step-end infinite;
-}
-
-.coach-arm-r {
-  transform-origin: 63px 52px;
-  animation: coachPoint 0.55s ease-in-out infinite alternate;
-}
-
-.coach-leg-l {
-  transform-origin: 37px 80px;
-  animation: coachWalk 0.7s ease-in-out infinite;
-}
-
-.coach-leg-r {
-  transform-origin: 53px 80px;
-  animation: coachWalk 0.7s ease-in-out infinite reverse;
-}
-
-.coach-mouth {
-  transform-box: fill-box;
-  transform-origin: center;
-}
-
-.coach-talking .coach-mouth {
-  animation: coachTalk 0.18s ease-in-out infinite alternate;
-}
-
+.coach-head,
+.coach-eye,
+.coach-arm-r,
+.coach-leg-l,
+.coach-leg-r,
+.coach-mouth,
+.coach-talking .coach-mouth,
 .coach-talking .coach-head {
-  animation: coachNod 0.55s ease-in-out infinite;
+  animation: none;
 }
 
 .coach-bubble {

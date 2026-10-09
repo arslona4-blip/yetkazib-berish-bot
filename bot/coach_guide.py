@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 GIF_PATH = ASSETS_DIR / "coach-person.gif"
+PNG_PATH = ASSETS_DIR / "coach-person.png"
 
 COACH_SCRIPT = " ".join(
     [
@@ -91,33 +92,24 @@ def _draw_person(img, bounce: int, arm_deg: float) -> None:
 
 
 def ensure_coach_gif() -> Path | None:
-    if GIF_PATH.is_file() and GIF_PATH.stat().st_size > 20000:
-        return GIF_PATH
+    if PNG_PATH.is_file() and PNG_PATH.stat().st_size > 4000:
+        return PNG_PATH
     try:
         from PIL import Image
 
         ASSETS_DIR.mkdir(parents=True, exist_ok=True)
-        w, h, n = 200, 170, 12
-        frames: list[Image.Image] = []
-        for i in range(n):
-            t = i / n
-            bounce = int(-10 * math.sin(2 * math.pi * t))
-            arm = -35 + 55 * (0.5 - 0.5 * math.cos(2 * math.pi * t))
-            hi = Image.new("RGB", (w * 2, h * 2), (231, 242, 227))
-            _draw_person(hi, bounce * 2, arm)
-            frames.append(hi.resize((w, h), Image.Resampling.LANCZOS))
-        frames[0].save(
-            GIF_PATH,
-            save_all=True,
-            append_images=frames[1:],
-            duration=90,
-            loop=0,
-            optimize=True,
-        )
-        if GIF_PATH.is_file() and GIF_PATH.stat().st_size > 400:
-            return GIF_PATH
+        w, h = 200, 170
+        hi = Image.new("RGB", (w * 2, h * 2), (231, 242, 227))
+        _draw_person(hi, 0, -28)
+        still = hi.resize((w, h), Image.Resampling.LANCZOS)
+        still.save(PNG_PATH, format="PNG", optimize=True)
+        still.save(GIF_PATH, format="GIF")
+        if PNG_PATH.is_file() and PNG_PATH.stat().st_size > 400:
+            return PNG_PATH
     except Exception as exc:
-        logger.warning("Coach GIF yaratilmadi: %s", exc)
+        logger.warning("Coach rasm yaratilmadi: %s", exc)
+        if PNG_PATH.is_file() and PNG_PATH.stat().st_size > 400:
+            return PNG_PATH
         if GIF_PATH.is_file() and GIF_PATH.stat().st_size > 400:
             return GIF_PATH
     return None
@@ -133,21 +125,21 @@ def coach_keyboard() -> InlineKeyboardMarkup | None:
 async def send_coach_guide(bot: Any, chat_id: int) -> bool:
     """Odamcha GIF + ovoz + Do‘kon tugmasi."""
     markup = coach_keyboard()
-    gif = ensure_coach_gif()
+    still = ensure_coach_gif()
     sent_media = False
-    if gif is not None:
+    if still is not None:
         try:
-            with gif.open("rb") as anim:
-                await bot.send_animation(
+            with still.open("rb") as photo:
+                await bot.send_photo(
                     chat_id=chat_id,
-                    animation=InputFile(anim, filename="coach-person.gif"),
+                    photo=InputFile(photo, filename="coach-person.png"),
                     caption=COACH_CAPTION,
                     parse_mode="HTML",
                     reply_markup=markup,
                 )
             sent_media = True
         except Exception as exc:
-            logger.warning("Coach GIF yuborilmadi: %s", exc)
+            logger.warning("Coach rasm yuborilmadi: %s", exc)
 
     if not sent_media:
         try:
