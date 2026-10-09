@@ -628,6 +628,7 @@
   }
 
   function openProductSheet(product) {
+    notifyCoach("sheet");
     const variants = product.variants || [];
     const packs = product.kg_packs || [];
     const money = product.kg_money || [];
@@ -1900,18 +1901,51 @@
   const COACH_STEPS = [
     {
       id: "shop",
-      text: "Do‘kon tugmasini bosing — pastdagi Katalog",
-      say: "Assalomu alaykum! Do‘kon tugmasini bosing. Pastdagi Katalog.",
+      text: "Pastdagi Katalog (do‘kon) tugmasini bosing",
+      say: "Assalomu alaykum! Pastdagi Katalog, ya'ni do‘kon tugmasini bosing.",
       done: "view:catalog",
       target: () => document.querySelector('.nav-btn[data-view="catalog"]'),
     },
     {
+      id: "search",
+      text: "Qidiruvga yozing: guruch, cola, non…",
+      say: "Qidiruvga yozing. Masalan: guruch, cola, non.",
+      done: "search",
+      prepare: () => showView("catalog"),
+      target: () => els.productSearch,
+    },
+    {
+      id: "category",
+      text: "Toifadan ham tanlashingiz mumkin",
+      say: "Yuqoridagi toifalardan ham tanlashingiz mumkin. Oziq-ovqat, ichimlik va boshqalar.",
+      done: "category",
+      prepare: () => showView("catalog"),
+      target: () => document.querySelector("#categories .chip, #categories button"),
+    },
+    {
+      id: "ai",
+      text: "AI: «osh uchun», «cola» deb yozing",
+      say: "AI tugmasi bor. Osh uchun, cola deb yozsangiz, o‘zi topib beradi.",
+      done: "view:ai",
+      target: () => document.querySelector('.nav-btn[data-view="ai"]'),
+    },
+    {
       id: "product",
-      text: "Mahsulot tanlang — «Qo'shish» tugmasini bosing",
-      say: "Mahsulot tanlang. Qo‘shish tugmasini bosing.",
-      done: "added",
+      text: "Mahsulot — «Qo'shish» ni bosing",
+      say: "Mahsulotni tanlang. Qo‘shish tugmasini bosing.",
+      done: "sheet",
       prepare: () => showView("catalog"),
       target: () => document.querySelector("#products .card .btn.add"),
+    },
+    {
+      id: "size",
+      text: "Hajmni tanlang: kg, litr yoki dona",
+      say: "Hajmni tanlang. Guruch bo‘lsa kilogramm, ichimlik bo‘lsa litr, donalik bo‘lsa nechta dona.",
+      done: "added",
+      target: () =>
+        document.querySelector("#variantOptions button") ||
+        document.querySelector("#variantTitle") ||
+        document.querySelector("#products .card .btn.add"),
     },
     {
       id: "cart",
@@ -1921,16 +1955,73 @@
       target: () => document.querySelector('.nav-btn[data-view="cart"]'),
     },
     {
+      id: "phone",
+      text: "Telefon raqamingizni yozing",
+      say: "Telefon raqamingizni yozing.",
+      done: "phone",
+      prepare: () => showView("cart"),
+      target: () => els.phone,
+    },
+    {
       id: "address",
-      text: "Manzil yozing yoki Lokatsiya tugmasini bosing",
-      say: "Manzil yozing yoki Lokatsiya tugmasini bosing.",
+      text: "Ko‘cha nomi va uy raqamini yozing",
+      say: "Ko‘cha nomi va uy raqamini yozing. Masalan: Amir Temur ko‘chasi, o‘n beshinchi uy.",
       done: "address",
       prepare: () => showView("cart"),
-      target: () => els.geoBtn || els.address,
+      target: () => els.address,
+    },
+    {
+      id: "geo",
+      text: "Xohlasangiz Lokatsiya belgilang",
+      say: "Xohlasangiz Lokatsiya tugmasini bosib, xaritadan joy belgilang.",
+      done: "geo",
+      prepare: () => showView("cart"),
+      target: () => els.geoBtn,
+    },
+    {
+      id: "slot",
+      text: "Yetkazish vaqtini tanlang",
+      say: "Yetkazish vaqtini tanlang.",
+      done: "slot",
+      prepare: () => showView("cart"),
+      target: () => els.slot,
+    },
+    {
+      id: "bonus",
+      text: "Bonus bo‘lsa so‘mda yozing (ixtiyoriy)",
+      say: "Bonus bo‘lsa, shu yerga so‘mda yozing. Bo‘lmasa o‘tkazib yuboring.",
+      done: "bonus",
+      prepare: () => showView("cart"),
+      target: () => els.bonus,
+    },
+    {
+      id: "pay",
+      text: "To‘lov: Naqd yoki Karta (plastik)",
+      say: "To‘lov usulini tanlang. Naqd yoki plastik, ya'ni karta.",
+      done: "pay",
+      prepare: () => showView("cart"),
+      target: () => els.paymentMethod,
+    },
+    {
+      id: "gift",
+      text: "100 000+ bo‘lsa sovg‘ani tanlang",
+      say: "Yuz ming so‘mdan oshsa, bepul sovg‘a tanlashingiz mumkin. Cola, Pepsi yoki Fanta.",
+      done: "gift",
+      prepare: () => showView("cart"),
+      skipIf: () => !els.giftPicker || els.giftPicker.hidden,
+      target: () => els.giftPicker,
+    },
+    {
+      id: "note",
+      text: "Izoh ixtiyoriy",
+      say: "Izoh ixtiyoriy. Qo‘ng‘iroq qiling yoki eshik oldida qoldiring, deb yozishingiz mumkin.",
+      done: "note",
+      prepare: () => showView("cart"),
+      target: () => els.note,
     },
     {
       id: "order",
-      text: "Oxiri: Buyurtma berish tugmasini bosing",
+      text: "Buyurtma berish tugmasini bosing",
       say: "Oxirida Buyurtma berish tugmasini bosing.",
       done: "ordered",
       prepare: () => showView("cart"),
@@ -1938,8 +2029,8 @@
     },
     {
       id: "done",
-      text: "Tayyor! Shu yo‘l bilan buyurtma berasiz 🌿",
-      say: "Tayyor! Shu yo‘l bilan buyurtma berasiz. Rahmat!",
+      text: "Tayyor! Shu yo‘l bilan buyurtma berasiz",
+      say: "Tayyor! Shu yo‘l bilan ipidan ignasigacha buyurtma berasiz. Rahmat!",
       done: null,
       target: () => els.shopName,
     },
@@ -2093,6 +2184,14 @@
   function renderCoachStep() {
     const step = COACH_STEPS[coachIndex];
     if (!step || !els.coach) return;
+    if (typeof step.skipIf === "function") {
+      try {
+        if (step.skipIf()) {
+          coachAdvance();
+          return;
+        }
+      } catch (_) {}
+    }
     els.coach.hidden = false;
     if (els.coachText) els.coachText.textContent = step.text;
     if (els.coachStep) {
@@ -2231,6 +2330,39 @@
       els.address.addEventListener("input", () => {
         if ((els.address.value || "").trim().length >= 4) notifyCoach("address");
       });
+    }
+    if (els.phone) {
+      els.phone.addEventListener("input", () => {
+        const d = String(els.phone.value || "").replace(/\D/g, "");
+        if (d.length >= 7) notifyCoach("phone");
+      });
+    }
+    if (els.slot) {
+      els.slot.addEventListener("change", () => notifyCoach("slot"));
+    }
+    if (els.bonus) {
+      els.bonus.addEventListener("input", () => notifyCoach("bonus"));
+    }
+    if (els.paymentMethod) {
+      els.paymentMethod.addEventListener("change", () => notifyCoach("pay"));
+    }
+    if (els.note) {
+      els.note.addEventListener("input", () => {
+        if ((els.note.value || "").trim()) notifyCoach("note");
+      });
+    }
+    if (els.productSearch) {
+      els.productSearch.addEventListener("input", () => {
+        if ((els.productSearch.value || "").trim().length >= 2) notifyCoach("search");
+      });
+    }
+    if (els.categories) {
+      els.categories.addEventListener("click", (ev) => {
+        if (ev.target.closest("button, .chip")) notifyCoach("category");
+      });
+    }
+    if (els.giftPicker) {
+      els.giftPicker.addEventListener("click", () => notifyCoach("gift"));
     }
     window.addEventListener("resize", () => placeCoachSoon());
     window.addEventListener("scroll", () => placeCoachSoon(), true);
@@ -2514,6 +2646,7 @@
       }
       applyGeoCoords(coords.latitude, coords.longitude);
       notifyCoach("address");
+      notifyCoach("geo");
     } catch (_) {
       clearGeoPin();
       setGeoStatus("Lokatsiya ochilmadi — ruxsat bering", true);

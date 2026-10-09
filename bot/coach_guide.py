@@ -19,25 +19,24 @@ ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 GIF_PATH = ASSETS_DIR / "coach-person.gif"
 PNG_PATH = ASSETS_DIR / "coach-person.png"
 
-COACH_SCRIPT = " ".join(
-    [
-        COACH_VOICE_LINES["shop"],
-        COACH_VOICE_LINES["product"],
-        COACH_VOICE_LINES["cart"],
-        COACH_VOICE_LINES["address"],
-        COACH_VOICE_LINES["order"],
-        COACH_VOICE_LINES["done"],
-    ]
-)
+COACH_SCRIPT = " ".join(COACH_VOICE_LINES.values())
 
 COACH_CAPTION = (
-    "🧭 <b>Men yo‘l ko‘rsataman!</b>\n\n"
-    "1️⃣ Pastdagi <b>🛒 Do'kon</b> tugmasini bosing\n"
-    "2️⃣ Mahsulot tanlang — «Qo'shish»\n"
-    "3️⃣ <b>Savatchani</b> oching\n"
-    "4️⃣ Manzil yoki lokatsiya\n"
-    "5️⃣ <b>Buyurtma berish</b>\n\n"
-    "Tayyor! Shu yo‘l bilan buyurtma berasiz."
+    "🧭 <b>Men yo‘l ko‘rsataman — ipidan ignasigacha!</b>\n\n"
+    "1️⃣ <b>Katalog</b> — do‘konni oching\n"
+    "2️⃣ <b>Qidiruv</b> — guruch, cola, non…\n"
+    "3️⃣ <b>Toifa</b> yoki <b>AI</b> («osh uchun»)\n"
+    "4️⃣ Mahsulot — hajm: kg / litr / dona\n"
+    "5️⃣ <b>Savatcha</b>\n"
+    "6️⃣ Telefon raqam\n"
+    "7️⃣ Ko‘cha nomi va uy raqami\n"
+    "8️⃣ Lokatsiya (ixtiyoriy)\n"
+    "9️⃣ Yetkazish vaqti\n"
+    "🔟 Bonus (ixtiyoriy)\n"
+    "1️⃣1️⃣ To‘lov: <b>Naqd</b> yoki <b>Karta</b>\n"
+    "1️⃣2️⃣ Sovg‘a (100 000+)\n"
+    "1️⃣3️⃣ Izoh (ixtiyoriy)\n"
+    "1️⃣4️⃣ <b>Buyurtma berish</b>"
 )
 
 

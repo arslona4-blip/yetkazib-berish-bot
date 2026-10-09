@@ -1358,14 +1358,23 @@ async def serve_receipt(request: web.Request) -> web.Response:
 
 
 COACH_VOICE_LINES = {
-    "shop": (
-        "Assalomu alaykum! Do‘kon tugmasini bosing. Pastdagi Katalog."
-    ),
-    "product": "Mahsulot tanlang. Qo‘shish tugmasini bosing.",
+    "shop": "Assalomu alaykum! Pastdagi Katalog, ya'ni do‘kon tugmasini bosing.",
+    "search": "Qidiruvga yozing. Masalan: guruch, cola, non.",
+    "category": "Yuqoridagi toifalardan ham tanlashingiz mumkin. Oziq-ovqat, ichimlik va boshqalar.",
+    "ai": "AI tugmasi bor. Osh uchun, cola deb yozsangiz, o‘zi topib beradi.",
+    "product": "Mahsulotni tanlang. Qo‘shish tugmasini bosing.",
+    "size": "Hajmni tanlang. Guruch bo‘lsa kilogramm, ichimlik bo‘lsa litr, donalik bo‘lsa nechta dona.",
     "cart": "Endi pastdagi Savatchani oching.",
-    "address": "Manzil yozing yoki Lokatsiya tugmasini bosing.",
+    "phone": "Telefon raqamingizni yozing. Masalan: plus to‘qqiz yuz to‘qson sakkiz, to‘qson, bir ikki uch, qirq besh, oltmish yetti.",
+    "address": "Ko‘cha nomi va uy raqamini yozing. Masalan: Amir Temur ko‘chasi, o‘n beshinchi uy.",
+    "geo": "Xohlasangiz Lokatsiya tugmasini bosib, xaritadan joy belgilang.",
+    "slot": "Yetkazish vaqtini tanlang.",
+    "bonus": "Bonus bo‘lsa, shu yerga so‘mda yozing. Bo‘lmasa o‘tkazib yuboring.",
+    "pay": "To‘lov usulini tanlang. Naqd yoki plastik, ya'ni karta.",
+    "gift": "Yuz ming so‘mdan oshsa, bepul sovg‘a tanlashingiz mumkin. Cola, Pepsi yoki Fanta.",
+    "note": "Izoh ixtiyoriy. Qo‘ng‘iroq qiling yoki eshik oldida qoldiring, deb yozishingiz mumkin.",
     "order": "Oxirida Buyurtma berish tugmasini bosing.",
-    "done": "Tayyor! Shu yo‘l bilan buyurtma berasiz. Rahmat!",
+    "done": "Tayyor! Shu yo‘l bilan ipidan ignasigacha buyurtma berasiz. Rahmat!",
 }
 
 
