@@ -2376,7 +2376,7 @@
     // Cache bo‘lsa allaqachon chizilgan; yangi javobni kutamiz
     if (state.allProducts.length) applyCatalogFilter();
     await Promise.all([productsPromise, bonusPromise]);
-    setTimeout(() => startCoach({ force: false }), 500);
+    setTimeout(() => startCoach({ force: true }), 700);
   }
 
   function getInitData() {
@@ -2738,6 +2738,6 @@
 
   bootstrap().catch((err) => {
     els.products.innerHTML = `<p class="empty">Yuklash xatosi: ${err.message}</p>`;
-    setTimeout(() => startCoach({ force: false }), 400);
+    setTimeout(() => startCoach({ force: true }), 400);
   });
 })();
