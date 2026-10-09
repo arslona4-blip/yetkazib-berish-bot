@@ -1496,6 +1496,19 @@ main {
   animation: coachWalk 0.7s ease-in-out infinite reverse;
 }
 
+.coach-mouth {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.coach-talking .coach-mouth {
+  animation: coachTalk 0.18s ease-in-out infinite alternate;
+}
+
+.coach-talking .coach-head {
+  animation: coachNod 0.55s ease-in-out infinite;
+}
+
 .coach-bubble {
   flex: 1;
   background: #fff;
@@ -1575,6 +1588,11 @@ main {
   to { transform: rotate(16deg); }
 }
 
+@keyframes coachTalk {
+  from { transform: scaleY(1); }
+  to { transform: scaleY(1.85) translateY(1px); }
+}
+
 @keyframes coachPop {
   from { opacity: 0; transform: translateY(10px) scale(0.94); }
   to { opacity: 1; transform: none; }
@@ -1597,6 +1615,9 @@ main {
   .coach-arm-r,
   .coach-leg-l,
   .coach-leg-r,
+  .coach-mouth,
+  .coach-talking .coach-mouth,
+  .coach-talking .coach-head,
   .coach-sticker {
     animation: none;
     transition: none;

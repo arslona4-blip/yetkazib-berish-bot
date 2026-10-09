@@ -1901,12 +1901,14 @@
     {
       id: "shop",
       text: "Do‘kon tugmasini bosing — pastdagi Katalog",
+      say: "Assalomu alaykum! Do‘kon tugmasini bosing. Pastdagi Katalog.",
       done: "view:catalog",
       target: () => document.querySelector('.nav-btn[data-view="catalog"]'),
     },
     {
       id: "product",
       text: "Mahsulot tanlang — «Qo'shish» tugmasini bosing",
+      say: "Mahsulot tanlang. Qo‘shish tugmasini bosing.",
       done: "added",
       prepare: () => showView("catalog"),
       target: () => document.querySelector("#products .card .btn.add"),
@@ -1914,12 +1916,14 @@
     {
       id: "cart",
       text: "Pastdagi Savatchani oching",
+      say: "Endi pastdagi Savatchani oching.",
       done: "view:cart",
       target: () => document.querySelector('.nav-btn[data-view="cart"]'),
     },
     {
       id: "address",
       text: "Manzil yozing yoki Lokatsiya tugmasini bosing",
+      say: "Manzil yozing yoki Lokatsiya tugmasini bosing.",
       done: "address",
       prepare: () => showView("cart"),
       target: () => els.geoBtn || els.address,
@@ -1927,6 +1931,7 @@
     {
       id: "order",
       text: "Oxiri: Buyurtma berish tugmasini bosing",
+      say: "Oxirida Buyurtma berish tugmasini bosing.",
       done: "ordered",
       prepare: () => showView("cart"),
       target: () => els.submit,
@@ -1934,6 +1939,7 @@
     {
       id: "done",
       text: "Tayyor! Shu yo‘l bilan buyurtma berasiz 🌿",
+      say: "Tayyor! Shu yo‘l bilan buyurtma berasiz. Rahmat!",
       done: null,
       target: () => els.shopName,
     },
@@ -1942,6 +1948,7 @@
   let coachActive = false;
   let coachPlaceTimer = null;
   let coachDoneTimer = null;
+  let coachAudio = null;
 
   function markCoachSeen() {
     try {
@@ -1957,9 +1964,76 @@
     }
   }
 
+  function coachMascot() {
+    return document.querySelector(".coach-mascot");
+  }
+
+  function setCoachTalking(on) {
+    const mascot = coachMascot();
+    if (mascot) mascot.classList.toggle("coach-talking", !!on);
+  }
+
+  function stopCoachVoice() {
+    setCoachTalking(false);
+    if (coachAudio) {
+      try {
+        coachAudio.pause();
+        coachAudio.removeAttribute("src");
+        coachAudio.load();
+      } catch (_) {}
+      coachAudio = null;
+    }
+    if (window.speechSynthesis) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch (_) {}
+    }
+  }
+
+  function speakCoachBrowser(line) {
+    const synth = window.speechSynthesis;
+    if (!synth || !line) return;
+    try {
+      synth.cancel();
+      const u = new SpeechSynthesisUtterance(line);
+      u.lang = "uz-UZ";
+      u.rate = 0.95;
+      const voices = synth.getVoices ? synth.getVoices() : [];
+      const hit =
+        voices.find((v) => /^uz/i.test(v.lang)) ||
+        voices.find((v) => /uzbek/i.test(v.name || "")) ||
+        voices.find((v) => /^tr/i.test(v.lang)) ||
+        voices.find((v) => /^ru/i.test(v.lang));
+      if (hit) u.voice = hit;
+      u.onstart = () => setCoachTalking(true);
+      u.onend = () => setCoachTalking(false);
+      u.onerror = () => setCoachTalking(false);
+      setCoachTalking(true);
+      synth.speak(u);
+    } catch (_) {
+      setCoachTalking(false);
+    }
+  }
+
+  function speakCoach(step) {
+    stopCoachVoice();
+    if (!step) return;
+    const line = step.say || step.text || "";
+    const audio = new Audio(`/api/coach-voice?id=${encodeURIComponent(step.id)}`);
+    coachAudio = audio;
+    audio.onplay = () => setCoachTalking(true);
+    audio.onended = () => setCoachTalking(false);
+    audio.onerror = () => speakCoachBrowser(line);
+    const play = audio.play();
+    if (play && typeof play.catch === "function") {
+      play.catch(() => speakCoachBrowser(line));
+    }
+  }
+
   function stopCoach() {
     coachActive = false;
     coachIndex = -1;
+    stopCoachVoice();
     if (coachPlaceTimer) {
       clearTimeout(coachPlaceTimer);
       coachPlaceTimer = null;
@@ -2034,6 +2108,7 @@
       } catch (_) {}
     }
     placeCoachSoon();
+    speakCoach(step);
     if (step.id === "done") {
       if (coachDoneTimer) clearTimeout(coachDoneTimer);
       coachDoneTimer = setTimeout(() => closeCoach(true), 2800);

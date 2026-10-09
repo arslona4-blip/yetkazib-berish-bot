@@ -1357,11 +1357,44 @@ async def serve_receipt(request: web.Request) -> web.Response:
     return web.Response(text=page, content_type="text/html", charset="utf-8")
 
 
+COACH_VOICE_LINES = {
+    "shop": (
+        "Assalomu alaykum! Do‘kon tugmasini bosing. Pastdagi Katalog."
+    ),
+    "product": "Mahsulot tanlang. Qo‘shish tugmasini bosing.",
+    "cart": "Endi pastdagi Savatchani oching.",
+    "address": "Manzil yozing yoki Lokatsiya tugmasini bosing.",
+    "order": "Oxirida Buyurtma berish tugmasini bosing.",
+    "done": "Tayyor! Shu yo‘l bilan buyurtma berasiz. Rahmat!",
+}
+
+
+async def api_coach_voice(request: web.Request) -> web.Response:
+    """Mini App yo‘l ko‘rsatma odamchasi — o‘zbekcha ovoz."""
+    step_id = str(request.query.get("id") or "").strip()
+    text = COACH_VOICE_LINES.get(step_id)
+    if not text:
+        raise web.HTTPNotFound(text="Ovoz topilmadi")
+    try:
+        from bot.voice_confirm import synthesize_uzbek_mp3
+
+        mp3 = await synthesize_uzbek_mp3(text)
+    except Exception as exc:
+        logger.warning("Coach ovoz xato %s: %s", step_id, exc)
+        raise web.HTTPServiceUnavailable(text="Ovoz tayyor emas") from exc
+    return web.Response(
+        body=mp3,
+        content_type="audio/mpeg",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
 def create_app() -> web.Application:
     from bot.admin_api import register_admin_routes
 
     app = web.Application(middlewares=[cors_middleware])
     app.router.add_get("/health", api_health)
+    app.router.add_get("/api/coach-voice", api_coach_voice)
     app.router.add_get("/api/config", api_config)
     app.router.add_get("/api/user", api_user)
     app.router.add_post("/api/promo", api_promo)
