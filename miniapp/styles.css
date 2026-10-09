@@ -1471,7 +1471,7 @@ main {
 }
 
 .coach-head {
-  transform-origin: 40px 44px;
+  transform-origin: 45px 46px;
   animation: coachNod 1.8s ease-in-out infinite;
 }
 
@@ -1482,17 +1482,17 @@ main {
 }
 
 .coach-arm-r {
-  transform-origin: 58px 50px;
+  transform-origin: 63px 52px;
   animation: coachPoint 0.55s ease-in-out infinite alternate;
 }
 
 .coach-leg-l {
-  transform-origin: 32px 78px;
+  transform-origin: 37px 80px;
   animation: coachWalk 0.7s ease-in-out infinite;
 }
 
 .coach-leg-r {
-  transform-origin: 48px 78px;
+  transform-origin: 53px 80px;
   animation: coachWalk 0.7s ease-in-out infinite reverse;
 }
 
