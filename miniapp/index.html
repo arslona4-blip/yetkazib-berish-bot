@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=47" />
+  <link rel="stylesheet" href="styles.css?v=48" />
 </head>
 <body>
   <header class="topbar">
@@ -32,7 +32,7 @@
         <h1 id="shopName">Baraka Market</h1>
         <p id="shopMeta" class="muted"></p>
       </div>
-      <button type="button" id="guideOpen" class="guide-open" aria-label="Qo‘llanma" title="Qo‘llanma">?</button>
+      <button type="button" id="guideOpen" class="guide-open" aria-label="Yo‘l ko‘rsatma" title="Yo‘l ko‘rsatma">?</button>
     </div>
     <div id="pwaInstall" class="pwa-install" hidden>
       <span>Ilovani asosiy ekranga qo‘shing</span>
@@ -231,6 +231,24 @@
     </div>
   </dialog>
 
-  <script src="app.js?v=47"></script>
+  <div id="coach" class="coach" hidden>
+    <div id="coachSpot" class="coach-spot" aria-hidden="true"></div>
+    <div id="coachSticker" class="coach-sticker">
+      <div class="coach-mascot" aria-hidden="true">
+        <span class="coach-face">🌿</span>
+        <span class="coach-hand">👉</span>
+      </div>
+      <div class="coach-bubble">
+        <p id="coachText"></p>
+        <div class="coach-bar">
+          <span id="coachStep" class="coach-step"></span>
+          <button type="button" id="coachSkip">O‘tkazib yuborish</button>
+          <button type="button" id="coachNext" class="coach-next">Keyingi</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js?v=48"></script>
 </body>
 </html>

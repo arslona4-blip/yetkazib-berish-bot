@@ -80,6 +80,13 @@
     guideNext: document.getElementById("guideNext"),
     guideSkip: document.getElementById("guideSkip"),
     guideOpen: document.getElementById("guideOpen"),
+    coach: document.getElementById("coach"),
+    coachSpot: document.getElementById("coachSpot"),
+    coachSticker: document.getElementById("coachSticker"),
+    coachText: document.getElementById("coachText"),
+    coachStep: document.getElementById("coachStep"),
+    coachSkip: document.getElementById("coachSkip"),
+    coachNext: document.getElementById("coachNext"),
     aiMessages: document.getElementById("aiMessages"),
     aiForm: document.getElementById("aiForm"),
     aiInput: document.getElementById("aiInput"),
@@ -498,6 +505,7 @@
     const nav = document.querySelector(`.nav-btn[data-view="${name}"]`);
     if (nav) nav.classList.add("active");
     if (name === "cart") renderCart();
+    notifyCoach("view:" + name);
     if (name === "ai" && els.aiInput) {
       setTimeout(() => {
         try {
@@ -1237,6 +1245,7 @@
       frag.appendChild(card);
     });
     els.products.appendChild(frag);
+    placeCoachSoon();
   }
 
   function addProduct(product) {
@@ -1429,6 +1438,7 @@
     if (document.getElementById("viewCart").classList.contains("active")) {
       renderCart();
     }
+    notifyCoach("added");
   }
 
   function htmlToPlain(html) {
@@ -1886,6 +1896,177 @@
     startGuideAuto();
   }
 
+  const COACH_KEY = "miniapp_coach_v1_seen";
+  const COACH_STEPS = [
+    {
+      id: "shop",
+      text: "Do‘kon tugmasini bosing — pastdagi Katalog",
+      done: "view:catalog",
+      target: () => document.querySelector('.nav-btn[data-view="catalog"]'),
+    },
+    {
+      id: "product",
+      text: "Mahsulot tanlang — «Qo'shish» tugmasini bosing",
+      done: "added",
+      prepare: () => showView("catalog"),
+      target: () => document.querySelector("#products .card .btn.add"),
+    },
+    {
+      id: "cart",
+      text: "Pastdagi Savatchani oching",
+      done: "view:cart",
+      target: () => document.querySelector('.nav-btn[data-view="cart"]'),
+    },
+    {
+      id: "address",
+      text: "Manzil yozing yoki Lokatsiya tugmasini bosing",
+      done: "address",
+      prepare: () => showView("cart"),
+      target: () => els.geoBtn || els.address,
+    },
+    {
+      id: "order",
+      text: "Oxiri: Buyurtma berish tugmasini bosing",
+      done: "ordered",
+      prepare: () => showView("cart"),
+      target: () => els.submit,
+    },
+    {
+      id: "done",
+      text: "Tayyor! Shu yo‘l bilan buyurtma berasiz 🌿",
+      done: null,
+      target: () => els.shopName,
+    },
+  ];
+  let coachIndex = -1;
+  let coachActive = false;
+  let coachPlaceTimer = null;
+  let coachDoneTimer = null;
+
+  function markCoachSeen() {
+    try {
+      localStorage.setItem(COACH_KEY, "1");
+    } catch (_) {}
+  }
+
+  function hasSeenCoach() {
+    try {
+      return localStorage.getItem(COACH_KEY) === "1";
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function stopCoach() {
+    coachActive = false;
+    coachIndex = -1;
+    if (coachPlaceTimer) {
+      clearTimeout(coachPlaceTimer);
+      coachPlaceTimer = null;
+    }
+    if (coachDoneTimer) {
+      clearTimeout(coachDoneTimer);
+      coachDoneTimer = null;
+    }
+    if (els.coach) els.coach.hidden = true;
+  }
+
+  function closeCoach(saveSeen) {
+    if (saveSeen) markCoachSeen();
+    stopCoach();
+  }
+
+  function placeCoachSoon() {
+    if (!coachActive) return;
+    if (coachPlaceTimer) clearTimeout(coachPlaceTimer);
+    coachPlaceTimer = setTimeout(placeCoach, 80);
+  }
+
+  function placeCoach() {
+    if (!coachActive || !els.coach || !els.coachSpot || !els.coachSticker) return;
+    const step = COACH_STEPS[coachIndex];
+    if (!step) return;
+    const target = typeof step.target === "function" ? step.target() : null;
+    if (!target) {
+      coachPlaceTimer = setTimeout(placeCoach, 280);
+      return;
+    }
+    try {
+      const nav = target.closest(".bottom-nav");
+      if (!nav) target.scrollIntoView({ block: "center", behavior: "smooth" });
+    } catch (_) {}
+    const r = target.getBoundingClientRect();
+    const pad = 7;
+    els.coachSpot.style.top = `${Math.max(4, r.top - pad)}px`;
+    els.coachSpot.style.left = `${Math.max(4, r.left - pad)}px`;
+    els.coachSpot.style.width = `${r.width + pad * 2}px`;
+    els.coachSpot.style.height = `${r.height + pad * 2}px`;
+    els.coachSpot.style.borderRadius =
+      r.height > 70 ? "18px" : r.height > 48 ? "16px" : "14px";
+
+    const sticker = els.coachSticker;
+    const sw = Math.min(320, window.innerWidth - 24);
+    sticker.style.width = `${sw}px`;
+    const sh = sticker.offsetHeight || 120;
+    let top = r.top - sh - 14;
+    if (top < 10) top = Math.min(window.innerHeight - sh - 12, r.bottom + 12);
+    let left = r.left + r.width / 2 - sw / 2;
+    left = Math.max(12, Math.min(left, window.innerWidth - sw - 12));
+    sticker.style.top = `${top}px`;
+    sticker.style.left = `${left}px`;
+  }
+
+  function renderCoachStep() {
+    const step = COACH_STEPS[coachIndex];
+    if (!step || !els.coach) return;
+    els.coach.hidden = false;
+    if (els.coachText) els.coachText.textContent = step.text;
+    if (els.coachStep) {
+      els.coachStep.textContent = `${coachIndex + 1}/${COACH_STEPS.length}`;
+    }
+    if (els.coachNext) {
+      els.coachNext.textContent =
+        coachIndex >= COACH_STEPS.length - 1 ? "Tushundim" : "Keyingi";
+    }
+    if (typeof step.prepare === "function") {
+      try {
+        step.prepare();
+      } catch (_) {}
+    }
+    placeCoachSoon();
+    if (step.id === "done") {
+      if (coachDoneTimer) clearTimeout(coachDoneTimer);
+      coachDoneTimer = setTimeout(() => closeCoach(true), 2800);
+    }
+  }
+
+  function coachAdvance() {
+    if (!coachActive) return;
+    if (coachIndex >= COACH_STEPS.length - 1) {
+      closeCoach(true);
+      return;
+    }
+    coachIndex += 1;
+    renderCoachStep();
+  }
+
+  function notifyCoach(event) {
+    if (!coachActive) return;
+    const step = COACH_STEPS[coachIndex];
+    if (!step || !step.done) return;
+    if (step.done === event) coachAdvance();
+  }
+
+  function startCoach(opts) {
+    const force = !!(opts && opts.force);
+    if (!els.coach || !COACH_STEPS.length) return;
+    if (!force && hasSeenCoach()) return;
+    closeGuide(false);
+    coachActive = true;
+    coachIndex = 0;
+    renderCoachStep();
+  }
+
   function setupPwa() {
     const dismissedKey = "miniapp_pwa_install_dismissed_v1";
     let deferredPrompt = null;
@@ -1963,8 +2144,21 @@
       els.geoClear.addEventListener("click", () => clearGeoPin());
     }
     if (els.guideOpen) {
-      els.guideOpen.addEventListener("click", () => openGuide({ force: true }));
+      els.guideOpen.addEventListener("click", () => startCoach({ force: true }));
     }
+    if (els.coachSkip) {
+      els.coachSkip.addEventListener("click", () => closeCoach(true));
+    }
+    if (els.coachNext) {
+      els.coachNext.addEventListener("click", () => coachAdvance());
+    }
+    if (els.address) {
+      els.address.addEventListener("input", () => {
+        if ((els.address.value || "").trim().length >= 4) notifyCoach("address");
+      });
+    }
+    window.addEventListener("resize", () => placeCoachSoon());
+    window.addEventListener("scroll", () => placeCoachSoon(), true);
     if (els.guidePrev) {
       els.guidePrev.addEventListener("click", () => {
         stopGuideAuto();
@@ -2107,7 +2301,7 @@
     // Cache bo‘lsa allaqachon chizilgan; yangi javobni kutamiz
     if (state.allProducts.length) applyCatalogFilter();
     await Promise.all([productsPromise, bonusPromise]);
-    setTimeout(() => openGuide({ force: false }), 400);
+    setTimeout(() => startCoach({ force: false }), 500);
   }
 
   function getInitData() {
@@ -2244,6 +2438,7 @@
         coords = await readBrowserGeo();
       }
       applyGeoCoords(coords.latitude, coords.longitude);
+      notifyCoach("address");
     } catch (_) {
       clearGeoPin();
       setGeoStatus("Lokatsiya ochilmadi — ruxsat bering", true);
@@ -2388,6 +2583,7 @@
       }
       els.submit.disabled = true;
       els.submit.textContent = "Yuborildi ✓";
+      notifyCoach("ordered");
       if (tg) {
         try {
           tg.HapticFeedback && tg.HapticFeedback.notificationOccurred("success");
@@ -2444,6 +2640,7 @@
       }
       els.submit.disabled = true;
       els.submit.textContent = "Yuborildi ✓";
+      notifyCoach("ordered");
       if (tg) {
         try {
           tg.HapticFeedback && tg.HapticFeedback.notificationOccurred("success");
@@ -2466,5 +2663,6 @@
 
   bootstrap().catch((err) => {
     els.products.innerHTML = `<p class="empty">Yuklash xatosi: ${err.message}</p>`;
+    setTimeout(() => startCoach({ force: false }), 400);
   });
 })();
