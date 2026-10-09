@@ -395,12 +395,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             parse_mode="HTML",
         )
 
-    # Jonli odamcha: yo‘l + ovoz (xush kelibsiz ovozi shu yerda)
+    # Jonli odamcha: yo‘l + ovoz (admin ham ko‘rsin)
     try:
         from bot.coach_guide import send_coach_guide
 
-        if user.id not in ADMIN_IDS:
-            await send_coach_guide(context.bot, user.id)
+        await send_coach_guide(context.bot, user.id)
     except Exception:
         try:
             from bot.voice_confirm import send_welcome_voice

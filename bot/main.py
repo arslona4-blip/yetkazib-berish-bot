@@ -202,6 +202,9 @@ def main() -> None:
     app.add_handler(MessageHandler(filters.Regex("^👥 Ulashish$"), share_invite))
     app.add_handler(MessageHandler(filters.Regex("^📋 Mening buyurtmalarim$"), my_orders))
     app.add_handler(MessageHandler(filters.Regex("^ℹ️ Yordam$"), help_command))
+    app.add_handler(
+        MessageHandler(filters.Regex(r"^🧭 Yo'l ko'rsatma$"), yol_command)
+    )
     app.add_handler(MessageHandler(filters.Regex("^📞 Aloqa$"), contact_info))
     app.add_handler(MessageHandler(filters.Regex("^📦 Buyurtmalar$"), admin_orders_panel))
     app.add_handler(MessageHandler(filters.Regex("^🛠 Admin panel$"), admin_panel))

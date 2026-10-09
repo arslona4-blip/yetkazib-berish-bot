@@ -123,7 +123,7 @@ async def send_coach_guide(bot: Any, chat_id: int) -> bool:
             with gif.open("rb") as anim:
                 await bot.send_animation(
                     chat_id=chat_id,
-                    animation=anim,
+                    animation=InputFile(anim, filename="coach-person.gif"),
                     caption=COACH_CAPTION,
                     parse_mode="HTML",
                     reply_markup=markup,
@@ -140,20 +140,38 @@ async def send_coach_guide(bot: Any, chat_id: int) -> bool:
                 parse_mode="HTML",
                 reply_markup=markup,
             )
+            sent_media = True
         except Exception as exc:
-            logger.warning("Coach matn yuborilmadi: %s", exc)
-            return False
+            logger.warning("Coach matn HTML yuborilmadi: %s", exc)
+            try:
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=(
+                        "Men yo‘l ko‘rsataman!\n\n"
+                        "1) Do'kon tugmasini bosing\n"
+                        "2) Mahsulot tanlang\n"
+                        "3) Savatchani oching\n"
+                        "4) Manzil yoki lokatsiya\n"
+                        "5) Buyurtma berish"
+                    ),
+                    reply_markup=markup,
+                )
+                sent_media = True
+            except Exception as exc2:
+                logger.warning("Coach matn yuborilmadi: %s", exc2)
+                return False
 
     try:
         from bot.voice_confirm import synthesize_uzbek_mp3
-        from telegram import InputFile as TGFile
 
         mp3 = await synthesize_uzbek_mp3(COACH_SCRIPT)
-        await bot.send_voice(
+        await bot.send_audio(
             chat_id=chat_id,
-            voice=TGFile(io.BytesIO(mp3), filename="yol_korsatma.ogg"),
+            audio=InputFile(io.BytesIO(mp3), filename="yol_korsatma.mp3"),
+            title="Yo‘l ko‘rsatma",
+            performer="Baraka Market",
             caption="🔊 Men yo‘l ko‘rsataman — Do‘kon tugmasini bosing",
         )
     except Exception as exc:
         logger.warning("Coach ovoz yuborilmadi: %s", exc)
-    return True
+    return sent_media
