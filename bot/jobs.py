@@ -7,6 +7,7 @@ from datetime import time, timedelta
 
 from telegram.ext import Application, ContextTypes
 
+from bot.annur_sync import setup_annur_sync
 from bot.config import ADMIN_IDS, DAILY_REPORT_HOUR
 from bot.database import (
     get_daily_report,
@@ -90,6 +91,7 @@ def setup_jobs(application: Application) -> None:
         first=120,
         name="recurring_orders",
     )
+    setup_annur_sync(application)
     logger.info(
         "Jobs registered: daily@%s, recurring=30m",
         report_time.strftime("%H:%M"),
