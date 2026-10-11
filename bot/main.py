@@ -160,6 +160,8 @@ def main() -> None:
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         level=logging.INFO,
     )
+    # httpx har bir so'rov manzilini INFO darajasida yozadi, manzil esa bot tokenini o'z ichiga oladi.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
     if not BOT_TOKEN:
         raise RuntimeError("BOT_TOKEN .env faylida ko'rsatilmagan.")
