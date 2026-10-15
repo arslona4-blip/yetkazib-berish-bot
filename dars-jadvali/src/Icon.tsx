@@ -169,6 +169,36 @@ const paths: Record<string, ReactElement> = {
       <path d="M5 5h14v10H9l-4 3z" />
     </>
   ),
+  bag: (
+    <>
+      <rect x="5" y="8" width="14" height="12" rx="2" />
+      <path d="M9 8V6a3 3 0 0 1 6 0v2M5 13h14" />
+    </>
+  ),
+  focus: (
+    <>
+      <circle cx="12" cy="13" r="7" />
+      <path d="M12 9v4l3 2M10 3h4" />
+    </>
+  ),
+  badges: (
+    <>
+      <circle cx="12" cy="9" r="5" />
+      <path d="M9 13.5L7.5 21l4.5-2.5 4.5 2.5L15 13.5" />
+    </>
+  ),
+  exams: (
+    <>
+      <rect x="4" y="5" width="16" height="15" rx="2" />
+      <path d="M8 3v4M16 3v4M4 10h16M10 15l2 2 3-4" />
+    </>
+  ),
+  camera: (
+    <>
+      <path d="M4 8h3l2-3h6l2 3h3v11H4z" />
+      <circle cx="12" cy="13" r="3.5" />
+    </>
+  ),
   close: <path d="M6 6l12 12M18 6L6 18" />,
   search: (
     <>

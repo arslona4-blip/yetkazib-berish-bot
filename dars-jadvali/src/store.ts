@@ -61,6 +61,11 @@ function scrubPlaceholders(s: AppSettings): AppSettings {
   }
 }
 
+/** Eski zaxira yoki eski versiyada yo'q bo'lgan maydonlarni to'ldiradi */
+export function normalizeSettings(s: AppSettings): AppSettings {
+  return { ...s, profiles: s.profiles.map((p) => createProfile(p)) }
+}
+
 export function loadSettings(): AppSettings {
   try {
     const raw = localStorage.getItem(KEY)
@@ -75,7 +80,7 @@ export function loadSettings(): AppSettings {
     }
     const parsed = JSON.parse(raw) as AppSettings
     if (!parsed.profiles?.length) return defaultSettings()
-    return scrubPlaceholders(parsed)
+    return normalizeSettings(scrubPlaceholders(parsed))
   } catch {
     return defaultSettings()
   }

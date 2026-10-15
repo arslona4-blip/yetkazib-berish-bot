@@ -32,6 +32,10 @@ export type ServiceId =
   | 'substitute'
   | 'notes'
   | 'colors'
+  | 'bag'
+  | 'focus'
+  | 'badges'
+  | 'exams'
 
 export type ServiceDef = {
   id: ServiceId
@@ -49,6 +53,10 @@ export const SERVICES: ServiceDef[] = [
   { id: 'week', titleUz: 'Haftalik jadval', titleRu: 'Неделя', descUz: '6×9 grid', descRu: 'Сетка недели', tone: 'teal', icon: 'week', featured: true },
   { id: 'alarm', titleUz: 'Budilnik', titleRu: 'Будильник', descUz: 'Dars eslatmasi', descRu: 'Напоминание', tone: 'amber', icon: 'alarm', featured: true },
   { id: 'homework', titleUz: 'Uyga vazifa', titleRu: 'Домашнее задание', descUz: 'Darsdan berilgan DZ', descRu: 'ДЗ по урокам', tone: 'rose', icon: 'homework', featured: true },
+  { id: 'bag', titleUz: 'Sumka', titleRu: 'Портфель', descUz: 'Ertaga nima olish', descRu: 'Что взять завтра', tone: 'teal', icon: 'bag' },
+  { id: 'exams', titleUz: 'Imtihonlar', titleRu: 'Экзамены', descUz: 'Necha kun qoldi', descRu: 'Сколько дней', tone: 'rose', icon: 'exams' },
+  { id: 'focus', titleUz: 'Fokus taymer', titleRu: 'Фокус-таймер', descUz: '25 daqiqa diqqat', descRu: '25 минут фокуса', tone: 'violet', icon: 'focus' },
+  { id: 'badges', titleUz: 'Yutuqlar', titleRu: 'Достижения', descUz: 'Nishonlar', descRu: 'Значки', tone: 'amber', icon: 'badges' },
   { id: 'bells', titleUz: 'Qo‘ng‘iroq', titleRu: 'Звонки', descUz: '9 dars vaqti', descRu: 'Время уроков', tone: 'violet', icon: 'bells' },
   { id: 'grades', titleUz: 'Baholar', titleRu: 'Оценки', descUz: 'Fan baholari', descRu: 'Оценки', tone: 'blue', icon: 'grades' },
   { id: 'attendance', titleUz: 'Davomat', titleRu: 'Посещаемость', descUz: 'Keldi/kelmadi', descRu: 'Был/не был', tone: 'teal', icon: 'attendance' },

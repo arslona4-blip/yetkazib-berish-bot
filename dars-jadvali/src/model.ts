@@ -18,6 +18,8 @@ export type Cell = {
   note: string
   homework: string
   homeworkDone: boolean
+  /** IndexedDB kaliti — uyga vazifa rasmi (rasmning o'zi localStorage ga sig'maydi) */
+  photo?: string
 }
 
 export type EventItem = {
@@ -44,6 +46,7 @@ export type ClubItem = {
 
 export type CheckItem = { id: string; text: string; done: boolean }
 export type Announcement = { id: string; text: string; at: string }
+export type FocusSession = { date: string; minutes: number }
 
 export type Profile = {
   id: string
@@ -63,6 +66,11 @@ export type Profile = {
   favorites: string[]
   commuteMinutes: number
   alarmMessage: string
+  /** fan nomi -> darsga olib boriladigan narsalar */
+  bagItems: Record<string, string[]>
+  /** sana (YYYY-MM-DD) -> sumkaga solingan narsalar */
+  bagPacked: Record<string, string[]>
+  focusLog: FocusSession[]
 }
 
 export type AlarmSettings = {
@@ -178,6 +186,9 @@ export function createProfile(partial?: Partial<Profile>): Profile {
     favorites: partial?.favorites ?? [],
     commuteMinutes: partial?.commuteMinutes ?? 20,
     alarmMessage: partial?.alarmMessage ?? 'Darsga tayyorlaning!',
+    bagItems: partial?.bagItems ?? {},
+    bagPacked: partial?.bagPacked ?? {},
+    focusLog: partial?.focusLog ?? [],
   }
 }
 

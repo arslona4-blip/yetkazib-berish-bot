@@ -16,7 +16,16 @@ import {
   type DayId,
   type Profile,
 } from './model'
-import { activeProfile, downloadBlob, downloadJson, loadSettings, readJsonFile, saveSettings, shareOrDownload } from './store'
+import {
+  activeProfile,
+  downloadBlob,
+  downloadJson,
+  loadSettings,
+  normalizeSettings,
+  readJsonFile,
+  saveSettings,
+  shareOrDownload,
+} from './store'
 import { t } from './i18n'
 import {
   applyTemplate,
@@ -52,6 +61,23 @@ import {
   type ServiceId,
 } from './services'
 import { Icon } from './Icon'
+import { answerQuestion } from './insights'
+import {
+  BadgesSheet,
+  BagSheet,
+  EventsEditor,
+  FocusSheet,
+  GradeAdder,
+  GradesInsight,
+  LessonBanner,
+  ParentNowCard,
+  PhotoPicker,
+  PhotoThumb,
+  badgeCount,
+  examWidgetText,
+  photoStore,
+  useFocus,
+} from './Extras'
 
 type Tab = 'home' | 'schedule' | 'tasks' | 'profile'
 
@@ -79,6 +105,27 @@ export default function App() {
   const readOnly = settings.parentMode && !unlocked
   const dateISO = isoDate(now)
   const lang = settings.lang
+  const [online, setOnline] = useState(() => navigator.onLine)
+  const focus = useFocus(
+    now,
+    (minutes) =>
+      patchProfile((p) => ({
+        ...p,
+        focusLog: [...p.focusLog, { date: isoDate(), minutes }].slice(-500),
+      })),
+    settings.alarm.sound,
+  )
+
+  useEffect(() => {
+    const on = () => setOnline(true)
+    const off = () => setOnline(false)
+    window.addEventListener('online', on)
+    window.addEventListener('offline', off)
+    return () => {
+      window.removeEventListener('online', on)
+      window.removeEventListener('offline', off)
+    }
+  }, [])
 
   useEffect(() => {
     saveSettings(settings)
@@ -237,6 +284,8 @@ export default function App() {
   function commitEdit() {
     if (!editing) return
     const [d, n] = editing.split('-') as [DayId, string]
+    const oldPhoto = profile.cells[cellKey(d, Number(n))]?.photo
+    if (oldPhoto && oldPhoto !== draft.photo) void photoStore.del(oldPhoto)
     patchProfile((p) => ({
       ...p,
       cells: { ...p.cells, [cellKey(d, Number(n))]: { ...draft } },
@@ -248,6 +297,12 @@ export default function App() {
     try {
       const text = await listenOnce(lang)
       setVoiceMsg(text)
+      const smart = answerQuestion(text, profile, lang)
+      if (smart) {
+        speak(smart, lang)
+        setVoiceMsg(`«${text}» — ${smart}`)
+        return
+      }
       const dayNow = todayDayId()
       if (!dayNow) {
         const ans = lang === 'ru' ? 'Сегодня уроков нет.' : 'Bugun dars yo‘q.'
@@ -286,6 +341,11 @@ export default function App() {
 
   return (
     <div className="app">
+      {!online && (
+        <div className="offline-pill no-print">
+          {lang === 'ru' ? 'Офлайн — данные сохранены на телефоне' : 'Internet yo‘q — ma’lumotlar telefonda saqlangan'}
+        </div>
+      )}
       {tab === 'home' && (
         <>
           <header className="hero">
@@ -347,6 +407,9 @@ export default function App() {
               ))}
             </div>
           </header>
+
+          {settings.parentMode && <ParentNowCard profile={profile} now={now} lang={lang} />}
+          {!settings.parentMode && <LessonBanner profile={profile} now={now} lang={lang} />}
 
           <section className="section">
             <div className="section-h">
@@ -410,7 +473,41 @@ export default function App() {
                 <div>
                   <strong>{dict.streak}</strong>
                   <p>
-                    {settings.streak.count} {lang === 'ru' ? 'дней' : 'kun'}
+                    {settings.streak.count} {lang === 'ru' ? 'дней' : 'kun'} · 🏅 {badgeCount(settings, profile)}
+                  </p>
+                </div>
+                <span className="chev">›</span>
+              </button>
+              <button type="button" className="widget" onClick={() => openService('exams')}>
+                <span className="w-ico">
+                  <Icon name="exams" />
+                </span>
+                <div>
+                  <strong>{lang === 'ru' ? 'Экзамен' : 'Imtihon'}</strong>
+                  <p>{examWidgetText(profile, lang)}</p>
+                </div>
+                <span className="chev">›</span>
+              </button>
+              <button type="button" className="widget" onClick={() => openService(focus.mode === 'idle' ? 'bag' : 'focus')}>
+                <span className="w-ico">
+                  <Icon name={focus.mode === 'idle' ? 'bag' : 'focus'} />
+                </span>
+                <div>
+                  <strong>
+                    {focus.mode === 'idle'
+                      ? lang === 'ru'
+                        ? 'Портфель'
+                        : 'Sumka'
+                      : lang === 'ru'
+                        ? 'Фокус'
+                        : 'Fokus'}
+                  </strong>
+                  <p>
+                    {focus.mode === 'idle'
+                      ? lang === 'ru'
+                        ? 'Что взять завтра'
+                        : 'Ertaga nima olish'
+                      : formatCountdown(focus.left)}
                   </p>
                 </div>
                 <span className="chev">›</span>
@@ -418,24 +515,13 @@ export default function App() {
             </div>
           </section>
 
-          {(progress.kind !== 'idle' || upcoming) && (
+          {!settings.parentMode && progress.kind === 'idle' && upcoming && (
             <section className="live-strip">
               <div>
-                <span>{progress.kind === 'break' ? dict.break : dict.next}</span>
-                <strong>
-                  {progress.kind === 'lesson' && today
-                    ? `${progress.n}. ${getEffectiveCell(profile, today, progress.n!).subject || '—'}`
-                    : upcoming
-                      ? `${upcoming.period.n}. ${upcoming.subject}`
-                      : '—'}
-                </strong>
+                <span>{dict.next}</span>
+                <strong>{`${upcoming.period.n}. ${upcoming.subject}`}</strong>
               </div>
-              {progress.kind !== 'idle' && (
-                <div className="mini-bar">
-                  <i style={{ width: `${progress.pct}%` }} />
-                </div>
-              )}
-              {upcoming && upcoming.start > now && (
+              {upcoming.start > now && (
                 <em>{formatCountdown(upcoming.start.getTime() - now.getTime())}</em>
               )}
             </section>
@@ -614,6 +700,7 @@ export default function App() {
                   <strong>{h.label}</strong>
                   <p>{h.cell.homework}</p>
                 </div>
+                <PhotoThumb photoKey={h.cell.photo} size={48} />
               </label>
             ))}
           </div>
@@ -668,7 +755,7 @@ export default function App() {
               if (!f) return
               try {
                 const data = (await readJsonFile(f)) as AppSettings | Profile
-                if ('profiles' in data) setSettings(data as AppSettings)
+                if ('profiles' in data) setSettings(normalizeSettings(data as AppSettings))
                 else {
                   const p = createProfile(data as Profile)
                   update((s) => ({
@@ -822,33 +909,36 @@ export default function App() {
 
           {sheet === 'grades' && (
             <div className="form-stack">
-              {profile.grades.map((g) => (
-                <div key={g.id} className="mini-row">
-                  <strong>
-                    {g.subject}: {g.score}
-                  </strong>
-                  <span>{g.date}</span>
-                </div>
-              ))}
+              <GradesInsight profile={profile} lang={lang} />
               {!readOnly && (
-                <button
-                  type="button"
-                  className="btn-ghost"
-                  onClick={() => {
-                    const subject = prompt(dict.subject) || ''
-                    const score = Number(prompt('5/4/3') || '5')
-                    if (!subject) return
+                <GradeAdder
+                  lang={lang}
+                  subjects={stats.top.map(([name]) => name)}
+                  onAdd={(subject, score) =>
                     patchProfile((p) => ({
                       ...p,
                       grades: [...p.grades, { id: uid(), subject, score, date: isoDate(), note: '' }],
                     }))
-                  }}
-                >
-                  + {dict.add}
-                </button>
+                  }
+                />
               )}
+              {[...profile.grades]
+                .reverse()
+                .slice(0, 30)
+                .map((g) => (
+                  <div key={g.id} className="mini-row">
+                    <strong>
+                      {g.subject}: {g.score}
+                    </strong>
+                    <span>{g.date}</span>
+                  </div>
+                ))}
             </div>
           )}
+
+          {sheet === 'bag' && <BagSheet profile={profile} lang={lang} readOnly={readOnly} patch={patchProfile} />}
+          {sheet === 'focus' && <FocusSheet focus={focus} profile={profile} lang={lang} />}
+          {sheet === 'badges' && <BadgesSheet settings={settings} profile={profile} lang={lang} />}
 
           {sheet === 'attendance' && (
             <div className="seg big">
@@ -871,33 +961,8 @@ export default function App() {
             </div>
           )}
 
-          {sheet === 'events' && (
-            <div className="form-stack">
-              {profile.events.map((ev) => (
-                <div key={ev.id} className="mini-row">
-                  <strong>
-                    {dict[ev.type]} · {ev.date}
-                  </strong>
-                  <span>{ev.title}</span>
-                </div>
-              ))}
-              {!readOnly && (
-                <button
-                  type="button"
-                  className="btn-ghost"
-                  onClick={() => {
-                    const title = prompt(dict.events) || ''
-                    if (!title) return
-                    patchProfile((p) => ({
-                      ...p,
-                      events: [...p.events, { id: uid(), title, date: isoDate(), type: 'exam' }],
-                    }))
-                  }}
-                >
-                  + {dict.add}
-                </button>
-              )}
-            </div>
+          {(sheet === 'events' || sheet === 'exams') && (
+            <EventsEditor profile={profile} lang={lang} readOnly={readOnly} patch={patchProfile} />
           )}
 
           {sheet === 'clubs' && (
@@ -999,8 +1064,8 @@ export default function App() {
             <div className="form-stack center-text">
               <p>
                 {lang === 'ru'
-                  ? 'Спросите: какой сейчас урок?'
-                  : 'So‘rang: «Hozir nechinchi dars?» — javob: «Hozir ikkinchi dars. Fan: Adabiyot.»'}
+                  ? 'Спросите: «Какой сейчас урок?», «Что завтра?», «Когда экзамен?», «Какое ДЗ по математике?», «Что взять в портфель?», «Мой средний балл?»'
+                  : 'So‘rang: «Hozir nechinchi dars?», «Ertaga qanday darslar?», «Imtihon qachon?», «Matematikadan vazifa nima?», «Sumkaga nima olay?», «O‘rtacha bahom?»'}
               </p>
               <button type="button" className="btn-primary" onClick={() => void onVoice()}>
                 <Icon name="voice" size={18} /> {dict.voice}
@@ -1223,6 +1288,9 @@ export default function App() {
                     ? 'Каждый день — шаг вперёд'
                     : 'Har kun — oldinga qadam'}
               </p>
+              <button type="button" className="btn-ghost" onClick={() => setSheet('badges')}>
+                🏅 {lang === 'ru' ? 'Достижения' : 'Yutuqlar'} · {badgeCount(settings, profile)}
+              </button>
             </div>
           )}
 
@@ -1446,6 +1514,7 @@ export default function App() {
                 onChange={(e) => setDraft({ ...draft, homework: e.target.value })}
               />
             </label>
+            <PhotoPicker lang={lang} photoKey={draft.photo} onChange={(photo) => setDraft({ ...draft, photo })} />
             <label className="switch">
               <span>{dict.favorites}</span>
               <input
