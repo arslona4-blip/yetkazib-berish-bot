@@ -66,7 +66,8 @@ export default function App() {
   const [unlocked, setUnlocked] = useState(false)
   const [activeAlarm, setActiveAlarm] = useState<AlarmEvent | null>(null)
   const [fired, setFired] = useState(() => loadFired())
-  const [weather, setWeather] = useState<{ temp: number; text: string } | null>(null)
+  // undefined — yuklanmoqda, null — ma'lumot olinmadi
+  const [weather, setWeather] = useState<{ temp: number; text: string } | null | undefined>(undefined)
   const [query, setQuery] = useState('')
   const [voiceMsg, setVoiceMsg] = useState('')
   const [weekMode, setWeekMode] = useState(false)
@@ -90,6 +91,7 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    setWeather(undefined)
     void fetchWeather(settings.weatherCity).then(setWeather)
   }, [settings.weatherCity])
 
@@ -293,10 +295,20 @@ export default function App() {
                 <Icon name="menu" size={18} />
               </button>
               <div className="hero-actions">
-                <button type="button" className="icon-btn" onClick={() => openService('announce')}>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  onClick={() => openService('announce')}
+                  aria-label={lang === 'ru' ? 'Объявления' : 'E’lonlar'}
+                >
                   <Icon name="chat" size={18} />
                 </button>
-                <button type="button" className="icon-btn badge" onClick={() => openService('alarm')}>
+                <button
+                  type="button"
+                  className="icon-btn badge"
+                  onClick={() => openService('alarm')}
+                  aria-label={lang === 'ru' ? 'Будильник' : 'Budilnik'}
+                >
                   <Icon name="alarm" size={18} />
                 </button>
               </div>
@@ -366,7 +378,15 @@ export default function App() {
                 </span>
                 <div>
                   <strong>{dict.weather}</strong>
-                  <p>{weather ? `${weather.temp}° · ${weather.text}` : '…'}</p>
+                  <p>
+                    {weather
+                      ? `${weather.temp}° · ${weather.text}`
+                      : weather === undefined
+                        ? '…'
+                        : lang === 'ru'
+                          ? 'Нет данных'
+                          : 'Ma’lumot yo‘q'}
+                  </p>
                 </div>
                 <span className="chev">›</span>
               </button>
@@ -956,7 +976,15 @@ export default function App() {
           {sheet === 'weather' && (
             <div className="weather-card">
               <div className="w-big">{weather ? `${weather.temp}°` : '—'}</div>
-              <p>{weather?.text || '…'}</p>
+              <p>
+                {weather
+                  ? weather.text
+                  : weather === undefined
+                    ? '…'
+                    : lang === 'ru'
+                      ? 'Город не найден или нет связи'
+                      : 'Shahar topilmadi yoki internet yo‘q'}
+              </p>
               <label>
                 Shahar
                 <input
