@@ -152,6 +152,8 @@ export default function App() {
   })
   const [newCatName, setNewCatName] = useState('')
   const [showProductForm, setShowProductForm] = useState(false)
+  const [photoHint, setPhotoHint] = useState('')
+  const [photoBusy, setPhotoBusy] = useState(false)
   const [tgInit, setTgInit] = useState('')
   const [tgReady, setTgReady] = useState(false)
   const [showCode, setShowCode] = useState(false)
@@ -734,6 +736,7 @@ export default function App() {
         category_id: '',
         description: '',
       })
+      setPhotoHint('')
       setShowProductForm(false)
       const cat = await api.products(auth)
       setCatalog(cat.products)
@@ -742,6 +745,37 @@ export default function App() {
       setError(e instanceof Error ? e.message : 'Mahsulot yaratish xato')
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function fillFromPhoto(file: File) {
+    if (!auth) return
+    setPhotoBusy(true)
+    setPhotoHint('Rasm o‘qilmoqda…')
+    setError('')
+    try {
+      const res = await api.productFromPhoto(auth, file)
+      const d = res.draft
+      setProductForm((s) => ({
+        ...s,
+        name: d.suggested_name || d.name || s.name,
+        price:
+          d.price != null && Number.isFinite(Number(d.price))
+            ? String(d.price)
+            : s.price,
+        category_id: d.category_id ? String(d.category_id) : s.category_id,
+        description: d.description || s.description,
+      }))
+      setShowProductForm(true)
+      const conf = Math.round((d.confidence || 0) * 100)
+      setPhotoHint(
+        `${res.message} Ishonch ~${conf}%. Maydonlarni tekshirib «Saqlash» bosing.`,
+      )
+    } catch (e) {
+      setPhotoHint('')
+      setError(e instanceof Error ? e.message : 'Foto o‘qilmadi')
+    } finally {
+      setPhotoBusy(false)
     }
   }
 
@@ -1933,16 +1967,39 @@ export default function App() {
           <div className="page-h">
             <div>
               <h1>Mahsulotlar</h1>
-              <p>Yaratish, narx va faollik</p>
+              <p>Yaratish, foto, narx va faollik</p>
             </div>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => setShowProductForm((v) => !v)}
-            >
-              {showProductForm ? 'Yopish' : '+ Yangi'}
-            </button>
+            <div className="actions" style={{ margin: 0, gap: 8 }}>
+              <label className="btn btn-ghost file-btn">
+                {photoBusy ? '…' : '📷 Foto / kamera'}
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  hidden
+                  disabled={photoBusy || busy}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    e.target.value = ''
+                    if (file) void fillFromPhoto(file)
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setShowProductForm((v) => !v)}
+              >
+                {showProductForm ? 'Yopish' : '+ Yangi'}
+              </button>
+            </div>
           </div>
+
+          {photoHint ? (
+            <p className="ok-text" style={{ marginBottom: 12 }}>
+              {photoHint}
+            </p>
+          ) : null}
 
           {showProductForm ? (
             <div className="card" style={{ marginBottom: 12 }}>
@@ -2029,6 +2086,10 @@ export default function App() {
                   }
                 />
               </div>
+              <p style={{ fontSize: 13, opacity: 0.75, marginBottom: 10 }}>
+                Saqlashdan oldin AI/demo maydonlarni tekshiring — narx yorliqdan
+                farq qilishi mumkin.
+              </p>
               <button
                 type="button"
                 className="btn btn-primary"
